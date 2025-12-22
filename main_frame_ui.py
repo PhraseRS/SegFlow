@@ -112,6 +112,12 @@ class Ui_MainWindow(object):
 
         self.verticalLayout_layerControl.addWidget(self.checkBox_baseImage)
 
+        self.checkBox_labelOnly = QCheckBox(self.groupBox_layerControl)
+        self.checkBox_labelOnly.setObjectName(u"checkBox_labelOnly")
+        self.checkBox_labelOnly.setChecked(False)
+
+        self.verticalLayout_layerControl.addWidget(self.checkBox_labelOnly)
+
         self.horizontalLayout_opacity = QHBoxLayout()
         self.horizontalLayout_opacity.setObjectName(u"horizontalLayout_opacity")
         self.label_opacity = QLabel(self.groupBox_layerControl)
@@ -135,6 +141,37 @@ class Ui_MainWindow(object):
 
 
         self.verticalLayout_layerControl.addLayout(self.horizontalLayout_opacity)
+
+        self.checkBox_swipeCompare = QCheckBox(self.groupBox_layerControl)
+        self.checkBox_swipeCompare.setObjectName(u"checkBox_swipeCompare")
+        self.checkBox_swipeCompare.setChecked(False)
+
+        self.verticalLayout_layerControl.addWidget(self.checkBox_swipeCompare)
+
+        self.horizontalLayout_swipe = QHBoxLayout()
+        self.horizontalLayout_swipe.setObjectName(u"horizontalLayout_swipe")
+        self.label_swipe = QLabel(self.groupBox_layerControl)
+        self.label_swipe.setObjectName(u"label_swipe")
+
+        self.horizontalLayout_swipe.addWidget(self.label_swipe)
+
+        self.slider_swipe = QSlider(self.groupBox_layerControl)
+        self.slider_swipe.setObjectName(u"slider_swipe")
+        self.slider_swipe.setMinimum(0)
+        self.slider_swipe.setMaximum(100)
+        self.slider_swipe.setValue(50)
+        self.slider_swipe.setOrientation(Qt.Orientation.Horizontal)
+        self.slider_swipe.setEnabled(False)
+
+        self.horizontalLayout_swipe.addWidget(self.slider_swipe)
+
+        self.label_swipeValue = QLabel(self.groupBox_layerControl)
+        self.label_swipeValue.setObjectName(u"label_swipeValue")
+
+        self.horizontalLayout_swipe.addWidget(self.label_swipeValue)
+
+
+        self.verticalLayout_layerControl.addLayout(self.horizontalLayout_swipe)
 
 
         self.verticalLayout_left.addWidget(self.groupBox_layerControl)
@@ -401,8 +438,12 @@ class Ui_MainWindow(object):
         self.groupBox_layerControl.setTitle(QCoreApplication.translate("MainWindow", u"\u56fe\u5c42\u63a7\u5236 (Layer Control)", None))
         self.checkBox_overlayPrediction.setText(QCoreApplication.translate("MainWindow", u"Overlay Prediction", None))
         self.checkBox_baseImage.setText(QCoreApplication.translate("MainWindow", u"Base Image (RGB/False Color)", None))
+        self.checkBox_labelOnly.setText(QCoreApplication.translate("MainWindow", u"Label Only", None))
         self.label_opacity.setText(QCoreApplication.translate("MainWindow", u"Opacity:", None))
         self.label_opacityValue.setText(QCoreApplication.translate("MainWindow", u"70%", None))
+        self.checkBox_swipeCompare.setText(QCoreApplication.translate("MainWindow", u"\u5377\u5e18\u5bf9\u6bd4 (Swipe Compare)", None))
+        self.label_swipe.setText(QCoreApplication.translate("MainWindow", u"Position:", None))
+        self.label_swipeValue.setText(QCoreApplication.translate("MainWindow", u"50%", None))
         self.groupBox_taskSwitcher.setTitle(QCoreApplication.translate("MainWindow", u"\u4efb\u52a1\u5207\u6362 (Task Switcher)", None))
         self.label_trainInfo.setText(QCoreApplication.translate("MainWindow", u"\u8bad\u7ec3\u6a21\u5f0f\u914d\u7f6e", None))
         self.tabWidget_tasks.setTabText(self.tabWidget_tasks.indexOf(self.tab_train), QCoreApplication.translate("MainWindow", u"\u8bad\u7ec3 (Train)", None))
