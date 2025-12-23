@@ -20,9 +20,9 @@ from PySide6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QGrap
     QGroupBox, QHBoxLayout, QHeaderView, QLabel,
     QMainWindow, QMenu, QMenuBar, QProgressBar,
     QPushButton, QScrollArea, QSizePolicy, QSlider,
-    QSpacerItem, QSplitter, QStatusBar, QTabWidget,
+    QSpacerItem, QSplitter, QStatusBar, QStackedWidget, QTabWidget,
     QTextEdit, QToolBar, QTreeWidget, QTreeWidgetItem,
-    QVBoxLayout, QWidget)
+    QVBoxLayout, QWidget, QListWidget, QListWidgetItem, QListView)
 
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
@@ -49,6 +49,13 @@ class Ui_MainWindow(object):
         self.action_inference.setObjectName(u"action_inference")
         self.action_about = QAction(MainWindow)
         self.action_about.setObjectName(u"action_about")
+        self.action_gridView = QAction(MainWindow)
+        self.action_gridView.setObjectName(u"action_gridView")
+        self.action_gridView.setCheckable(True)
+        self.action_detailView = QAction(MainWindow)
+        self.action_detailView.setObjectName(u"action_detailView")
+        self.action_detailView.setCheckable(True)
+        self.action_detailView.setChecked(True)
         self.centralwidget = QWidget(MainWindow)
         self.centralwidget.setObjectName(u"centralwidget")
         self.verticalLayout_main = QVBoxLayout(self.centralwidget)
@@ -182,11 +189,43 @@ class Ui_MainWindow(object):
         self.verticalLayout_center = QVBoxLayout(self.centerPanel)
         self.verticalLayout_center.setObjectName(u"verticalLayout_center")
         self.verticalLayout_center.setContentsMargins(0, 0, 0, 0)
-        self.graphicsView_canvas = QGraphicsView(self.centerPanel)
+        
+        # 使用 QStackedWidget 切换视图
+        self.stackedWidget_views = QStackedWidget(self.centerPanel)
+        self.stackedWidget_views.setObjectName(u"stackedWidget_views")
+        
+        # 页面0: 详情视图 (Detail View)
+        self.page_detailView = QWidget()
+        self.page_detailView.setObjectName(u"page_detailView")
+        self.verticalLayout_detailView = QVBoxLayout(self.page_detailView)
+        self.verticalLayout_detailView.setObjectName(u"verticalLayout_detailView")
+        self.verticalLayout_detailView.setContentsMargins(0, 0, 0, 0)
+        self.graphicsView_canvas = QGraphicsView(self.page_detailView)
         self.graphicsView_canvas.setObjectName(u"graphicsView_canvas")
         self.graphicsView_canvas.setMinimumSize(QSize(600, 400))
+        self.verticalLayout_detailView.addWidget(self.graphicsView_canvas)
+        self.stackedWidget_views.addWidget(self.page_detailView)
+        
+        # 页面1: 网格视图 (Grid View)
+        self.page_gridView = QWidget()
+        self.page_gridView.setObjectName(u"page_gridView")
+        self.verticalLayout_gridView = QVBoxLayout(self.page_gridView)
+        self.verticalLayout_gridView.setObjectName(u"verticalLayout_gridView")
+        self.verticalLayout_gridView.setContentsMargins(0, 0, 0, 0)
+        self.listWidget_thumbnails = QListWidget(self.page_gridView)
+        self.listWidget_thumbnails.setObjectName(u"listWidget_thumbnails")
+        self.listWidget_thumbnails.setViewMode(QListView.ViewMode.IconMode)
+        self.listWidget_thumbnails.setIconSize(QSize(120, 120))
+        self.listWidget_thumbnails.setGridSize(QSize(140, 160))  # 固定网格大小，留出文字空间
+        self.listWidget_thumbnails.setSpacing(8)
+        self.listWidget_thumbnails.setResizeMode(QListView.ResizeMode.Adjust)
+        self.listWidget_thumbnails.setWordWrap(True)  # 文件名换行
+        self.listWidget_thumbnails.setMovement(QListView.Movement.Static)
+        self.listWidget_thumbnails.setMinimumSize(QSize(600, 400))
+        self.verticalLayout_gridView.addWidget(self.listWidget_thumbnails)
+        self.stackedWidget_views.addWidget(self.page_gridView)
 
-        self.verticalLayout_center.addWidget(self.graphicsView_canvas)
+        self.verticalLayout_center.addWidget(self.stackedWidget_views)
 
         self.splitter_horizontal.addWidget(self.centerPanel)
         self.rightPanel = QWidget(self.splitter_horizontal)
@@ -386,6 +425,9 @@ class Ui_MainWindow(object):
         self.toolBar.addSeparator()
         self.toolBar.addAction(self.action_train)
         self.toolBar.addAction(self.action_inference)
+        self.toolBar.addSeparator()
+        self.toolBar.addAction(self.action_detailView)
+        self.toolBar.addAction(self.action_gridView)
 
         self.retranslateUi(MainWindow)
         self.slider_opacity.valueChanged.connect(self.label_opacityValue.setNum)
@@ -433,6 +475,8 @@ class Ui_MainWindow(object):
         self.action_inference.setShortcut(QCoreApplication.translate("MainWindow", u"F6", None))
 #endif // QT_CONFIG(shortcut)
         self.action_about.setText(QCoreApplication.translate("MainWindow", u"\u5173\u4e8e", None))
+        self.action_detailView.setText(QCoreApplication.translate("MainWindow", u"\u8be6\u60c5\u89c6\u56fe (Detail)", None))
+        self.action_gridView.setText(QCoreApplication.translate("MainWindow", u"\u7f51\u683c\u89c6\u56fe (Grid)", None))
         self.groupBox_dataSource.setTitle(QCoreApplication.translate("MainWindow", u"\u6570\u636e\u6e90\u7ba1\u7406 (Data Source Manager)", None))
         self.pushButton_addSample.setText(QCoreApplication.translate("MainWindow", u"\u6dfb\u52a0\u6837\u672c", None))
         self.groupBox_layerControl.setTitle(QCoreApplication.translate("MainWindow", u"\u56fe\u5c42\u63a7\u5236 (Layer Control)", None))
