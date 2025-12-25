@@ -1,0 +1,201 @@
+# -*- coding: utf-8 -*-
+"""
+可折叠面板组件 (Collapsible Panel Widget)
+支持独立展开/折叠的卡片式布局
+"""
+
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
+                                QFrame, QSizePolicy, QScrollArea)
+from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, Property, Signal
+from PySide6.QtGui import QIcon, QFont
+
+
+class CollapsiblePanel(QWidget):
+    """可折叠面板组件"""
+    
+    # 信号：展开/折叠状态改变
+    toggled = Signal(bool)
+    
+    def __init__(self, title="Panel", parent=None, expanded=True):
+        super().__init__(parent)
+        self._is_expanded = expanded
+        self._title = title
+        self._content_height = 0
+        
+        self._setup_ui()
+    
+    def _setup_ui(self):
+        """初始化UI"""
+        self.main_layout = QVBoxLayout(self)
+        self.main_layout.setContentsMargins(0, 0, 0, 0)
+        self.main_layout.setSpacing(0)
+        
+        # 标题栏（可点击）
+        self.header_button = QPushButton(self)
+        self.header_button.setObjectName("collapsibleHeader")
+        self.header_button.setCheckable(True)
+        self.header_button.setChecked(self._is_expanded)
+        self.header_button.clicked.connect(self._on_header_clicked)
+        self._update_header_text()
+        
+        # 标题栏样式 - 使用系统调色板颜色
+        self.header_button.setStyleSheet("""
+            QPushButton#collapsibleHeader {
+                background-color: palette(button);
+                color: palette(button-text);
+                border: 1px solid palette(mid);
+                border-radius: 4px;
+                padding: 8px 12px;
+                text-align: left;
+                font-weight: bold;
+            }
+            QPushButton#collapsibleHeader:hover {
+                background-color: palette(light);
+            }
+            QPushButton#collapsibleHeader:checked {
+                background-color: palette(button);
+            }
+        """)
+        
+        self.main_layout.addWidget(self.header_button)
+        
+        # 内容区域容器
+        self.content_frame = QFrame(self)
+        self.content_frame.setObjectName("collapsibleContent")
+        self.content_frame.setStyleSheet("""
+            QFrame#collapsibleContent {
+                background-color: palette(base);
+                border: 1px solid palette(mid);
+                border-top: none;
+                border-radius: 0 0 4px 4px;
+            }
+        """)
+        
+        self.content_layout = QVBoxLayout(self.content_frame)
+        self.content_layout.setContentsMargins(8, 8, 8, 8)
+        self.content_layout.setSpacing(4)
+        
+        self.main_layout.addWidget(self.content_frame)
+        
+        # 应用初始展开状态
+        self.content_frame.setVisible(self._is_expanded)
+    
+    def _update_header_text(self):
+        """更新标题栏文字"""
+        if self._is_expanded:
+            self.header_button.setText(f"▼ {self._title}")
+        else:
+            self.header_button.setText(f"▶ {self._title}")
+    
+    def _on_header_clicked(self, checked):
+        """标题栏点击事件"""
+        self._is_expanded = checked
+        self._update_ui()
+        self.toggled.emit(checked)
+    
+    def _update_ui(self):
+        """更新UI状态"""
+        self._update_header_text()
+        self.content_frame.setVisible(self._is_expanded)
+    
+    def set_expanded(self, expanded):
+        """设置展开/折叠状态"""
+        self._is_expanded = expanded
+        self.header_button.setChecked(expanded)
+        self._update_ui()
+    
+    def is_expanded(self):
+        """获取展开状态"""
+        return self._is_expanded
+    
+    def set_title(self, title):
+        """设置标题"""
+        self._title = title
+        self._update_ui()
+    
+    def get_content_layout(self):
+        """获取内容区域布局，用于添加子控件"""
+        return self.content_layout
+    
+    def add_widget(self, widget):
+        """向内容区域添加控件"""
+        self.content_layout.addWidget(widget)
+    
+    def add_layout(self, layout):
+        """向内容区域添加布局"""
+        self.content_layout.addLayout(layout)
+
+
+class CollapsibleContainer(QScrollArea):
+    """可折叠面板容器（带滚动条）"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._panels = []
+        
+        self._setup_ui()
+    
+    def _setup_ui(self):
+        """初始化UI"""
+        self.setWidgetResizable(True)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        
+        # 滚动区域样式 - 使用系统调色板
+        self.setStyleSheet("""
+            QScrollArea {
+                border: none;
+                background-color: transparent;
+            }
+        """)
+        
+        # 内容容器
+        self.container = QWidget()
+        self.container_layout = QVBoxLayout(self.container)
+        self.container_layout.setContentsMargins(0, 0, 0, 0)
+        self.container_layout.setSpacing(8)
+        
+        # 底部弹性空间
+        self.container_layout.addStretch()
+        
+        self.setWidget(self.container)
+    
+    def add_panel(self, title, expanded=True):
+        """
+        添加一个可折叠面板
+        
+        Args:
+            title: 面板标题
+            expanded: 初始是否展开
+        
+        Returns:
+            CollapsiblePanel: 创建的面板对象
+        """
+        panel = CollapsiblePanel(title, self.container)
+        panel.set_expanded(expanded)
+        
+        # 插入到弹性空间之前
+        self.container_layout.insertWidget(len(self._panels), panel)
+        self._panels.append(panel)
+        
+        return panel
+    
+    def get_panel(self, index):
+        """获取指定索引的面板"""
+        if 0 <= index < len(self._panels):
+            return self._panels[index]
+        return None
+    
+    def get_panels(self):
+        """获取所有面板"""
+        return self._panels
+    
+    def expand_all(self):
+        """展开所有面板"""
+        for panel in self._panels:
+            panel.set_expanded(True)
+    
+    def collapse_all(self):
+        """折叠所有面板"""
+        for panel in self._panels:
+            panel.set_expanded(False)

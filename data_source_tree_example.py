@@ -10,6 +10,8 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QTreeWidgetItem, QFile
 from PySide6.QtCore import Qt, QRectF, QSize, QThread, Signal, QObject, QTimer
 from PySide6.QtGui import QIcon, QPixmap, QImage, QPainter, QColor, QPen, QBrush
 from main_frame_ui import Ui_MainWindow
+from dataset_metadata import DatasetMetadataManager
+from thumbnail_manager import ThumbnailLazyLoader
 import sys
 import os
 
@@ -17,100 +19,6 @@ import os
 # 视图模式常量
 VIEW_MODE_DETAIL = 0
 VIEW_MODE_GRID = 1
-
-  
-class ThumbnailLoader(QThread):
-    """异步缩略图加载线程"""
-    # 信号：单个缩略图加载完成 (sample_id, dataset, image_pixmap, label_pixmap)
-    thumbnail_ready = Signal(str, str, QPixmap, QPixmap)
-    # 信号：所有缩略图加载完成
-    all_done = Signal()
-    # 信号：进度更新 (current, total)
-    progress = Signal(int, int)
-    
-    # VOC调色板
-    VOC_PALETTE = [
-        (0, 0, 0), (128, 0, 0), (0, 128, 0), (128, 128, 0),
-        (0, 0, 128), (128, 0, 128), (0, 128, 128), (128, 128, 128),
-        (64, 0, 0), (192, 0, 0), (64, 128, 0), (192, 128, 0),
-        (64, 0, 128), (192, 0, 128), (64, 128, 128), (192, 128, 128),
-        (0, 64, 0), (128, 64, 0), (0, 192, 0), (128, 192, 0),
-        (0, 64, 128), (255, 255, 255),
-    ]
-    
-    def __init__(self, samples_list, thumbnail_size=120, parent=None):
-        """
-        Args:
-            samples_list: [(sample_id, dataset_type, image_path, label_path), ...]
-            thumbnail_size: 缩略图尺寸
-        """
-        super().__init__(parent)
-        self.samples_list = samples_list
-        self.thumbnail_size = thumbnail_size
-        self._is_cancelled = False
-    
-    def cancel(self):
-        """取消加载"""
-        self._is_cancelled = True
-    
-    def _apply_colormap(self, label_image):
-        """将标签图像转换为伪彩色"""
-        width = label_image.width()
-        height = label_image.height()
-        colored = QImage(width, height, QImage.Format.Format_ARGB32)
-        
-        for y in range(height):
-            for x in range(width):
-                pixel = label_image.pixel(x, y)
-                gray = pixel & 0xFF
-                if gray < len(self.VOC_PALETTE):
-                    r, g, b = self.VOC_PALETTE[gray]
-                else:
-                    r, g, b = 255, 255, 255
-                alpha = 0 if gray == 0 else 255
-                colored.setPixel(x, y, (alpha << 24) | (r << 16) | (g << 8) | b)
-        
-        return colored
-    
-    def run(self):
-        """在后台线程中加载缩略图"""
-        total = len(self.samples_list)
-        
-        for i, (sample_id, dataset_type, image_path, label_path) in enumerate(self.samples_list):
-            if self._is_cancelled:
-                break
-            
-            image_pixmap = QPixmap()
-            label_pixmap = QPixmap()
-            
-            # 加载原图
-            if image_path and os.path.exists(image_path):
-                image = QImage(image_path)
-                if not image.isNull():
-                    scaled = image.scaled(
-                        self.thumbnail_size, self.thumbnail_size,
-                        Qt.AspectRatioMode.KeepAspectRatio,
-                        Qt.TransformationMode.SmoothTransformation
-                    )
-                    image_pixmap = QPixmap.fromImage(scaled)
-            
-            # 加载标签
-            if label_path and os.path.exists(label_path):
-                label_image = QImage(label_path)
-                if not label_image.isNull():
-                    colored = self._apply_colormap(label_image)
-                    scaled = colored.scaled(
-                        self.thumbnail_size, self.thumbnail_size,
-                        Qt.AspectRatioMode.KeepAspectRatio,
-                        Qt.TransformationMode.SmoothTransformation
-                    )
-                    label_pixmap = QPixmap.fromImage(scaled)
-            
-            self.thumbnail_ready.emit(sample_id, dataset_type, image_pixmap, label_pixmap)
-            self.progress.emit(i + 1, total)
-        
-        if not self._is_cancelled:
-            self.all_done.emit()
 
 
 class SwipeLineItem(QGraphicsLineItem):
@@ -828,32 +736,23 @@ class MainWindow(QMainWindow):
         # 当前视图模式
         self.current_view_mode = VIEW_MODE_DETAIL
         
-        # 缩略图加载线程
-        self.thumbnail_loader = None
-        
-        # 缩略图项映射 {key: QListWidgetItem}
-        self.thumbnail_items = {}
-        
-        # 缩略图原始数据 {key: {'image': QPixmap, 'label': QPixmap}}
-        self.thumbnail_data = {}
-        
-        # 缩略图合成缓存 {key: QPixmap} - 避免重复合成
-        self.thumbnail_cache = {}
-        
-        # 当前缓存的图层设置（用于判断是否需要重新合成）
-        self._cached_layer_settings = None
-        
-        # 防抖定时器（用于滑块拖动时延迟刷新）
-        self._refresh_timer = QTimer()
-        self._refresh_timer.setSingleShot(True)
-        self._refresh_timer.setInterval(50)  # 50ms 防抖
-        self._refresh_timer.timeout.connect(self._do_refresh_thumbnails)
-        
         # 初始化数据源管理器
         self.data_manager = DataSourceManager(self.ui.treeWidget_dataSources)
         
+        # 初始化元数据管理器
+        self.metadata_manager = DatasetMetadataManager()
+        
         # 初始化影像查看器
         self.image_viewer = ImageViewer(self.ui.graphicsView_canvas)
+        
+        # 初始化缩略图懒加载管理器
+        self.thumbnail_manager = ThumbnailLazyLoader(self.ui.listWidget_thumbnails, thumbnail_size=120)
+        
+        # 防抖定时器（用于图层设置变化时刷新）
+        self._layer_refresh_timer = QTimer()
+        self._layer_refresh_timer.setSingleShot(True)
+        self._layer_refresh_timer.setInterval(50)  # 50ms 防抖
+        self._layer_refresh_timer.timeout.connect(self._do_refresh_layer_settings)
         
         # 连接信号
         self._connect_signals()
@@ -941,9 +840,168 @@ class MainWindow(QMainWindow):
             )
             return
         
+        # 保存数据根目录
+        self._current_data_root = data_root
+        
         # 加载数据
         self.data_manager.load_from_txt_files(data_root)
         self.statusBar().showMessage(f"已从 {data_root} 加载VOC数据集")
+        
+        # 更新数据集概览（基本统计）
+        self._update_dataset_overview()
+        
+        # 使用 AnalysisPanel 智能启动统计流程
+        self._initialize_analysis_panel(data_root)
+    
+    def _initialize_analysis_panel(self, data_root):
+        """使用 AnalysisPanel 智能启动统计流程"""
+        # 收集样本信息
+        samples_info = []
+        for dataset_type in ['train', 'val', 'test']:
+            for sample_id in self.data_manager.get_samples(dataset_type):
+                samples_info.append((sample_id, dataset_type))
+        
+        # 连接 AnalysisPanel 信号
+        self.ui.analysis_panel.analysis_started.connect(self._on_analysis_started)
+        self.ui.analysis_panel.analysis_finished.connect(self._on_analysis_finished)
+        self.ui.analysis_panel.analysis_error.connect(self._on_analysis_error)
+        
+        # 启动智能分析流程
+        labels_dir = self.data_manager.labels_dir
+        self.ui.analysis_panel.initialize_statistics_flow(
+            data_root, 
+            samples_info, 
+            labels_dir
+        )
+    
+    def _on_analysis_started(self):
+        """分析开始回调"""
+        self.statusBar().showMessage("正在分析数据集...")
+    
+    def _on_analysis_finished(self):
+        """分析完成回调"""
+        self.statusBar().showMessage("数据集分析完成")
+        self._on_metadata_ready()
+    
+    def _on_analysis_error(self, error_msg):
+        """分析错误回调"""
+        self.statusBar().showMessage(f"分析错误: {error_msg}")
+        print(f"⚠️ 分析错误: {error_msg}")
+    
+    def _load_or_calculate_metadata(self, data_root):
+        """加载缓存的元数据，或启动后台进程计算（保留用于兼容）"""
+        # 初始化数据库
+        self.metadata_manager.init_database(data_root)
+        
+        # 收集样本信息
+        samples_info = []
+        for dataset_type in ['train', 'val', 'test']:
+            for sample_id in self.data_manager.get_samples(dataset_type):
+                samples_info.append((sample_id, dataset_type))
+        
+        # 连接信号
+        self.metadata_manager.signals.progress.connect(self._on_metadata_progress)
+        self.metadata_manager.signals.finished.connect(self._on_metadata_finished)
+        self.metadata_manager.signals.error.connect(self._on_metadata_error)
+        
+        # 检查缓存是否有效
+        if self.metadata_manager.is_cache_valid(samples_info):
+            print("✅ 使用缓存的元数据")
+            self.statusBar().showMessage("已加载元数据缓存")
+            self._on_metadata_ready()
+            return
+        
+        # 缓存无效，启动后台进程计算
+        print("🔄 启动后台进程计算元数据...")
+        self.statusBar().showMessage("正在计算数据集统计信息（后台进程）...")
+        
+        labels_dir = self.data_manager.labels_dir
+        self.metadata_manager.start_calculation(samples_info, labels_dir)
+    
+    def _on_metadata_progress(self, current, total, sample_id):
+        """元数据计算进度回调（已在后端降频，约每50-100个样本触发一次）"""
+        self.statusBar().showMessage(f"正在分析样本... {current}/{total} ({sample_id})")
+        # 更新统计面板（从数据库读取，毫秒级）
+        self._on_metadata_ready()
+    
+    def _on_metadata_finished(self):
+        """元数据计算完成回调"""
+        self.statusBar().showMessage("数据集分析完成")
+        self._on_metadata_ready()
+    
+    def _on_metadata_error(self, error_msg):
+        """元数据计算错误回调"""
+        print(f"⚠️ 元数据计算错误: {error_msg}")
+    
+    def _on_metadata_ready(self):
+        """元数据准备就绪，更新UI（从数据库读取）"""
+        # 优先从 AnalysisPanel 获取统计数据
+        stats = self.ui.analysis_panel.get_aggregated_stats()
+        if not stats:
+            # 回退到直接从 metadata_manager 获取
+            stats = self.metadata_manager.get_aggregated_stats()
+        
+        if stats:
+            # 更新类别分布
+            self._update_class_distribution(stats.get('class_distribution', {}))
+            # 更新尺度分析
+            self._update_scale_analysis(stats.get('size_stats', {}))
+    
+    def _update_class_distribution(self, class_distribution):
+        """更新类别分布面板"""
+        if not class_distribution:
+            self.ui.label_classDistribution.setText("暂无类别分布数据")
+            return
+        
+        # 按像素数排序
+        sorted_classes = sorted(class_distribution.items(), 
+                                key=lambda x: int(x[1]), reverse=True)
+        
+        total_pixels = sum(int(v) for v in class_distribution.values())
+        
+        lines = []
+        for class_id, pixel_count in sorted_classes[:10]:  # 只显示前10个类别
+            pct = pixel_count / total_pixels * 100 if total_pixels > 0 else 0
+            lines.append(f"类别 {class_id}: {pixel_count:,} 像素 ({pct:.1f}%)")
+        
+        if len(sorted_classes) > 10:
+            lines.append(f"... 还有 {len(sorted_classes) - 10} 个类别")
+        
+        self.ui.label_classDistribution.setText("\n".join(lines))
+    
+    def _update_scale_analysis(self, size_stats):
+        """更新尺度分析面板"""
+        widths = size_stats.get('widths', [])
+        heights = size_stats.get('heights', [])
+        
+        if not widths or not heights:
+            self.ui.label_scaleAnalysis.setText("影像尺寸统计:\n- 暂无数据")
+            return
+        
+        min_w = size_stats.get('min_width', 0)
+        min_h = size_stats.get('min_height', 0)
+        max_w = size_stats.get('max_width', 0)
+        max_h = size_stats.get('max_height', 0)
+        
+        avg_w = sum(widths) / len(widths) if widths else 0
+        avg_h = sum(heights) / len(heights) if heights else 0
+        
+        text = (
+            f"影像尺寸统计:\n"
+            f"- 最小: {min_w} × {min_h}\n"
+            f"- 最大: {max_w} × {max_h}\n"
+            f"- 平均: {avg_w:.0f} × {avg_h:.0f}\n"
+            f"- 样本数: {len(widths)}"
+        )
+        self.ui.label_scaleAnalysis.setText(text)
+    
+    def _update_dataset_overview(self):
+        """更新数据集概览面板"""
+        train_count = len(self.data_manager.get_samples('train'))
+        val_count = len(self.data_manager.get_samples('val'))
+        test_count = len(self.data_manager.get_samples('test'))
+        
+        self.ui.widget_datasetOverview.update_data(train_count, val_count, test_count)
     
     def _validate_voc_structure(self, data_root):
         """
@@ -1014,54 +1072,28 @@ class MainWindow(QMainWindow):
                 self.load_sample_visualization(sample_info)
     
     def _filter_grid_by_dataset(self, dataset_type):
-        """根据数据集类型过滤网格视图"""
-        # 取消正在进行的加载
-        if self.thumbnail_loader and self.thumbnail_loader.isRunning():
-            self.thumbnail_loader.cancel()
-            self.thumbnail_loader.wait()
-        
+        """根据数据集类型过滤网格视图（懒加载模式）"""
         # 清空现有内容
-        self.ui.listWidget_thumbnails.clear()
-        self.thumbnail_items.clear()
-        self.thumbnail_data.clear()
-        self.thumbnail_cache.clear()
+        self.thumbnail_manager.clear()
         
         # 只获取指定数据集的样本
         if dataset_type:
             samples = self.data_manager.get_samples(dataset_type)
-            samples_list = []
             
-            for sample_id in samples:
-                image_path, label_path = self.data_manager.get_sample_paths(sample_id, dataset_type)
-                samples_list.append((sample_id, dataset_type, image_path, label_path))
-                
-                # 创建占位项
-                item = QListWidgetItem()
-                item.setText(sample_id)
-                item.setData(Qt.ItemDataRole.UserRole, {
-                    'sample_id': sample_id,
-                    'dataset': dataset_type
-                })
-                self.ui.listWidget_thumbnails.addItem(item)
-                self.thumbnail_items[f"{dataset_type}_{sample_id}"] = item
-            
-            total = len(samples_list)
-            if total == 0:
+            if not samples:
                 self.statusBar().showMessage(f"{dataset_type.upper()}: 无样本")
                 return
             
-            self.statusBar().showMessage(f"正在加载 {dataset_type.upper()} 缩略图... 0/{total}")
+            # 添加样本（只创建占位项）
+            for sample_id in samples:
+                image_path, label_path = self.data_manager.get_sample_paths(sample_id, dataset_type)
+                key = f"{dataset_type}_{sample_id}"
+                self.thumbnail_manager.add_sample(key, sample_id, dataset_type, image_path, label_path)
             
-            # 启动加载线程
-            self.thumbnail_loader = ThumbnailLoader(samples_list, thumbnail_size=120)
-            self.thumbnail_loader.thumbnail_ready.connect(self._on_thumbnail_ready)
-            self.thumbnail_loader.progress.connect(
-                lambda c, t: self.statusBar().showMessage(f"正在加载 {dataset_type.upper()} 缩略图... {c}/{t}")
-            )
-            self.thumbnail_loader.all_done.connect(
-                lambda: self.statusBar().showMessage(f"{dataset_type.upper()}: 共 {total} 个样本")
-            )
-            self.thumbnail_loader.start()
+            self.statusBar().showMessage(f"{dataset_type.upper()}: 共 {len(samples)} 个样本")
+            
+            # 触发初始加载（只加载可见区域）
+            self.thumbnail_manager.trigger_initial_load()
     
     def on_tree_item_clicked(self, item, column):
         """树控件项点击事件"""
@@ -1117,14 +1149,14 @@ class MainWindow(QMainWindow):
         self.image_viewer.set_image_visible(state == Qt.CheckState.Checked.value)
         # 网格视图模式下刷新缩略图
         if self.current_view_mode == VIEW_MODE_GRID:
-            self._refresh_all_thumbnails()
+            self._schedule_layer_refresh()
     
     def on_overlay_toggled(self, state):
         """叠加层可见性切换"""
         self.image_viewer.set_label_visible(state == Qt.CheckState.Checked.value)
         # 网格视图模式下刷新缩略图
         if self.current_view_mode == VIEW_MODE_GRID:
-            self._refresh_all_thumbnails()
+            self._schedule_layer_refresh()
     
     def on_label_only_toggled(self, state):
         """单独显示标签切换"""
@@ -1145,7 +1177,18 @@ class MainWindow(QMainWindow):
         self.ui.label_opacityValue.setText(f"{value}%")
         # 网格视图模式下刷新缩略图
         if self.current_view_mode == VIEW_MODE_GRID:
-            self._refresh_all_thumbnails()
+            self._schedule_layer_refresh()
+    
+    def _schedule_layer_refresh(self):
+        """调度图层刷新（防抖）"""
+        self._layer_refresh_timer.start()
+    
+    def _do_refresh_layer_settings(self):
+        """执行图层设置刷新"""
+        show_image = self.ui.checkBox_baseImage.isChecked()
+        show_label = self.ui.checkBox_overlayPrediction.isChecked()
+        opacity = self.ui.slider_opacity.value()
+        self.thumbnail_manager.set_layer_settings(show_image, show_label, opacity)
     
     def on_swipe_toggled(self, state):
         """卷帘对比模式切换"""
@@ -1173,11 +1216,6 @@ class MainWindow(QMainWindow):
     
     def on_switch_to_detail_view(self):
         """切换到详情视图"""
-        # 取消正在进行的缩略图加载
-        if self.thumbnail_loader and self.thumbnail_loader.isRunning():
-            self.thumbnail_loader.cancel()
-            self.thumbnail_loader.wait()
-        
         self.current_view_mode = VIEW_MODE_DETAIL
         self.ui.stackedWidget_views.setCurrentIndex(VIEW_MODE_DETAIL)
         self.ui.action_detailView.setChecked(True)
@@ -1199,155 +1237,39 @@ class MainWindow(QMainWindow):
         self.ui.checkBox_swipeCompare.setEnabled(False)
         self.ui.slider_swipe.setEnabled(False)
         
-        # 异步加载缩略图
-        self._start_thumbnail_loading()
-    
-    def _start_thumbnail_loading(self):
-        """开始异步加载缩略图"""
-        # 如果有正在运行的加载线程，先取消
-        if self.thumbnail_loader and self.thumbnail_loader.isRunning():
-            self.thumbnail_loader.cancel()
-            self.thumbnail_loader.wait()
+        # 初始化图层设置
+        show_image = self.ui.checkBox_baseImage.isChecked()
+        show_label = self.ui.checkBox_overlayPrediction.isChecked()
+        opacity = self.ui.slider_opacity.value()
+        self.thumbnail_manager.set_layer_settings(show_image, show_label, opacity)
         
+        # 加载缩略图（懒加载模式）
+        self._populate_grid_view()
+    
+    def _populate_grid_view(self):
+        """填充网格视图（只创建占位项，懒加载缩略图）"""
         # 清空现有内容
-        self.ui.listWidget_thumbnails.clear()
-        self.thumbnail_items.clear()
-        self.thumbnail_data.clear()
-        self.thumbnail_cache.clear()
+        self.thumbnail_manager.clear()
         
         # 收集所有样本信息
         all_samples = self.data_manager.get_all_samples()
-        samples_list = []
+        total = sum(len(samples) for samples in all_samples.values())
         
-        for dataset_type, samples in all_samples.items():
-            for sample_id in samples:
-                image_path, label_path = self.data_manager.get_sample_paths(sample_id, dataset_type)
-                samples_list.append((sample_id, dataset_type, image_path, label_path))
-                
-                # 先创建占位项（立即显示）
-                item = QListWidgetItem()
-                item.setText(sample_id)
-                item.setData(Qt.ItemDataRole.UserRole, {
-                    'sample_id': sample_id,
-                    'dataset': dataset_type
-                })
-                self.ui.listWidget_thumbnails.addItem(item)
-                self.thumbnail_items[f"{dataset_type}_{sample_id}"] = item
-        
-        total = len(samples_list)
         if total == 0:
             self.statusBar().showMessage("网格视图: 无样本")
             return
         
-        self.statusBar().showMessage(f"正在加载缩略图... 0/{total}")
+        # 添加所有样本（只创建占位项）
+        for dataset_type, samples in all_samples.items():
+            for sample_id in samples:
+                image_path, label_path = self.data_manager.get_sample_paths(sample_id, dataset_type)
+                key = f"{dataset_type}_{sample_id}"
+                self.thumbnail_manager.add_sample(key, sample_id, dataset_type, image_path, label_path)
         
-        # 创建并启动加载线程
-        self.thumbnail_loader = ThumbnailLoader(samples_list, thumbnail_size=120)
-        self.thumbnail_loader.thumbnail_ready.connect(self._on_thumbnail_ready)
-        self.thumbnail_loader.progress.connect(self._on_thumbnail_progress)
-        self.thumbnail_loader.all_done.connect(self._on_thumbnails_done)
-        self.thumbnail_loader.start()
-    
-    def _on_thumbnail_ready(self, sample_id, dataset_type, image_pixmap, label_pixmap):
-        """单个缩略图加载完成"""
-        key = f"{dataset_type}_{sample_id}"
-        
-        # 保存原始数据
-        self.thumbnail_data[key] = {
-            'image': image_pixmap,
-            'label': label_pixmap
-        }
-        
-        # 根据当前图层设置合成显示
-        if key in self.thumbnail_items:
-            self._update_thumbnail_display(key)
-    
-    def _update_thumbnail_display(self, key):
-        """根据图层设置更新单个缩略图显示（带缓存优化）"""
-        if key not in self.thumbnail_items or key not in self.thumbnail_data:
-            return
-        
-        item = self.thumbnail_items[key]
-        data = self.thumbnail_data[key]
-        image_pixmap = data['image']
-        label_pixmap = data['label']
-        
-        show_image = self.ui.checkBox_baseImage.isChecked()
-        show_label = self.ui.checkBox_overlayPrediction.isChecked()
-        opacity = self.ui.slider_opacity.value()
-        
-        # 生成缓存键（包含图层设置）
-        cache_key = f"{key}_{show_image}_{show_label}_{opacity}"
-        
-        # 检查缓存
-        if cache_key in self.thumbnail_cache:
-            item.setIcon(QIcon(self.thumbnail_cache[cache_key]))
-            return
-        
-        # 合成图像
-        if image_pixmap.isNull() and label_pixmap.isNull():
-            return
-        
-        # 确定输出尺寸
-        if not image_pixmap.isNull():
-            result = QPixmap(image_pixmap.size())
-        else:
-            result = QPixmap(label_pixmap.size())
-        result.fill(Qt.GlobalColor.transparent)
-        
-        painter = QPainter(result)
-        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, False)  # 关闭平滑以提升性能
-        
-        # 绘制底图
-        if show_image and not image_pixmap.isNull():
-            painter.drawPixmap(0, 0, image_pixmap)
-        
-        # 绘制标签（使用 CompositionMode 进行高效混合）
-        if show_label and not label_pixmap.isNull():
-            painter.setOpacity(opacity / 100.0)
-            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
-            painter.drawPixmap(0, 0, label_pixmap)
-        
-        painter.end()
-        
-        # 存入缓存
-        self.thumbnail_cache[cache_key] = result
-        item.setIcon(QIcon(result))
-    
-    def _get_current_layer_settings(self):
-        """获取当前图层设置（用于缓存判断）"""
-        return (
-            self.ui.checkBox_baseImage.isChecked(),
-            self.ui.checkBox_overlayPrediction.isChecked(),
-            self.ui.slider_opacity.value()
-        )
-    
-    def _refresh_all_thumbnails(self):
-        """刷新所有缩略图显示（使用防抖机制）"""
-        # 重启防抖定时器
-        self._refresh_timer.start()
-    
-    def _do_refresh_thumbnails(self):
-        """实际执行缩略图刷新（防抖后调用）"""
-        # 检查图层设置是否变化
-        current_settings = self._get_current_layer_settings()
-        if current_settings != self._cached_layer_settings:
-            # 设置变化，清空合成缓存
-            self.thumbnail_cache.clear()
-            self._cached_layer_settings = current_settings
-        
-        # 批量更新所有缩略图
-        for key in self.thumbnail_data.keys():
-            self._update_thumbnail_display(key)
-    
-    def _on_thumbnail_progress(self, current, total):
-        """缩略图加载进度更新"""
-        self.statusBar().showMessage(f"正在加载缩略图... {current}/{total}")
-    
-    def _on_thumbnails_done(self):
-        """所有缩略图加载完成"""
-        total = self.ui.listWidget_thumbnails.count()
         self.statusBar().showMessage(f"网格视图: 共 {total} 个样本")
+        
+        # 触发初始加载（只加载可见区域）
+        self.thumbnail_manager.trigger_initial_load()
     
     def on_thumbnail_double_clicked(self, item):
         """缩略图双击事件 - 切换到详情视图并显示该样本"""

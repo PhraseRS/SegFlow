@@ -1,0 +1,422 @@
+# -*- coding: utf-8 -*-
+"""
+缩略图懒加载管理器 (Thumbnail Lazy Loading Manager)
+只加载可见区域的缩略图，使用 QThreadPool 管理任务
+"""
+
+from PySide6.QtWidgets import QListWidget
+from PySide6.QtCore import Qt, QRunnable, QThreadPool, Signal, QObject, QTimer, QMutex, QMutexLocker
+from PySide6.QtGui import QPixmap, QImage, QIcon, QPainter, QColor
+import os
+
+
+# VOC调色板
+VOC_PALETTE = [
+    (0, 0, 0), (128, 0, 0), (0, 128, 0), (128, 128, 0),
+    (0, 0, 128), (128, 0, 128), (0, 128, 128), (128, 128, 128),
+    (64, 0, 0), (192, 0, 0), (64, 128, 0), (192, 128, 0),
+    (64, 0, 128), (192, 0, 128), (64, 128, 128), (192, 128, 128),
+    (0, 64, 0), (128, 64, 0), (0, 192, 0), (128, 192, 0),
+    (0, 64, 128), (255, 255, 255),
+]
+
+
+class ThumbnailSignals(QObject):
+    """缩略图加载信号"""
+    ready = Signal(str, QPixmap, QPixmap)  # (key, image_pixmap, label_pixmap)
+    error = Signal(str, str)  # (key, error_msg)
+
+
+class ThumbnailTask(QRunnable):
+    """单个缩略图加载任务"""
+    
+    def __init__(self, key, image_path, label_path, thumbnail_size=120):
+        super().__init__()
+        self.key = key
+        self.image_path = image_path
+        self.label_path = label_path
+        self.thumbnail_size = thumbnail_size
+        self.signals = ThumbnailSignals()
+        self._is_cancelled = False
+    
+    def cancel(self):
+        """标记任务为取消"""
+        self._is_cancelled = True
+    
+    def _apply_colormap(self, label_image):
+        """将标签图像转换为伪彩色"""
+        width = label_image.width()
+        height = label_image.height()
+        colored = QImage(width, height, QImage.Format.Format_ARGB32)
+        
+        for y in range(height):
+            for x in range(width):
+                pixel = label_image.pixel(x, y)
+                gray = pixel & 0xFF
+                if gray < len(VOC_PALETTE):
+                    r, g, b = VOC_PALETTE[gray]
+                else:
+                    r, g, b = 255, 255, 255
+                alpha = 0 if gray == 0 else 255
+                colored.setPixel(x, y, (alpha << 24) | (r << 16) | (g << 8) | b)
+        
+        return colored
+    
+    def _apply_linear_stretch(self, image, percent=2):
+        """对图像应用线性拉伸"""
+        width = image.width()
+        height = image.height()
+        
+        if image.format() != QImage.Format.Format_RGB32:
+            image = image.convertToFormat(QImage.Format.Format_RGB32)
+        
+        # 收集像素亮度
+        pixels = []
+        for y in range(height):
+            for x in range(width):
+                pixel = image.pixel(x, y)
+                r = (pixel >> 16) & 0xFF
+                g = (pixel >> 8) & 0xFF
+                b = pixel & 0xFF
+                luminance = int(0.299 * r + 0.587 * g + 0.114 * b)
+                pixels.append(luminance)
+        
+        if not pixels:
+            return image
+        
+        pixels.sort()
+        n = len(pixels)
+        low_idx = int(n * percent / 100)
+        high_idx = int(n * (100 - percent) / 100) - 1
+        
+        if low_idx >= high_idx:
+            return image
+        
+        low_val = pixels[low_idx]
+        high_val = pixels[high_idx]
+        
+        if high_val <= low_val:
+            return image
+        
+        result = QImage(width, height, QImage.Format.Format_RGB32)
+        scale = 255.0 / (high_val - low_val)
+        
+        for y in range(height):
+            for x in range(width):
+                pixel = image.pixel(x, y)
+                r = (pixel >> 16) & 0xFF
+                g = (pixel >> 8) & 0xFF
+                b = pixel & 0xFF
+                
+                r_new = int(max(0, min(255, (r - low_val) * scale)))
+                g_new = int(max(0, min(255, (g - low_val) * scale)))
+                b_new = int(max(0, min(255, (b - low_val) * scale)))
+                
+                result.setPixel(x, y, (255 << 24) | (r_new << 16) | (g_new << 8) | b_new)
+        
+        return result
+    
+    def run(self):
+        """执行缩略图加载"""
+        if self._is_cancelled:
+            return
+        
+        image_pixmap = QPixmap()
+        label_pixmap = QPixmap()
+        
+        try:
+            # 加载原图
+            if self.image_path and os.path.exists(self.image_path):
+                image = QImage(self.image_path)
+                if not image.isNull():
+                    # 先缩放
+                    scaled = image.scaled(
+                        self.thumbnail_size, self.thumbnail_size,
+                        Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation
+                    )
+                    # 再拉伸
+                    stretched = self._apply_linear_stretch(scaled, percent=2)
+                    image_pixmap = QPixmap.fromImage(stretched)
+            
+            if self._is_cancelled:
+                return
+            
+            # 加载标签
+            if self.label_path and os.path.exists(self.label_path):
+                label_image = QImage(self.label_path)
+                if not label_image.isNull():
+                    colored = self._apply_colormap(label_image)
+                    scaled = colored.scaled(
+                        self.thumbnail_size, self.thumbnail_size,
+                        Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation
+                    )
+                    label_pixmap = QPixmap.fromImage(scaled)
+            
+            if not self._is_cancelled:
+                self.signals.ready.emit(self.key, image_pixmap, label_pixmap)
+        
+        except Exception as e:
+            if not self._is_cancelled:
+                self.signals.error.emit(self.key, str(e))
+
+
+class ThumbnailLazyLoader:
+    """缩略图懒加载管理器"""
+    
+    def __init__(self, list_widget, thumbnail_size=120):
+        """
+        Args:
+            list_widget: QListWidget 实例
+            thumbnail_size: 缩略图尺寸
+        """
+        self.list_widget = list_widget
+        self.thumbnail_size = thumbnail_size
+        
+        # 线程池
+        self.thread_pool = QThreadPool.globalInstance()
+        self.thread_pool.setMaxThreadCount(4)  # 限制并发数
+        
+        # 样本数据 {key: {'image_path': str, 'label_path': str, 'item': QListWidgetItem}}
+        self.samples = {}
+        
+        # 已加载的缩略图数据 {key: {'image': QPixmap, 'label': QPixmap}}
+        self.loaded_data = {}
+        
+        # 合成缓存 {cache_key: QPixmap}
+        self.composite_cache = {}
+        
+        # 当前图层设置
+        self.show_image = True
+        self.show_label = True
+        self.opacity = 70
+        
+        # 待处理任务 {key: ThumbnailTask}
+        self.pending_tasks = {}
+        self.task_mutex = QMutex()
+        
+        # 防抖定时器
+        self._scroll_timer = QTimer()
+        self._scroll_timer.setSingleShot(True)
+        self._scroll_timer.setInterval(100)  # 100ms 防抖
+        self._scroll_timer.timeout.connect(self._load_visible_thumbnails)
+        
+        # 连接滚动信号
+        scrollbar = self.list_widget.verticalScrollBar()
+        scrollbar.valueChanged.connect(self._on_scroll)
+        
+        # 连接resize信号
+        self.list_widget.resizeEvent = self._on_resize
+        
+        # 占位图
+        self._placeholder = self._create_placeholder()
+    
+    def _create_placeholder(self):
+        """创建占位图"""
+        pixmap = QPixmap(self.thumbnail_size, self.thumbnail_size)
+        pixmap.fill(QColor(128, 128, 128, 50))
+        return QIcon(pixmap)
+    
+    def clear(self):
+        """清空所有数据"""
+        # 取消所有待处理任务
+        with QMutexLocker(self.task_mutex):
+            for task in self.pending_tasks.values():
+                task.cancel()
+            self.pending_tasks.clear()
+        
+        self.samples.clear()
+        self.loaded_data.clear()
+        self.composite_cache.clear()
+        self.list_widget.clear()
+    
+    def add_sample(self, key, sample_id, dataset_type, image_path, label_path):
+        """添加样本（只创建占位项，不加载缩略图）"""
+        from PySide6.QtWidgets import QListWidgetItem
+        
+        item = QListWidgetItem()
+        item.setText(sample_id)
+        item.setIcon(self._placeholder)
+        item.setData(Qt.ItemDataRole.UserRole, {
+            'sample_id': sample_id,
+            'dataset': dataset_type
+        })
+        
+        self.list_widget.addItem(item)
+        
+        self.samples[key] = {
+            'sample_id': sample_id,
+            'dataset': dataset_type,
+            'image_path': image_path,
+            'label_path': label_path,
+            'item': item
+        }
+    
+    def _on_scroll(self, value):
+        """滚动事件（防抖）"""
+        self._scroll_timer.start()
+    
+    def _on_resize(self, event):
+        """窗口大小改变事件"""
+        # 调用原始的resizeEvent
+        from PySide6.QtWidgets import QListWidget
+        QListWidget.resizeEvent(self.list_widget, event)
+        # 触发重新加载可见区域
+        self._scroll_timer.start()
+    
+    def _get_visible_items(self):
+        """获取当前可见区域的项"""
+        visible_keys = []
+        viewport = self.list_widget.viewport()
+        viewport_rect = viewport.rect()
+        
+        for i in range(self.list_widget.count()):
+            item = self.list_widget.item(i)
+            item_rect = self.list_widget.visualItemRect(item)
+            
+            # 检查是否在可见区域内（包含部分可见）
+            if item_rect.intersects(viewport_rect):
+                # 查找对应的key
+                for key, data in self.samples.items():
+                    if data['item'] is item:
+                        visible_keys.append(key)
+                        break
+        
+        return visible_keys
+    
+    def _load_visible_thumbnails(self):
+        """加载可见区域的缩略图"""
+        visible_keys = self._get_visible_items()
+        
+        # 取消不在可见区域的待处理任务
+        with QMutexLocker(self.task_mutex):
+            keys_to_cancel = [k for k in self.pending_tasks.keys() if k not in visible_keys]
+            for key in keys_to_cancel:
+                self.pending_tasks[key].cancel()
+                del self.pending_tasks[key]
+        
+        # 加载可见区域中未加载的缩略图
+        for key in visible_keys:
+            if key in self.loaded_data:
+                # 已加载，直接更新显示
+                self._update_item_display(key)
+            elif key not in self.pending_tasks:
+                # 未加载且未在队列中，创建任务
+                self._start_load_task(key)
+    
+    def _start_load_task(self, key):
+        """启动加载任务"""
+        if key not in self.samples:
+            return
+        
+        sample = self.samples[key]
+        task = ThumbnailTask(
+            key,
+            sample['image_path'],
+            sample['label_path'],
+            self.thumbnail_size
+        )
+        task.signals.ready.connect(self._on_thumbnail_ready)
+        task.signals.error.connect(self._on_thumbnail_error)
+        
+        with QMutexLocker(self.task_mutex):
+            self.pending_tasks[key] = task
+        
+        self.thread_pool.start(task)
+    
+    def _on_thumbnail_ready(self, key, image_pixmap, label_pixmap):
+        """缩略图加载完成"""
+        # 从待处理列表移除
+        with QMutexLocker(self.task_mutex):
+            if key in self.pending_tasks:
+                del self.pending_tasks[key]
+        
+        # 保存数据
+        self.loaded_data[key] = {
+            'image': image_pixmap,
+            'label': label_pixmap
+        }
+        
+        # 更新显示
+        self._update_item_display(key)
+    
+    def _on_thumbnail_error(self, key, error_msg):
+        """缩略图加载错误"""
+        with QMutexLocker(self.task_mutex):
+            if key in self.pending_tasks:
+                del self.pending_tasks[key]
+        print(f"⚠️ 缩略图加载失败 [{key}]: {error_msg}")
+    
+    def _update_item_display(self, key):
+        """更新单个项的显示"""
+        if key not in self.samples or key not in self.loaded_data:
+            return
+        
+        item = self.samples[key]['item']
+        data = self.loaded_data[key]
+        image_pixmap = data['image']
+        label_pixmap = data['label']
+        
+        # 生成缓存键
+        cache_key = f"{key}_{self.show_image}_{self.show_label}_{self.opacity}"
+        
+        # 检查缓存
+        if cache_key in self.composite_cache:
+            item.setIcon(QIcon(self.composite_cache[cache_key]))
+            return
+        
+        # 合成图像
+        if image_pixmap.isNull() and label_pixmap.isNull():
+            return
+        
+        if not image_pixmap.isNull():
+            result = QPixmap(image_pixmap.size())
+        else:
+            result = QPixmap(label_pixmap.size())
+        result.fill(Qt.GlobalColor.transparent)
+        
+        painter = QPainter(result)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, False)
+        
+        if self.show_image and not image_pixmap.isNull():
+            painter.drawPixmap(0, 0, image_pixmap)
+        
+        if self.show_label and not label_pixmap.isNull():
+            painter.setOpacity(self.opacity / 100.0)
+            painter.drawPixmap(0, 0, label_pixmap)
+        
+        painter.end()
+        
+        # 缓存并显示
+        self.composite_cache[cache_key] = result
+        item.setIcon(QIcon(result))
+    
+    def set_layer_settings(self, show_image, show_label, opacity):
+        """设置图层参数"""
+        if (self.show_image == show_image and 
+            self.show_label == show_label and 
+            self.opacity == opacity):
+            return
+        
+        self.show_image = show_image
+        self.show_label = show_label
+        self.opacity = opacity
+        
+        # 清空合成缓存
+        self.composite_cache.clear()
+        
+        # 刷新已加载的可见项
+        visible_keys = self._get_visible_items()
+        for key in visible_keys:
+            if key in self.loaded_data:
+                self._update_item_display(key)
+    
+    def refresh_visible(self):
+        """刷新可见区域"""
+        self._load_visible_thumbnails()
+    
+    def trigger_initial_load(self):
+        """触发初始加载（切换到网格视图时调用）"""
+        # 延迟一点执行，确保布局完成
+        QTimer.singleShot(50, self._load_visible_thumbnails)

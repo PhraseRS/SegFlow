@@ -23,6 +23,9 @@ from PySide6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QGrap
     QSpacerItem, QSplitter, QStatusBar, QStackedWidget, QTabWidget,
     QTextEdit, QToolBar, QTreeWidget, QTreeWidgetItem,
     QVBoxLayout, QWidget, QListWidget, QListWidgetItem, QListView)
+from collapsible_widget import CollapsibleContainer, CollapsiblePanel
+from dataset_overview_widget import DatasetOverviewWidget
+from analysis_panel import AnalysisPanel
 
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
@@ -233,11 +236,73 @@ class Ui_MainWindow(object):
         self.verticalLayout_right = QVBoxLayout(self.rightPanel)
         self.verticalLayout_right.setObjectName(u"verticalLayout_right")
         self.verticalLayout_right.setContentsMargins(0, 0, 0, 0)
-        self.groupBox_taskSwitcher = QGroupBox(self.rightPanel)
-        self.groupBox_taskSwitcher.setObjectName(u"groupBox_taskSwitcher")
-        self.verticalLayout_taskSwitcher = QVBoxLayout(self.groupBox_taskSwitcher)
-        self.verticalLayout_taskSwitcher.setObjectName(u"verticalLayout_taskSwitcher")
-        self.tabWidget_tasks = QTabWidget(self.groupBox_taskSwitcher)
+        
+        # 右侧面板：上下文属性与控制 (Context & Control)
+        self.tabWidget_contextControl = QTabWidget(self.rightPanel)
+        self.tabWidget_contextControl.setObjectName(u"tabWidget_contextControl")
+        
+        # ========== Tab 1: 数据洞察 (Data Profile) ==========
+        self.tab_dataProfile = QWidget()
+        self.tab_dataProfile.setObjectName(u"tab_dataProfile")
+        self.verticalLayout_dataProfile = QVBoxLayout(self.tab_dataProfile)
+        self.verticalLayout_dataProfile.setObjectName(u"verticalLayout_dataProfile")
+        self.verticalLayout_dataProfile.setContentsMargins(0, 0, 0, 0)
+        
+        # 使用 AnalysisPanel 智能分析面板
+        self.analysis_panel = AnalysisPanel(self.tab_dataProfile)
+        self.analysis_panel.setObjectName(u"analysis_panel")
+        
+        # === 顶部：数据集概览（永远可见）===
+        self.panel_datasetOverview = CollapsiblePanel("数据集概览 (Dataset Overview)", expanded=True)
+        self.widget_datasetOverview = DatasetOverviewWidget()
+        self.widget_datasetOverview.setObjectName(u"widget_datasetOverview")
+        self.panel_datasetOverview.add_widget(self.widget_datasetOverview)
+        self.analysis_panel.set_overview_widget(self.panel_datasetOverview)
+        
+        # === 底部：深度图表（可折叠面板容器）===
+        self.collapsible_dataProfile = CollapsibleContainer()
+        self.collapsible_dataProfile.setObjectName(u"collapsible_dataProfile")
+        
+        # 面板1: 类别分布 (Class Distribution)
+        self.panel_classDistribution = self.collapsible_dataProfile.add_panel("类别分布 (Class Distribution)", expanded=True)
+        self.label_classDistribution = QLabel()
+        self.label_classDistribution.setObjectName(u"label_classDistribution")
+        self.label_classDistribution.setWordWrap(True)
+        self.panel_classDistribution.add_widget(self.label_classDistribution)
+        
+        # 面板2: 尺度分析 (Scale Analysis)
+        self.panel_scaleAnalysis = self.collapsible_dataProfile.add_panel("尺度分析 (Scale Analysis)", expanded=False)
+        self.label_scaleAnalysis = QLabel()
+        self.label_scaleAnalysis.setObjectName(u"label_scaleAnalysis")
+        self.label_scaleAnalysis.setWordWrap(True)
+        self.panel_scaleAnalysis.add_widget(self.label_scaleAnalysis)
+        
+        # 面板3: 健康检查 (Health Check)
+        self.panel_healthCheck = self.collapsible_dataProfile.add_panel("健康检查 (Health Check)", expanded=False)
+        self.label_healthCheck = QLabel()
+        self.label_healthCheck.setObjectName(u"label_healthCheck")
+        self.label_healthCheck.setWordWrap(True)
+        self.panel_healthCheck.add_widget(self.label_healthCheck)
+        
+        # 将深度图表设置为 AnalysisPanel 的底部组件
+        self.analysis_panel.set_charts_widget(self.collapsible_dataProfile)
+        
+        self.verticalLayout_dataProfile.addWidget(self.analysis_panel)
+        
+        self.tabWidget_contextControl.addTab(self.tab_dataProfile, "")
+        
+        # ========== Tab 2: 任务配置 (Task Config) ==========
+        self.tab_taskConfig = QWidget()
+        self.tab_taskConfig.setObjectName(u"tab_taskConfig")
+        self.verticalLayout_taskConfig = QVBoxLayout(self.tab_taskConfig)
+        self.verticalLayout_taskConfig.setObjectName(u"verticalLayout_taskConfig")
+        
+        # 任务类型选择
+        self.groupBox_taskType = QGroupBox(self.tab_taskConfig)
+        self.groupBox_taskType.setObjectName(u"groupBox_taskType")
+        self.verticalLayout_taskType = QVBoxLayout(self.groupBox_taskType)
+        self.verticalLayout_taskType.setObjectName(u"verticalLayout_taskType")
+        self.tabWidget_tasks = QTabWidget(self.groupBox_taskType)
         self.tabWidget_tasks.setObjectName(u"tabWidget_tasks")
         self.tab_train = QWidget()
         self.tab_train.setObjectName(u"tab_train")
@@ -245,9 +310,7 @@ class Ui_MainWindow(object):
         self.verticalLayout_train.setObjectName(u"verticalLayout_train")
         self.label_trainInfo = QLabel(self.tab_train)
         self.label_trainInfo.setObjectName(u"label_trainInfo")
-
         self.verticalLayout_train.addWidget(self.label_trainInfo)
-
         self.tabWidget_tasks.addTab(self.tab_train, "")
         self.tab_inference = QWidget()
         self.tab_inference.setObjectName(u"tab_inference")
@@ -255,17 +318,13 @@ class Ui_MainWindow(object):
         self.verticalLayout_inference.setObjectName(u"verticalLayout_inference")
         self.label_inferenceInfo = QLabel(self.tab_inference)
         self.label_inferenceInfo.setObjectName(u"label_inferenceInfo")
-
         self.verticalLayout_inference.addWidget(self.label_inferenceInfo)
-
         self.tabWidget_tasks.addTab(self.tab_inference, "")
-
-        self.verticalLayout_taskSwitcher.addWidget(self.tabWidget_tasks)
-
-
-        self.verticalLayout_right.addWidget(self.groupBox_taskSwitcher)
-
-        self.groupBox_paramConfig = QGroupBox(self.rightPanel)
+        self.verticalLayout_taskType.addWidget(self.tabWidget_tasks)
+        self.verticalLayout_taskConfig.addWidget(self.groupBox_taskType)
+        
+        # 参数配置
+        self.groupBox_paramConfig = QGroupBox(self.tab_taskConfig)
         self.groupBox_paramConfig.setObjectName(u"groupBox_paramConfig")
         self.verticalLayout_paramConfig = QVBoxLayout(self.groupBox_paramConfig)
         self.verticalLayout_paramConfig.setObjectName(u"verticalLayout_paramConfig")
@@ -280,45 +339,86 @@ class Ui_MainWindow(object):
         self.label_paramPlaceholder = QLabel(self.scrollAreaWidgetContents)
         self.label_paramPlaceholder.setObjectName(u"label_paramPlaceholder")
         self.label_paramPlaceholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
         self.verticalLayout_scrollParams.addWidget(self.label_paramPlaceholder)
-
         self.verticalSpacer_params = QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
-
         self.verticalLayout_scrollParams.addItem(self.verticalSpacer_params)
-
         self.scrollArea_params.setWidget(self.scrollAreaWidgetContents)
-
         self.verticalLayout_paramConfig.addWidget(self.scrollArea_params)
-
-
-        self.verticalLayout_right.addWidget(self.groupBox_paramConfig)
-
-        self.groupBox_actions = QGroupBox(self.rightPanel)
+        self.verticalLayout_taskConfig.addWidget(self.groupBox_paramConfig)
+        
+        # 操作按钮
+        self.groupBox_actions = QGroupBox(self.tab_taskConfig)
         self.groupBox_actions.setObjectName(u"groupBox_actions")
         self.verticalLayout_actions = QVBoxLayout(self.groupBox_actions)
         self.verticalLayout_actions.setObjectName(u"verticalLayout_actions")
         self.pushButton_run = QPushButton(self.groupBox_actions)
         self.pushButton_run.setObjectName(u"pushButton_run")
-
         self.verticalLayout_actions.addWidget(self.pushButton_run)
-
         self.pushButton_stop = QPushButton(self.groupBox_actions)
         self.pushButton_stop.setObjectName(u"pushButton_stop")
-
         self.verticalLayout_actions.addWidget(self.pushButton_stop)
-
         self.pushButton_export = QPushButton(self.groupBox_actions)
         self.pushButton_export.setObjectName(u"pushButton_export")
-
         self.verticalLayout_actions.addWidget(self.pushButton_export)
-
-
-        self.verticalLayout_right.addWidget(self.groupBox_actions)
-
-        self.verticalSpacer_right = QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
-
-        self.verticalLayout_right.addItem(self.verticalSpacer_right)
+        self.verticalLayout_taskConfig.addWidget(self.groupBox_actions)
+        
+        self.verticalSpacer_taskConfig = QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
+        self.verticalLayout_taskConfig.addItem(self.verticalSpacer_taskConfig)
+        
+        self.tabWidget_contextControl.addTab(self.tab_taskConfig, "")
+        
+        # ========== Tab 3: 推理可视化 (Inference) ==========
+        self.tab_inferenceVis = QWidget()
+        self.tab_inferenceVis.setObjectName(u"tab_inferenceVis")
+        self.verticalLayout_inferenceVis = QVBoxLayout(self.tab_inferenceVis)
+        self.verticalLayout_inferenceVis.setObjectName(u"verticalLayout_inferenceVis")
+        
+        # 模型选择
+        self.groupBox_modelSelect = QGroupBox(self.tab_inferenceVis)
+        self.groupBox_modelSelect.setObjectName(u"groupBox_modelSelect")
+        self.verticalLayout_modelSelect = QVBoxLayout(self.groupBox_modelSelect)
+        self.verticalLayout_modelSelect.setObjectName(u"verticalLayout_modelSelect")
+        self.label_modelSelect = QLabel(self.groupBox_modelSelect)
+        self.label_modelSelect.setObjectName(u"label_modelSelect")
+        self.verticalLayout_modelSelect.addWidget(self.label_modelSelect)
+        self.pushButton_loadModel = QPushButton(self.groupBox_modelSelect)
+        self.pushButton_loadModel.setObjectName(u"pushButton_loadModel")
+        self.verticalLayout_modelSelect.addWidget(self.pushButton_loadModel)
+        self.verticalLayout_inferenceVis.addWidget(self.groupBox_modelSelect)
+        
+        # 推理结果
+        self.groupBox_inferenceResult = QGroupBox(self.tab_inferenceVis)
+        self.groupBox_inferenceResult.setObjectName(u"groupBox_inferenceResult")
+        self.verticalLayout_inferenceResult = QVBoxLayout(self.groupBox_inferenceResult)
+        self.verticalLayout_inferenceResult.setObjectName(u"verticalLayout_inferenceResult")
+        self.label_inferenceResult = QLabel(self.groupBox_inferenceResult)
+        self.label_inferenceResult.setObjectName(u"label_inferenceResult")
+        self.label_inferenceResult.setWordWrap(True)
+        self.verticalLayout_inferenceResult.addWidget(self.label_inferenceResult)
+        self.verticalLayout_inferenceVis.addWidget(self.groupBox_inferenceResult)
+        
+        # 推理操作
+        self.groupBox_inferenceActions = QGroupBox(self.tab_inferenceVis)
+        self.groupBox_inferenceActions.setObjectName(u"groupBox_inferenceActions")
+        self.verticalLayout_inferenceActions = QVBoxLayout(self.groupBox_inferenceActions)
+        self.verticalLayout_inferenceActions.setObjectName(u"verticalLayout_inferenceActions")
+        self.pushButton_runInference = QPushButton(self.groupBox_inferenceActions)
+        self.pushButton_runInference.setObjectName(u"pushButton_runInference")
+        self.verticalLayout_inferenceActions.addWidget(self.pushButton_runInference)
+        self.pushButton_batchInference = QPushButton(self.groupBox_inferenceActions)
+        self.pushButton_batchInference.setObjectName(u"pushButton_batchInference")
+        self.verticalLayout_inferenceActions.addWidget(self.pushButton_batchInference)
+        self.pushButton_exportResult = QPushButton(self.groupBox_inferenceActions)
+        self.pushButton_exportResult.setObjectName(u"pushButton_exportResult")
+        self.verticalLayout_inferenceActions.addWidget(self.pushButton_exportResult)
+        self.verticalLayout_inferenceVis.addWidget(self.groupBox_inferenceActions)
+        
+        self.verticalSpacer_inferenceVis = QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
+        self.verticalLayout_inferenceVis.addItem(self.verticalSpacer_inferenceVis)
+        
+        self.tabWidget_contextControl.addTab(self.tab_inferenceVis, "")
+        
+        self.verticalLayout_right.addWidget(self.tabWidget_contextControl)
 
         self.splitter_horizontal.addWidget(self.rightPanel)
         self.splitter_vertical.addWidget(self.splitter_horizontal)
@@ -488,7 +588,17 @@ class Ui_MainWindow(object):
         self.checkBox_swipeCompare.setText(QCoreApplication.translate("MainWindow", u"\u5377\u5e18\u5bf9\u6bd4 (Swipe Compare)", None))
         self.label_swipe.setText(QCoreApplication.translate("MainWindow", u"Position:", None))
         self.label_swipeValue.setText(QCoreApplication.translate("MainWindow", u"50%", None))
-        self.groupBox_taskSwitcher.setTitle(QCoreApplication.translate("MainWindow", u"\u4efb\u52a1\u5207\u6362 (Task Switcher)", None))
+        
+        # Tab 1: 数据洞察（使用可折叠面板，标题在组件中设置）
+        self.tabWidget_contextControl.setTabText(self.tabWidget_contextControl.indexOf(self.tab_dataProfile), QCoreApplication.translate("MainWindow", u"\u6570\u636e\u6d1e\u5bdf (Data Profile)", None))
+        # widget_datasetOverview 使用自定义组件，无需设置文本
+        self.label_classDistribution.setText(QCoreApplication.translate("MainWindow", u"\u6682\u65e0\u7c7b\u522b\u5206\u5e03\u6570\u636e\n\u8bf7\u5148\u52a0\u8f7d\u6570\u636e\u96c6", None))
+        self.label_scaleAnalysis.setText(QCoreApplication.translate("MainWindow", u"\u5f71\u50cf\u5c3a\u5bf8\u7edf\u8ba1:\n- \u6700\u5c0f: -\n- \u6700\u5927: -\n- \u5e73\u5747: -", None))
+        self.label_healthCheck.setText(QCoreApplication.translate("MainWindow", u"\u2705 \u6570\u636e\u96c6\u72b6\u6001: \u672a\u68c0\u67e5\n\n\u70b9\u51fb\u201c\u8fd0\u884c\u68c0\u67e5\u201d\u5f00\u59cb\u5065\u5eb7\u68c0\u67e5", None))
+        
+        # Tab 2: 任务配置
+        self.tabWidget_contextControl.setTabText(self.tabWidget_contextControl.indexOf(self.tab_taskConfig), QCoreApplication.translate("MainWindow", u"\u4efb\u52a1\u914d\u7f6e (Task Config)", None))
+        self.groupBox_taskType.setTitle(QCoreApplication.translate("MainWindow", u"\u4efb\u52a1\u7c7b\u578b (Task Type)", None))
         self.label_trainInfo.setText(QCoreApplication.translate("MainWindow", u"\u8bad\u7ec3\u6a21\u5f0f\u914d\u7f6e", None))
         self.tabWidget_tasks.setTabText(self.tabWidget_tasks.indexOf(self.tab_train), QCoreApplication.translate("MainWindow", u"\u8bad\u7ec3 (Train)", None))
         self.label_inferenceInfo.setText(QCoreApplication.translate("MainWindow", u"\u63a8\u7406\u6a21\u5f0f\u914d\u7f6e", None))
@@ -500,6 +610,19 @@ class Ui_MainWindow(object):
         self.pushButton_run.setText(QCoreApplication.translate("MainWindow", u"\u8fd0\u884c (Run)", None))
         self.pushButton_stop.setText(QCoreApplication.translate("MainWindow", u"\u505c\u6b62 (Stop)", None))
         self.pushButton_export.setText(QCoreApplication.translate("MainWindow", u"\u5bfc\u51fa (Export)", None))
+        
+        # Tab 3: 推理可视化
+        self.tabWidget_contextControl.setTabText(self.tabWidget_contextControl.indexOf(self.tab_inferenceVis), QCoreApplication.translate("MainWindow", u"\u63a8\u7406\u53ef\u89c6\u5316 (Inference)", None))
+        self.groupBox_modelSelect.setTitle(QCoreApplication.translate("MainWindow", u"\u6a21\u578b\u9009\u62e9 (Model Selection)", None))
+        self.label_modelSelect.setText(QCoreApplication.translate("MainWindow", u"\u672a\u52a0\u8f7d\u6a21\u578b", None))
+        self.pushButton_loadModel.setText(QCoreApplication.translate("MainWindow", u"\u52a0\u8f7d\u6a21\u578b (Load Model)", None))
+        self.groupBox_inferenceResult.setTitle(QCoreApplication.translate("MainWindow", u"\u63a8\u7406\u7ed3\u679c (Inference Result)", None))
+        self.label_inferenceResult.setText(QCoreApplication.translate("MainWindow", u"\u6682\u65e0\u63a8\u7406\u7ed3\u679c", None))
+        self.groupBox_inferenceActions.setTitle(QCoreApplication.translate("MainWindow", u"\u63a8\u7406\u64cd\u4f5c (Inference Actions)", None))
+        self.pushButton_runInference.setText(QCoreApplication.translate("MainWindow", u"\u8fd0\u884c\u63a8\u7406 (Run Inference)", None))
+        self.pushButton_batchInference.setText(QCoreApplication.translate("MainWindow", u"\u6279\u91cf\u63a8\u7406 (Batch Inference)", None))
+        self.pushButton_exportResult.setText(QCoreApplication.translate("MainWindow", u"\u5bfc\u51fa\u7ed3\u679c (Export Result)", None))
+        
         self.tabWidget_bottom.setTabText(self.tabWidget_bottom.indexOf(self.tab_logs), QCoreApplication.translate("MainWindow", u"\u65e5\u5fd7\u8f93\u51fa (Logs)", None))
         self.label_metricsPlaceholder.setText(QCoreApplication.translate("MainWindow", u"\u5b9e\u65f6\u8bad\u7ec3\u6307\u6807\u66f2\u7ebf\u663e\u793a\u533a\u57df\n"
 "(\u53ef\u4f7f\u7528 matplotlib \u6216 pyqtgraph)", None))
