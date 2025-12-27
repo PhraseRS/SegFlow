@@ -942,32 +942,46 @@ class MainWindow(QMainWindow):
             stats = self.metadata_manager.get_aggregated_stats()
         
         if stats:
-            # 更新类别分布
-            self._update_class_distribution(stats.get('class_distribution', {}))
+            # 更新类别分布（传递 image_counts）
+            self._update_class_distribution(
+                stats.get('class_distribution', {}),
+                stats.get('image_counts', {})
+            )
             # 更新尺度分析
             self._update_scale_analysis(stats.get('size_stats', {}))
     
-    def _update_class_distribution(self, class_distribution):
-        """更新类别分布面板"""
+    def _update_class_distribution(self, class_distribution, image_counts=None):
+        """更新类别分布面板
+        
+        Args:
+            class_distribution: 各类别像素总数 {class_id: pixel_count}
+            image_counts: 各类别出现在多少张图像中 {class_id: image_count}
+        """
         if not class_distribution:
-            self.ui.label_classDistribution.setText("暂无类别分布数据")
+            self.ui.widget_classDistribution.clear()
             return
         
-        # 按像素数排序
+        # 按类别ID排序
         sorted_classes = sorted(class_distribution.items(), 
-                                key=lambda x: int(x[1]), reverse=True)
+                                key=lambda x: int(x[0]))
         
-        total_pixels = sum(int(v) for v in class_distribution.values())
+        # 准备数据格式
+        class_vals = [str(k) for k, v in sorted_classes]
+        pixel_counts = [int(v) for k, v in sorted_classes]
         
-        lines = []
-        for class_id, pixel_count in sorted_classes[:10]:  # 只显示前10个类别
-            pct = pixel_count / total_pixels * 100 if total_pixels > 0 else 0
-            lines.append(f"类别 {class_id}: {pixel_count:,} 像素 ({pct:.1f}%)")
+        # 使用真实的 image_counts（如果提供），否则默认为0
+        if image_counts:
+            img_counts = [int(image_counts.get(k, 0)) for k, v in sorted_classes]
+        else:
+            img_counts = [0] * len(class_vals)
         
-        if len(sorted_classes) > 10:
-            lines.append(f"... 还有 {len(sorted_classes) - 10} 个类别")
+        stats = {
+            'class_vals': class_vals,
+            'pixel_counts': pixel_counts,
+            'image_counts': img_counts
+        }
         
-        self.ui.label_classDistribution.setText("\n".join(lines))
+        self.ui.widget_classDistribution.set_data(stats)
     
     def _update_scale_analysis(self, size_stats):
         """更新尺度分析面板"""

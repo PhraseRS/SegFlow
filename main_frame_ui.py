@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QGrap
 from collapsible_widget import CollapsibleContainer, CollapsiblePanel
 from dataset_overview_widget import DatasetOverviewWidget
 from analysis_panel import AnalysisPanel
+from class_distribution_widget import ClassDistributionWidget
 
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
@@ -265,10 +266,9 @@ class Ui_MainWindow(object):
         
         # 面板1: 类别分布 (Class Distribution)
         self.panel_classDistribution = self.collapsible_dataProfile.add_panel("类别分布 (Class Distribution)", expanded=True)
-        self.label_classDistribution = QLabel()
-        self.label_classDistribution.setObjectName(u"label_classDistribution")
-        self.label_classDistribution.setWordWrap(True)
-        self.panel_classDistribution.add_widget(self.label_classDistribution)
+        self.widget_classDistribution = ClassDistributionWidget()
+        self.widget_classDistribution.setObjectName(u"widget_classDistribution")
+        self.panel_classDistribution.add_widget(self.widget_classDistribution)
         
         # 面板2: 尺度分析 (Scale Analysis)
         self.panel_scaleAnalysis = self.collapsible_dataProfile.add_panel("尺度分析 (Scale Analysis)", expanded=False)
@@ -591,8 +591,7 @@ class Ui_MainWindow(object):
         
         # Tab 1: 数据洞察（使用可折叠面板，标题在组件中设置）
         self.tabWidget_contextControl.setTabText(self.tabWidget_contextControl.indexOf(self.tab_dataProfile), QCoreApplication.translate("MainWindow", u"\u6570\u636e\u6d1e\u5bdf (Data Profile)", None))
-        # widget_datasetOverview 使用自定义组件，无需设置文本
-        self.label_classDistribution.setText(QCoreApplication.translate("MainWindow", u"\u6682\u65e0\u7c7b\u522b\u5206\u5e03\u6570\u636e\n\u8bf7\u5148\u52a0\u8f7d\u6570\u636e\u96c6", None))
+        # widget_datasetOverview 和 widget_classDistribution 使用自定义组件，无需设置文本
         self.label_scaleAnalysis.setText(QCoreApplication.translate("MainWindow", u"\u5f71\u50cf\u5c3a\u5bf8\u7edf\u8ba1:\n- \u6700\u5c0f: -\n- \u6700\u5927: -\n- \u5e73\u5747: -", None))
         self.label_healthCheck.setText(QCoreApplication.translate("MainWindow", u"\u2705 \u6570\u636e\u96c6\u72b6\u6001: \u672a\u68c0\u67e5\n\n\u70b9\u51fb\u201c\u8fd0\u884c\u68c0\u67e5\u201d\u5f00\u59cb\u5065\u5eb7\u68c0\u67e5", None))
         

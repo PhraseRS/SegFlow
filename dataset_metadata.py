@@ -23,7 +23,9 @@ def _calculate_sample_stats(args):
         args: (sample_id, dataset_type, label_path)
     
     Returns:
-        dict: 样本统计信息
+        dict: 样本统计信息，包含：
+            - class_pixels: 各类别像素数
+            - classes_present: 该样本中出现的类别列表（用于统计 image_counts）
     """
     sample_id, dataset_type, label_path = args
     
@@ -35,6 +37,7 @@ def _calculate_sample_stats(args):
         'height': 0,
         'total_pixels': 0,
         'class_pixels': {},
+        'classes_present': [],  # 该样本中出现的类别列表
         'error': None
     }
     
@@ -58,6 +61,9 @@ def _calculate_sample_stats(args):
             # 统计各类别像素数
             unique, counts = np.unique(arr, return_counts=True)
             stats['class_pixels'] = {str(int(k)): int(v) for k, v in zip(unique, counts)}
+            
+            # 记录该样本中出现的类别（用于统计 image_counts）
+            stats['classes_present'] = [str(int(k)) for k in unique]
     
     except Exception as e:
         stats['error'] = str(e)
@@ -103,8 +109,8 @@ def _worker_process(db_path, samples_queue, progress_queue, stop_event, total_sa
             # 写入数据库
             cursor.execute('''
                 INSERT OR REPLACE INTO sample_stats 
-                (sample_id, dataset, label_path, width, height, total_pixels, class_pixels, error, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (sample_id, dataset, label_path, width, height, total_pixels, class_pixels, classes_present, error, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 stats['sample_id'],
                 stats['dataset'],
@@ -113,6 +119,7 @@ def _worker_process(db_path, samples_queue, progress_queue, stop_event, total_sa
                 stats['height'],
                 stats['total_pixels'],
                 json.dumps(stats['class_pixels']),
+                json.dumps(stats.get('classes_present', [])),
                 stats['error'],
                 datetime.now().isoformat()
             ))
@@ -166,10 +173,18 @@ class MetadataDatabase:
                 height INTEGER,
                 total_pixels INTEGER,
                 class_pixels TEXT,
+                classes_present TEXT,
                 error TEXT,
                 updated_at TEXT
             )
         ''')
+        
+        # 检查是否需要添加 classes_present 列（兼容旧数据库）
+        cursor.execute("PRAGMA table_info(sample_stats)")
+        columns = [col[1] for col in cursor.fetchall()]
+        if 'classes_present' not in columns:
+            cursor.execute('ALTER TABLE sample_stats ADD COLUMN classes_present TEXT')
+            print("📦 数据库升级：添加 classes_present 列")
         
         # 元数据信息表
         cursor.execute('''
@@ -205,7 +220,9 @@ class MetadataDatabase:
         获取聚合统计数据（直接从数据库读取，毫秒级）
         
         Returns:
-            dict: 聚合统计信息
+            dict: 聚合统计信息，包含：
+                - class_distribution: 各类别像素总数
+                - image_counts: 各类别出现在多少张图像中
         """
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
@@ -216,6 +233,7 @@ class MetadataDatabase:
             'val_count': 0,
             'test_count': 0,
             'class_distribution': {},
+            'image_counts': {},  # 各类别出现在多少张图像中
             'size_stats': {
                 'min_width': float('inf'),
                 'min_height': float('inf'),
@@ -237,14 +255,21 @@ class MetadataDatabase:
             elif dataset == 'test':
                 stats['test_count'] = count
         
-        # 聚合类别分布
-        cursor.execute('SELECT class_pixels FROM sample_stats WHERE class_pixels IS NOT NULL')
+        # 聚合类别分布（像素计数）和图像计数
+        cursor.execute('SELECT class_pixels, classes_present FROM sample_stats WHERE class_pixels IS NOT NULL')
         for row in cursor.fetchall():
             try:
+                # 聚合像素计数
                 class_pixels = json.loads(row[0])
                 for class_id, count in class_pixels.items():
                     stats['class_distribution'][class_id] = \
                         stats['class_distribution'].get(class_id, 0) + count
+                
+                # 聚合图像计数：每个样本中出现的类别，该类别的 image_count +1
+                classes_present = json.loads(row[1]) if row[1] else list(class_pixels.keys())
+                for class_id in classes_present:
+                    stats['image_counts'][class_id] = \
+                        stats['image_counts'].get(class_id, 0) + 1
             except:
                 pass
         
