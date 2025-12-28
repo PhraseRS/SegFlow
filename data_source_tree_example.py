@@ -947,8 +947,8 @@ class MainWindow(QMainWindow):
                 stats.get('class_distribution', {}),
                 stats.get('image_counts', {})
             )
-            # 更新尺度分析
-            self._update_scale_analysis(stats.get('size_stats', {}))
+            # 更新覆盖率分析
+            self._update_coverage_analysis()
     
     def _update_class_distribution(self, class_distribution, image_counts=None):
         """更新类别分布面板
@@ -983,31 +983,20 @@ class MainWindow(QMainWindow):
         
         self.ui.widget_classDistribution.set_data(stats)
     
-    def _update_scale_analysis(self, size_stats):
-        """更新尺度分析面板"""
-        widths = size_stats.get('widths', [])
-        heights = size_stats.get('heights', [])
-        
-        if not widths or not heights:
-            self.ui.label_scaleAnalysis.setText("影像尺寸统计:\n- 暂无数据")
+    def _update_coverage_analysis(self):
+        """更新覆盖率分析面板"""
+        # 从 AnalysisPanel 的 metadata_manager 获取数据库
+        database = self.ui.analysis_panel.metadata_manager.database
+        if database is None:
+            self.ui.widget_coverageAnalysis.clear()
             return
         
-        min_w = size_stats.get('min_width', 0)
-        min_h = size_stats.get('min_height', 0)
-        max_w = size_stats.get('max_width', 0)
-        max_h = size_stats.get('max_height', 0)
+        image_records = database.get_image_records()
+        if not image_records:
+            self.ui.widget_coverageAnalysis.clear()
+            return
         
-        avg_w = sum(widths) / len(widths) if widths else 0
-        avg_h = sum(heights) / len(heights) if heights else 0
-        
-        text = (
-            f"影像尺寸统计:\n"
-            f"- 最小: {min_w} × {min_h}\n"
-            f"- 最大: {max_w} × {max_h}\n"
-            f"- 平均: {avg_w:.0f} × {avg_h:.0f}\n"
-            f"- 样本数: {len(widths)}"
-        )
-        self.ui.label_scaleAnalysis.setText(text)
+        self.ui.widget_coverageAnalysis.set_data(image_records)
     
     def _update_dataset_overview(self):
         """更新数据集概览面板"""

@@ -19,13 +19,16 @@ def _calculate_sample_stats(args):
     """
     计算单个样本的统计信息（在独立进程中运行）
     
+    一次读取，同时计算：像素总量、各类别像素数、覆盖率
+    
     Args:
         args: (sample_id, dataset_type, label_path)
     
     Returns:
         dict: 样本统计信息，包含：
-            - class_pixels: 各类别像素数
-            - classes_present: 该样本中出现的类别列表（用于统计 image_counts）
+            - class_pixels: 各类别像素数 {class_id: count} -> 用于全局累加
+            - class_ratios: 各类别覆盖率 {class_id: ratio} -> 用于覆盖率分析
+            - classes_present: 该样本中出现的类别列表
     """
     sample_id, dataset_type, label_path = args
     
@@ -36,8 +39,9 @@ def _calculate_sample_stats(args):
         'width': 0,
         'height': 0,
         'total_pixels': 0,
-        'class_pixels': {},
-        'classes_present': [],  # 该样本中出现的类别列表
+        'class_pixels': {},      # {class_id: pixel_count} -> 用于全局累加
+        'class_ratios': {},      # {class_id: ratio} -> 用于覆盖率分析
+        'classes_present': [],   # 该样本中出现的类别列表
         'error': None
     }
     
@@ -56,14 +60,25 @@ def _calculate_sample_stats(args):
             
             arr = np.array(img)
             stats['height'], stats['width'] = arr.shape
-            stats['total_pixels'] = arr.size
+            total_pixels = arr.size
+            stats['total_pixels'] = total_pixels
             
-            # 统计各类别像素数
-            unique, counts = np.unique(arr, return_counts=True)
-            stats['class_pixels'] = {str(int(k)): int(v) for k, v in zip(unique, counts)}
+            # 核心计算：np.unique 一次性获取所有类别和像素数
+            unique_classes, counts = np.unique(arr, return_counts=True)
             
-            # 记录该样本中出现的类别（用于统计 image_counts）
-            stats['classes_present'] = [str(int(k)) for k in unique]
+            # 构建统计数据
+            for cls_id, count in zip(unique_classes, counts):
+                cls_key = str(int(cls_id))
+                
+                # 记录绝对数量（用于全局累加）
+                stats['class_pixels'][cls_key] = int(count)
+                
+                # 记录覆盖率（用于单图分析）
+                ratio = count / total_pixels
+                stats['class_ratios'][cls_key] = float(ratio)
+            
+            # 记录该样本中出现的类别
+            stats['classes_present'] = [str(int(k)) for k in unique_classes]
     
     except Exception as e:
         stats['error'] = str(e)
@@ -109,8 +124,8 @@ def _worker_process(db_path, samples_queue, progress_queue, stop_event, total_sa
             # 写入数据库
             cursor.execute('''
                 INSERT OR REPLACE INTO sample_stats 
-                (sample_id, dataset, label_path, width, height, total_pixels, class_pixels, classes_present, error, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (sample_id, dataset, label_path, width, height, total_pixels, class_pixels, class_ratios, classes_present, error, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 stats['sample_id'],
                 stats['dataset'],
@@ -119,6 +134,7 @@ def _worker_process(db_path, samples_queue, progress_queue, stop_event, total_sa
                 stats['height'],
                 stats['total_pixels'],
                 json.dumps(stats['class_pixels']),
+                json.dumps(stats.get('class_ratios', {})),
                 json.dumps(stats.get('classes_present', [])),
                 stats['error'],
                 datetime.now().isoformat()
@@ -173,18 +189,24 @@ class MetadataDatabase:
                 height INTEGER,
                 total_pixels INTEGER,
                 class_pixels TEXT,
+                class_ratios TEXT,
                 classes_present TEXT,
                 error TEXT,
                 updated_at TEXT
             )
         ''')
         
-        # 检查是否需要添加 classes_present 列（兼容旧数据库）
+        # 检查是否需要添加新列（兼容旧数据库）
         cursor.execute("PRAGMA table_info(sample_stats)")
         columns = [col[1] for col in cursor.fetchall()]
+        
         if 'classes_present' not in columns:
             cursor.execute('ALTER TABLE sample_stats ADD COLUMN classes_present TEXT')
             print("📦 数据库升级：添加 classes_present 列")
+        
+        if 'class_ratios' not in columns:
+            cursor.execute('ALTER TABLE sample_stats ADD COLUMN class_ratios TEXT')
+            print("📦 数据库升级：添加 class_ratios 列")
         
         # 元数据信息表
         cursor.execute('''
@@ -299,6 +321,147 @@ class MetadataDatabase:
         cursor.execute('DELETE FROM sample_stats')
         conn.commit()
         conn.close()
+    
+    def get_image_records(self, dataset_filter=None):
+        """
+        获取单图记录列表（用于覆盖率分析）
+        
+        兼容旧数据库：当 class_ratios 为空时，从 class_pixels 和 total_pixels 计算覆盖率
+        
+        Args:
+            dataset_filter: 可选，筛选数据集类型 ('train', 'val', 'test')
+        
+        Returns:
+            list: 单图记录列表，每条记录包含：
+                - sample_id: 样本ID
+                - dataset: 数据集类型
+                - total_pixels: 总像素数
+                - class_ratios: 各类别覆盖率 {class_id: ratio}
+                - width, height: 图像尺寸
+        """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        # 查询所有有效记录（包括 class_ratios 为空但 class_pixels 有数据的情况）
+        if dataset_filter:
+            cursor.execute('''
+                SELECT sample_id, dataset, total_pixels, class_ratios, class_pixels, width, height 
+                FROM sample_stats 
+                WHERE dataset = ? AND (class_ratios IS NOT NULL OR class_pixels IS NOT NULL)
+            ''', (dataset_filter,))
+        else:
+            cursor.execute('''
+                SELECT sample_id, dataset, total_pixels, class_ratios, class_pixels, width, height 
+                FROM sample_stats 
+                WHERE class_ratios IS NOT NULL OR class_pixels IS NOT NULL
+            ''')
+        
+        records = []
+        for row in cursor.fetchall():
+            try:
+                sample_id = row[0]
+                dataset = row[1]
+                total_pixels = row[2] or 0
+                class_ratios_str = row[3]
+                class_pixels_str = row[4]
+                width = row[5]
+                height = row[6]
+                
+                # 优先使用 class_ratios
+                class_ratios = {}
+                if class_ratios_str:
+                    class_ratios = json.loads(class_ratios_str)
+                
+                # 如果 class_ratios 为空，从 class_pixels 计算
+                if not class_ratios and class_pixels_str and total_pixels > 0:
+                    class_pixels = json.loads(class_pixels_str)
+                    for class_id, pixel_count in class_pixels.items():
+                        ratio = pixel_count / total_pixels
+                        if ratio > 0:
+                            class_ratios[class_id] = ratio
+                
+                # 只添加有有效覆盖率数据的记录
+                if class_ratios:
+                    records.append({
+                        'sample_id': sample_id,
+                        'dataset': dataset,
+                        'total_pixels': total_pixels,
+                        'class_ratios': class_ratios,
+                        'width': width,
+                        'height': height
+                    })
+            except Exception as e:
+                # 静默跳过解析错误的记录
+                pass
+        
+        conn.close()
+        return records
+    
+    def get_samples_by_class(self, class_id, min_ratio=0.0):
+        """
+        获取包含指定类别的样本列表（支持点击交互过滤）
+        
+        兼容旧数据库：当 class_ratios 为空时，从 class_pixels 和 total_pixels 计算覆盖率
+        
+        Args:
+            class_id: 类别ID（字符串）
+            min_ratio: 最小覆盖率阈值
+        
+        Returns:
+            list: 符合条件的样本记录
+        """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT sample_id, dataset, total_pixels, class_ratios, class_pixels, width, height 
+            FROM sample_stats 
+            WHERE class_ratios IS NOT NULL OR class_pixels IS NOT NULL
+        ''')
+        
+        records = []
+        for row in cursor.fetchall():
+            try:
+                sample_id = row[0]
+                dataset = row[1]
+                total_pixels = row[2] or 0
+                class_ratios_str = row[3]
+                class_pixels_str = row[4]
+                width = row[5]
+                height = row[6]
+                
+                # 优先使用 class_ratios
+                class_ratios = {}
+                if class_ratios_str:
+                    class_ratios = json.loads(class_ratios_str)
+                
+                # 如果 class_ratios 为空，从 class_pixels 计算
+                if not class_ratios and class_pixels_str and total_pixels > 0:
+                    class_pixels = json.loads(class_pixels_str)
+                    for cid, pixel_count in class_pixels.items():
+                        ratio = pixel_count / total_pixels
+                        if ratio > 0:
+                            class_ratios[cid] = ratio
+                
+                # 检查是否包含指定类别且满足最小覆盖率
+                if class_id in class_ratios and class_ratios[class_id] >= min_ratio:
+                    records.append({
+                        'sample_id': sample_id,
+                        'dataset': dataset,
+                        'total_pixels': total_pixels,
+                        'class_ratios': class_ratios,
+                        'ratio': class_ratios[class_id],
+                        'width': width,
+                        'height': height
+                    })
+            except Exception as e:
+                pass
+        
+        conn.close()
+        
+        # 按覆盖率降序排序
+        records.sort(key=lambda x: x['ratio'], reverse=True)
+        return records
 
 
 # ============== 元数据管理器（Qt 集成）==============

@@ -27,6 +27,7 @@ from collapsible_widget import CollapsibleContainer, CollapsiblePanel
 from dataset_overview_widget import DatasetOverviewWidget
 from analysis_panel import AnalysisPanel
 from class_distribution_widget import ClassDistributionWidget
+from coverage_analysis_widget import CoverageAnalysisCard
 
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
@@ -272,12 +273,11 @@ class Ui_MainWindow(object):
         # 将权重按钮添加到标题栏
         self.panel_classDistribution.add_header_widget(self.widget_classDistribution.get_header_button())
         
-        # 面板2: 尺度分析 (Scale Analysis)
-        self.panel_scaleAnalysis = self.collapsible_dataProfile.add_panel("尺度分析", expanded=False)
-        self.label_scaleAnalysis = QLabel()
-        self.label_scaleAnalysis.setObjectName(u"label_scaleAnalysis")
-        self.label_scaleAnalysis.setWordWrap(True)
-        self.panel_scaleAnalysis.add_widget(self.label_scaleAnalysis)
+        # 面板2: 覆盖率分析 (Coverage Analysis)
+        self.panel_coverageAnalysis = self.collapsible_dataProfile.add_panel("覆盖率分析", expanded=False)
+        self.widget_coverageAnalysis = CoverageAnalysisCard()
+        self.widget_coverageAnalysis.setObjectName(u"widget_coverageAnalysis")
+        self.panel_coverageAnalysis.add_widget(self.widget_coverageAnalysis)
         
         # 面板3: 健康检查 (Health Check)
         self.panel_healthCheck = self.collapsible_dataProfile.add_panel("健康检查", expanded=False)
@@ -593,8 +593,7 @@ class Ui_MainWindow(object):
         
         # Tab 1: 数据洞察（使用可折叠面板，标题在组件中设置）
         self.tabWidget_contextControl.setTabText(self.tabWidget_contextControl.indexOf(self.tab_dataProfile), QCoreApplication.translate("MainWindow", u"\u6570\u636e\u6d1e\u5bdf (Data Profile)", None))
-        # widget_datasetOverview 和 widget_classDistribution 使用自定义组件，无需设置文本
-        self.label_scaleAnalysis.setText(QCoreApplication.translate("MainWindow", u"\u5f71\u50cf\u5c3a\u5bf8\u7edf\u8ba1:\n- \u6700\u5c0f: -\n- \u6700\u5927: -\n- \u5e73\u5747: -", None))
+        # widget_datasetOverview, widget_classDistribution, widget_coverageAnalysis 使用自定义组件，无需设置文本
         self.label_healthCheck.setText(QCoreApplication.translate("MainWindow", u"\u2705 \u6570\u636e\u96c6\u72b6\u6001: \u672a\u68c0\u67e5\n\n\u70b9\u51fb\u201c\u8fd0\u884c\u68c0\u67e5\u201d\u5f00\u59cb\u5065\u5eb7\u68c0\u67e5", None))
         
         # Tab 2: 任务配置
