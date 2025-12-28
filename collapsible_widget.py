@@ -31,6 +31,9 @@ class CollapsiblePanel(QWidget):
         self.main_layout.setContentsMargins(0, 0, 0, 0)
         self.main_layout.setSpacing(0)
         
+        # 设置尺寸策略：宽度扩展，高度由内容决定（不拉伸）
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        
         # 标题栏容器
         self.header_frame = QFrame(self)
         self.header_frame.setObjectName("collapsibleHeaderFrame")
@@ -77,6 +80,7 @@ class CollapsiblePanel(QWidget):
         # 内容区域容器
         self.content_frame = QFrame(self)
         self.content_frame.setObjectName("collapsibleContent")
+        self.content_frame.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.content_frame.setStyleSheet("""
             QFrame#collapsibleContent {
                 background-color: palette(base);
@@ -152,8 +156,8 @@ class CollapsiblePanel(QWidget):
         self.content_layout.addLayout(layout)
 
 
-class CollapsibleContainer(QScrollArea):
-    """可折叠面板容器（带滚动条）"""
+class CollapsibleContainer(QWidget):
+    """可折叠面板容器（不带滚动条，由外层控制滚动）"""
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -163,29 +167,14 @@ class CollapsibleContainer(QScrollArea):
     
     def _setup_ui(self):
         """初始化UI"""
-        self.setWidgetResizable(True)
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        # 设置尺寸策略：宽度扩展，高度由内容决定
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         
-        # 滚动区域样式 - 使用系统调色板
-        self.setStyleSheet("""
-            QScrollArea {
-                border: none;
-                background-color: transparent;
-            }
-        """)
-        
-        # 内容容器
-        self.container = QWidget()
-        self.container_layout = QVBoxLayout(self.container)
+        # 内容布局
+        self.container_layout = QVBoxLayout(self)
         self.container_layout.setContentsMargins(0, 0, 0, 0)
         self.container_layout.setSpacing(8)
-        self.container_layout.setAlignment(Qt.AlignmentFlag.AlignTop)  # 顶部对齐
-        
-        # 底部弹性空间
-        self.container_layout.addStretch()
-        
-        self.setWidget(self.container)
+        self.container_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
     
     def add_panel(self, title, expanded=True):
         """
@@ -198,11 +187,10 @@ class CollapsibleContainer(QScrollArea):
         Returns:
             CollapsiblePanel: 创建的面板对象
         """
-        panel = CollapsiblePanel(title, self.container)
+        panel = CollapsiblePanel(title, self)
         panel.set_expanded(expanded)
         
-        # 插入到弹性空间之前
-        self.container_layout.insertWidget(len(self._panels), panel)
+        self.container_layout.addWidget(panel)
         self._panels.append(panel)
         
         return panel

@@ -281,12 +281,14 @@ class AnalysisPanel(QWidget):
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setFrameShape(QFrame.Shape.NoFrame)
         self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         
         # 滚动区域内容容器
         self.content_widget = QWidget()
         self.content_layout = QVBoxLayout(self.content_widget)
         self.content_layout.setContentsMargins(4, 4, 4, 4)
         self.content_layout.setSpacing(8)
+        self.content_layout.setAlignment(Qt.AlignmentFlag.AlignTop)  # 顶部对齐
         
         # === 1. 顶部：数据集概览占位（永远可见）===
         self.overview_container = QWidget()
@@ -301,13 +303,16 @@ class AnalysisPanel(QWidget):
         self.control_widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         self.content_layout.addWidget(self.control_widget)
         
-        # === 3. 底部：深度图表占位（独立显示，可展开填充剩余空间）===
+        # === 3. 底部：深度图表占位（独立显示）===
         self.charts_container = QWidget()
-        self.charts_container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
+        self.charts_container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         self.charts_layout = QVBoxLayout(self.charts_container)
         self.charts_layout.setContentsMargins(0, 0, 0, 0)
         self.charts_layout.setSpacing(0)
         self.content_layout.addWidget(self.charts_container)
+        
+        # 底部弹性空间
+        self.content_layout.addStretch()
         
         self.scroll_area.setWidget(self.content_widget)
         main_layout.addWidget(self.scroll_area)

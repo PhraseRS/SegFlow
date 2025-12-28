@@ -27,10 +27,23 @@ class ClassDistributionChart(FigureCanvas):
     # 信号：点击某个类别
     bar_clicked = Signal(int)  # class_id
     
-    # 条形配置（像素单位）
-    BAR_HEIGHT_PX = 10  # 每个条形高度 10px（细条）
-    BAR_GAP_PX = 6      # 条形间距 6px
-    PADDING_PX = 6      # 上下边距
+    # ==================== 样式配置 ====================
+    # 条形尺寸（像素单位）
+    BAR_HEIGHT_PX = 10      # 每个条形高度
+    BAR_GAP_PX = 6          # 条形间距
+    PADDING_PX = 6          # 上下边距
+    
+    # 条形样式
+    BAR_ROUNDING_PX = 0     # 圆角半径（像素），0=无圆角
+    BAR_COLOR_BASE = (0.35, 0.65, 0.35)  # 基础颜色 (RGB, 0-1)
+    BAR_COLOR_VARIATION = 0.3  # 颜色变化幅度
+    
+    # 文字样式
+    LABEL_FONT_SIZE = 7     # Y轴标签字号
+    VALUE_FONT_SIZE = 6     # 数值字号
+    VALUE_COLOR = '#555'    # 数值颜色
+    VALUE_OFFSET = 0.03     # 数值与条形的间距比例
+    # ================================================
     
     def __init__(self, parent: Optional[QWidget] = None, dpi: int = 100):
         self._dpi = dpi
@@ -98,7 +111,7 @@ class ClassDistributionChart(FigureCanvas):
         self._update_chart()
     
     def _update_chart(self) -> None:
-        """更新图表 - 圆角细条风格"""
+        """更新图表 - 使用统一样式配置"""
         self.axes.clear()
         
         if not self._class_vals:
@@ -144,14 +157,19 @@ class ClassDistributionChart(FigureCanvas):
             min_display = max_count * 0.02
             display_counts = np.maximum(counts, min_display)
         
-        # 颜色映射 - 使用绿色系
-        base_color = np.array([0.35, 0.65, 0.35])  # 绿色基调
-        colors = [base_color * (0.7 + 0.3 * i / max(n_classes - 1, 1)) for i in range(n_classes)]
+        # 颜色映射 - 使用配置的基础颜色
+        base_color = np.array(self.BAR_COLOR_BASE)
+        colors = [base_color * (1.0 - self.BAR_COLOR_VARIATION + self.BAR_COLOR_VARIATION * i / max(n_classes - 1, 1)) 
+                  for i in range(n_classes)]
         
-        # 条形高度（相对单位）
-        bar_height = self.BAR_HEIGHT_PX / (self.BAR_HEIGHT_PX + self.BAR_GAP_PX) * 0.8
+        # 条形高度（相对单位）- 固定比例
+        bar_height = 0.6  # 固定相对高度
         
-        # 绘制圆角条形图
+        # 圆角半径（相对单位）- 基于像素配置转换
+        # 将像素圆角转换为相对单位
+        rounding = bar_height * 0.5 if self.BAR_ROUNDING_PX > 0 else 0
+        
+        # 绘制条形图
         max_width = display_counts.max()
         self._bars = []
         self._bar_class_map.clear()
@@ -159,18 +177,25 @@ class ClassDistributionChart(FigureCanvas):
         y_pos = np.arange(n_classes)
         
         for i, (y, width, count, cv) in enumerate(zip(y_pos, display_counts, counts, class_vals)):
-            # 圆角半径（相对于条形高度）
-            rounding = bar_height * 0.5
-            
-            # 创建圆角矩形
-            bar = FancyBboxPatch(
-                (0, y - bar_height / 2),  # 左下角
-                width, bar_height,         # 宽度和高度
-                boxstyle=f"round,pad=0,rounding_size={rounding}",
-                facecolor=colors[i % len(colors)],
-                edgecolor='none',
-                linewidth=0
-            )
+            # 创建条形
+            if rounding > 0:
+                bar = FancyBboxPatch(
+                    (0, y - bar_height / 2),
+                    width, bar_height,
+                    boxstyle=f"round,pad=0,rounding_size={rounding}",
+                    facecolor=colors[i % len(colors)],
+                    edgecolor='none',
+                    linewidth=0
+                )
+            else:
+                bar = FancyBboxPatch(
+                    (0, y - bar_height / 2),
+                    width, bar_height,
+                    boxstyle="square,pad=0",
+                    facecolor=colors[i % len(colors)],
+                    edgecolor='none',
+                    linewidth=0
+                )
             self.axes.add_patch(bar)
             self._bars.append(bar)
             
@@ -193,13 +218,14 @@ class ClassDistributionChart(FigureCanvas):
             else:
                 text = f'{int(count):,}'
             
-            x_pos = width + max_width * 0.03
-            self.axes.text(x_pos, y, text, va='center', ha='left', fontsize=6, color='#555')
+            x_pos = width + max_width * self.VALUE_OFFSET
+            self.axes.text(x_pos, y, text, va='center', ha='left', 
+                          fontsize=self.VALUE_FONT_SIZE, color=self.VALUE_COLOR)
         
         # Y轴标签
         labels = [f"C{cv}" for cv in class_vals]
         self.axes.set_yticks(y_pos)
-        self.axes.set_yticklabels(labels, fontsize=7)
+        self.axes.set_yticklabels(labels, fontsize=self.LABEL_FONT_SIZE)
         
         # 隐藏坐标轴
         self.axes.set_xticks([])
