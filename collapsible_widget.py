@@ -5,7 +5,7 @@
 """
 
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
-                                QFrame, QSizePolicy, QScrollArea)
+                                QFrame, QSizePolicy, QScrollArea, QToolButton)
 from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, Property, Signal
 from PySide6.QtGui import QIcon, QFont
 
@@ -21,6 +21,7 @@ class CollapsiblePanel(QWidget):
         self._is_expanded = expanded
         self._title = title
         self._content_height = 0
+        self._header_widgets = []  # 标题栏额外控件
         
         self._setup_ui()
     
@@ -30,34 +31,48 @@ class CollapsiblePanel(QWidget):
         self.main_layout.setContentsMargins(0, 0, 0, 0)
         self.main_layout.setSpacing(0)
         
-        # 标题栏（可点击）
+        # 标题栏容器
+        self.header_frame = QFrame(self)
+        self.header_frame.setObjectName("collapsibleHeaderFrame")
+        self.header_layout = QHBoxLayout(self.header_frame)
+        self.header_layout.setContentsMargins(0, 0, 4, 0)
+        self.header_layout.setSpacing(4)
+        
+        # 标题按钮（可点击展开/折叠）
         self.header_button = QPushButton(self)
         self.header_button.setObjectName("collapsibleHeader")
         self.header_button.setCheckable(True)
         self.header_button.setChecked(self._is_expanded)
         self.header_button.clicked.connect(self._on_header_clicked)
+        self.header_button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self._update_header_text()
         
-        # 标题栏样式 - 使用系统调色板颜色
-        self.header_button.setStyleSheet("""
-            QPushButton#collapsibleHeader {
+        # 标题栏样式
+        self.header_frame.setStyleSheet("""
+            QFrame#collapsibleHeaderFrame {
                 background-color: palette(button);
-                color: palette(button-text);
                 border: 1px solid palette(mid);
                 border-radius: 4px;
-                padding: 8px 12px;
+            }
+        """)
+        self.header_button.setStyleSheet("""
+            QPushButton#collapsibleHeader {
+                background-color: transparent;
+                color: palette(button-text);
+                border: none;
+                padding: 6px 8px;
                 text-align: left;
                 font-weight: bold;
+                font-size: 11px;
             }
             QPushButton#collapsibleHeader:hover {
                 background-color: palette(light);
-            }
-            QPushButton#collapsibleHeader:checked {
-                background-color: palette(button);
+                border-radius: 4px;
             }
         """)
         
-        self.main_layout.addWidget(self.header_button)
+        self.header_layout.addWidget(self.header_button)
+        self.main_layout.addWidget(self.header_frame)
         
         # 内容区域容器
         self.content_frame = QFrame(self)
@@ -74,6 +89,7 @@ class CollapsiblePanel(QWidget):
         self.content_layout = QVBoxLayout(self.content_frame)
         self.content_layout.setContentsMargins(8, 8, 8, 8)
         self.content_layout.setSpacing(4)
+        self.content_layout.setAlignment(Qt.AlignmentFlag.AlignTop)  # 顶部对齐
         
         self.main_layout.addWidget(self.content_frame)
         
@@ -112,6 +128,16 @@ class CollapsiblePanel(QWidget):
         """设置标题"""
         self._title = title
         self._update_ui()
+    
+    def add_header_widget(self, widget):
+        """
+        向标题栏添加控件（如按钮）
+        
+        Args:
+            widget: 要添加的控件
+        """
+        self._header_widgets.append(widget)
+        self.header_layout.addWidget(widget)
     
     def get_content_layout(self):
         """获取内容区域布局，用于添加子控件"""
@@ -154,6 +180,7 @@ class CollapsibleContainer(QScrollArea):
         self.container_layout = QVBoxLayout(self.container)
         self.container_layout.setContentsMargins(0, 0, 0, 0)
         self.container_layout.setSpacing(8)
+        self.container_layout.setAlignment(Qt.AlignmentFlag.AlignTop)  # 顶部对齐
         
         # 底部弹性空间
         self.container_layout.addStretch()

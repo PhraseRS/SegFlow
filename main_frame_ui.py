@@ -265,20 +265,22 @@ class Ui_MainWindow(object):
         self.collapsible_dataProfile.setObjectName(u"collapsible_dataProfile")
         
         # 面板1: 类别分布 (Class Distribution)
-        self.panel_classDistribution = self.collapsible_dataProfile.add_panel("类别分布 (Class Distribution)", expanded=True)
+        self.panel_classDistribution = self.collapsible_dataProfile.add_panel("类别分布", expanded=True)
         self.widget_classDistribution = ClassDistributionWidget()
         self.widget_classDistribution.setObjectName(u"widget_classDistribution")
         self.panel_classDistribution.add_widget(self.widget_classDistribution)
+        # 将权重按钮添加到标题栏
+        self.panel_classDistribution.add_header_widget(self.widget_classDistribution.get_header_button())
         
         # 面板2: 尺度分析 (Scale Analysis)
-        self.panel_scaleAnalysis = self.collapsible_dataProfile.add_panel("尺度分析 (Scale Analysis)", expanded=False)
+        self.panel_scaleAnalysis = self.collapsible_dataProfile.add_panel("尺度分析", expanded=False)
         self.label_scaleAnalysis = QLabel()
         self.label_scaleAnalysis.setObjectName(u"label_scaleAnalysis")
         self.label_scaleAnalysis.setWordWrap(True)
         self.panel_scaleAnalysis.add_widget(self.label_scaleAnalysis)
         
         # 面板3: 健康检查 (Health Check)
-        self.panel_healthCheck = self.collapsible_dataProfile.add_panel("健康检查 (Health Check)", expanded=False)
+        self.panel_healthCheck = self.collapsible_dataProfile.add_panel("健康检查", expanded=False)
         self.label_healthCheck = QLabel()
         self.label_healthCheck.setObjectName(u"label_healthCheck")
         self.label_healthCheck.setWordWrap(True)

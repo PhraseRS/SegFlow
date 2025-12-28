@@ -17,6 +17,7 @@ import matplotlib
 matplotlib.use('QtAgg')
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
+from matplotlib.patches import FancyBboxPatch
 import matplotlib.pyplot as plt
 
 
@@ -27,9 +28,9 @@ class ClassDistributionChart(FigureCanvas):
     bar_clicked = Signal(int)  # class_id
     
     # 条形配置（像素单位）
-    BAR_HEIGHT_PX = 15  # 每个条形高度 15px
-    BAR_GAP_PX = 4      # 条形间距 4px
-    PADDING_PX = 8      # 上下边距
+    BAR_HEIGHT_PX = 10  # 每个条形高度 10px（细条）
+    BAR_GAP_PX = 6      # 条形间距 6px
+    PADDING_PX = 6      # 上下边距
     
     def __init__(self, parent: Optional[QWidget] = None, dpi: int = 100):
         self._dpi = dpi
@@ -97,7 +98,7 @@ class ClassDistributionChart(FigureCanvas):
         self._update_chart()
     
     def _update_chart(self) -> None:
-        """更新图表 - 紧凑版，固定条形高度15px"""
+        """更新图表 - 圆角细条风格"""
         self.axes.clear()
         
         if not self._class_vals:
@@ -126,7 +127,7 @@ class ClassDistributionChart(FigureCanvas):
         
         # 计算固定高度（像素）
         total_height_px = n_classes * self.BAR_HEIGHT_PX + (n_classes - 1) * self.BAR_GAP_PX + 2 * self.PADDING_PX
-        total_height_px = max(total_height_px, 40)  # 最小高度
+        total_height_px = max(total_height_px, 40)
         
         # 更新 Figure 高度
         fig_height_inch = total_height_px / self._dpi
@@ -143,37 +144,43 @@ class ClassDistributionChart(FigureCanvas):
             min_display = max_count * 0.02
             display_counts = np.maximum(counts, min_display)
         
-        # 颜色映射
-        colors = plt.cm.tab20(np.linspace(0, 1, n_classes))
+        # 颜色映射 - 使用绿色系
+        base_color = np.array([0.35, 0.65, 0.35])  # 绿色基调
+        colors = [base_color * (0.7 + 0.3 * i / max(n_classes - 1, 1)) for i in range(n_classes)]
         
-        # 计算条形高度（相对单位）
-        # 总高度 = n_classes 个单位，每个条形占 bar_ratio
-        bar_ratio = self.BAR_HEIGHT_PX / (self.BAR_HEIGHT_PX + self.BAR_GAP_PX)
+        # 条形高度（相对单位）
+        bar_height = self.BAR_HEIGHT_PX / (self.BAR_HEIGHT_PX + self.BAR_GAP_PX) * 0.8
         
-        # 绘制水平条形图
-        y_pos = np.arange(n_classes)
-        self._bars = self.axes.barh(y_pos, display_counts, color=colors, 
-                                     edgecolor='none', height=bar_ratio)
-        
-        # 建立映射
+        # 绘制圆角条形图
+        max_width = display_counts.max()
+        self._bars = []
         self._bar_class_map.clear()
-        for i, cv in enumerate(class_vals):
+        
+        y_pos = np.arange(n_classes)
+        
+        for i, (y, width, count, cv) in enumerate(zip(y_pos, display_counts, counts, class_vals)):
+            # 圆角半径（相对于条形高度）
+            rounding = bar_height * 0.5
+            
+            # 创建圆角矩形
+            bar = FancyBboxPatch(
+                (0, y - bar_height / 2),  # 左下角
+                width, bar_height,         # 宽度和高度
+                boxstyle=f"round,pad=0,rounding_size={rounding}",
+                facecolor=colors[i % len(colors)],
+                edgecolor='none',
+                linewidth=0
+            )
+            self.axes.add_patch(bar)
+            self._bars.append(bar)
+            
+            # 建立映射
             try:
                 self._bar_class_map[i] = int(cv)
             except ValueError:
                 self._bar_class_map[i] = i
-        
-        # Y轴标签 - 紧凑字体
-        labels = [f"C{cv}" for cv in class_vals]
-        self.axes.set_yticks(y_pos)
-        self.axes.set_yticklabels(labels, fontsize=7)
-        
-        # 隐藏X轴
-        self.axes.set_xticks([])
-        
-        # 在条形后显示数值
-        max_width = display_counts.max()
-        for i, (bar, count) in enumerate(zip(self._bars, counts)):
+            
+            # 在条形后显示数值
             if self._show_pixel_count:
                 if count >= 1e9:
                     text = f'{count/1e9:.1f}B'
@@ -186,24 +193,29 @@ class ClassDistributionChart(FigureCanvas):
             else:
                 text = f'{int(count):,}'
             
-            x_pos = bar.get_width() + max_width * 0.02
-            self.axes.text(x_pos, bar.get_y() + bar.get_height()/2, text,
-                          va='center', ha='left', fontsize=6, color='#555')
+            x_pos = width + max_width * 0.03
+            self.axes.text(x_pos, y, text, va='center', ha='left', fontsize=6, color='#555')
         
-        # 隐藏所有边框
+        # Y轴标签
+        labels = [f"C{cv}" for cv in class_vals]
+        self.axes.set_yticks(y_pos)
+        self.axes.set_yticklabels(labels, fontsize=7)
+        
+        # 隐藏坐标轴
+        self.axes.set_xticks([])
         self.axes.invert_yaxis()
         for spine in self.axes.spines.values():
             spine.set_visible(False)
         
-        # X轴范围
-        self.axes.set_xlim(0, max_width * 1.3)
+        # 设置范围
+        self.axes.set_xlim(0, max_width * 1.35)
+        self.axes.set_ylim(n_classes - 0.5, -0.5)
         
-        # 紧凑布局
         self.fig.tight_layout(pad=0.1)
         self.draw()
     
     def _on_click(self, event) -> None:
-        if event.inaxes != self.axes or self._bars is None:
+        if event.inaxes != self.axes or not self._bars:
             return
         for i, bar in enumerate(self._bars):
             if bar.contains(event)[0]:
@@ -224,14 +236,15 @@ class ClassDistributionWidget(QWidget):
         self._connect_signals()
     
     def _setup_ui(self) -> None:
-        """初始化UI - 紧凑版"""
+        """初始化UI - 紧凑版，顶部对齐"""
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(2, 2, 2, 2)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(2)
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop)  # 顶部对齐
         
-        # === 单行控制栏：Pixel/Image + Log + HideBG + 权重按钮 ===
+        # === 单行控制栏：Pixel/Image + Log + HideBG ===
         control_layout = QHBoxLayout()
-        control_layout.setSpacing(4)
+        control_layout.setSpacing(6)
         control_layout.setContentsMargins(0, 0, 0, 0)
         
         # RadioButton 切换
@@ -247,9 +260,7 @@ class ClassDistributionWidget(QWidget):
         
         control_layout.addWidget(self.radio_pixel)
         control_layout.addWidget(self.radio_image)
-        
-        # 分隔
-        control_layout.addSpacing(4)
+        control_layout.addSpacing(8)
         
         # CheckBox
         self.check_log = QCheckBox("Log")
@@ -262,29 +273,36 @@ class ClassDistributionWidget(QWidget):
         control_layout.addWidget(self.check_hide_bg)
         
         control_layout.addStretch()
+        layout.addLayout(control_layout)
         
-        # 权重按钮 - 图标化
+        # === 图表区域 ===
+        self.chart = ClassDistributionChart(self)
+        layout.addWidget(self.chart, 0, Qt.AlignmentFlag.AlignTop)  # 顶部对齐，不拉伸
+        
+        # 底部弹性空间，确保内容顶部对齐
+        layout.addStretch()
+        
+        # === 权重按钮（供外部添加到标题栏）===
         self.btn_calc_weights = QToolButton()
-        self.btn_calc_weights.setText("⚖")
+        self.btn_calc_weights.setText("📊 计算权重")
         self.btn_calc_weights.setToolTip("计算类别权重 (Median Frequency Balancing)")
         self.btn_calc_weights.setStyleSheet("""
             QToolButton {
-                font-size: 12px;
-                padding: 2px 6px;
+                font-size: 10px;
+                padding: 2px 8px;
                 border: 1px solid palette(mid);
                 border-radius: 3px;
+                background: transparent;
             }
             QToolButton:hover { background-color: palette(light); }
             QToolButton:disabled { color: gray; }
         """)
         self.btn_calc_weights.setEnabled(False)
-        control_layout.addWidget(self.btn_calc_weights)
-        
-        layout.addLayout(control_layout)
-        
-        # === 图表区域 ===
-        self.chart = ClassDistributionChart(self)
-        layout.addWidget(self.chart, 1)
+        self.btn_calc_weights.setParent(None)  # 不添加到布局，供外部使用
+    
+    def get_header_button(self) -> QToolButton:
+        """获取权重计算按钮，供添加到折叠面板标题栏"""
+        return self.btn_calc_weights
     
     def _connect_signals(self) -> None:
         self.radio_group.idToggled.connect(self._on_count_type_changed)
