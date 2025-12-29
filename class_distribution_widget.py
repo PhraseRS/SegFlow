@@ -20,6 +20,10 @@ from matplotlib.figure import Figure
 from matplotlib.patches import FancyBboxPatch
 import matplotlib.pyplot as plt
 
+# 配置 Matplotlib 支持中文字体
+plt.rcParams['font.sans-serif'] = ['Microsoft YaHei', 'SimHei', 'DejaVu Sans']
+plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
+
 
 class ClassDistributionChart(FigureCanvas):
     """类别分布图表（Matplotlib 嵌入式）- 紧凑版"""

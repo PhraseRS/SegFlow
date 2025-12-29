@@ -800,6 +800,10 @@ class MainWindow(QMainWindow):
         
         # 网格视图双击
         self.ui.listWidget_thumbnails.itemDoubleClicked.connect(self.on_thumbnail_double_clicked)
+        
+        # 健康检查卡片过滤信号
+        self.ui.widget_healthCheck.filterRequested.connect(self._on_health_filter_requested)
+        self.ui.widget_healthCheck.clearFilterRequested.connect(self.clear_tree_filter)
     
     def _init_layer_controls(self):
         """初始化图层控制"""
@@ -867,10 +871,12 @@ class MainWindow(QMainWindow):
         self.ui.analysis_panel.analysis_error.connect(self._on_analysis_error)
         
         # 启动智能分析流程
+        images_dir = self.data_manager.images_dir
         labels_dir = self.data_manager.labels_dir
         self.ui.analysis_panel.initialize_statistics_flow(
             data_root, 
             samples_info, 
+            images_dir,
             labels_dir
         )
     
@@ -934,7 +940,7 @@ class MainWindow(QMainWindow):
         print(f"⚠️ 元数据计算错误: {error_msg}")
     
     def _on_metadata_ready(self):
-        """元数据准备就绪，更新UI（从数据库读取）"""
+        """元数据准备就绪，更新UI（从数据库读取）- UI 层分流逻辑"""
         # 优先从 AnalysisPanel 获取统计数据
         stats = self.ui.analysis_panel.get_aggregated_stats()
         if not stats:
@@ -942,13 +948,17 @@ class MainWindow(QMainWindow):
             stats = self.metadata_manager.get_aggregated_stats()
         
         if stats:
-            # 更新类别分布（传递 image_counts）
+            # 1. 更新类别分布卡片（传递 image_counts）
             self._update_class_distribution(
                 stats.get('class_distribution', {}),
                 stats.get('image_counts', {})
             )
-            # 更新覆盖率分析
+            
+            # 2. 更新覆盖率分析卡片
             self._update_coverage_analysis()
+            
+            # 3. 更新健康检查卡片
+            self._update_health_check()
     
     def _update_class_distribution(self, class_distribution, image_counts=None):
         """更新类别分布面板
@@ -997,6 +1007,155 @@ class MainWindow(QMainWindow):
             return
         
         self.ui.widget_coverageAnalysis.set_data(image_records)
+    
+    def _update_health_check(self):
+        """更新健康检查面板"""
+        # 从 AnalysisPanel 的 metadata_manager 获取数据库
+        database = self.ui.analysis_panel.metadata_manager.database
+        if database is None:
+            self.ui.widget_healthCheck.clear()
+            return
+        
+        # 获取健康检查问题汇总
+        health_data = database.get_health_check_issues()
+        if not health_data:
+            self.ui.widget_healthCheck.clear()
+            return
+        
+        # 设置问题数据
+        issues = {
+            'fatal': health_data.get('fatal', {}),
+            'warning': health_data.get('warning', {})
+        }
+        total_samples = health_data.get('total_samples', 0)
+        
+        self.ui.widget_healthCheck.set_issues(issues, total_samples)
+    
+    def _on_health_filter_requested(self, issue_type: str):
+        """
+        健康检查卡片过滤请求回调
+        
+        交互流程：
+        1. 用户点击问题行（如 "🔴 尺寸不匹配 [ 2 项 ]"）
+        2. 左侧文件列表过滤显示问题文件
+        3. 自动加载第一个问题文件到主视图
+        
+        Args:
+            issue_type: 问题类型（如 'empty_mask', 'corrupt_file' 等）
+        """
+        print(f"🔍 健康检查过滤请求: {issue_type}")
+        
+        # 从数据库获取问题文件列表
+        database = self.ui.analysis_panel.metadata_manager.database
+        if database is None:
+            return
+        
+        problem_samples = database.get_samples_by_issue(issue_type)
+        if not problem_samples:
+            self.statusBar().showMessage(f"未找到 {issue_type} 类型的问题文件")
+            return
+        
+        print(f"📋 找到 {len(problem_samples)} 个问题文件: {problem_samples[:5]}...")
+        
+        # 过滤树形控件：隐藏非问题文件，只显示问题文件
+        self._filter_tree_by_samples(problem_samples, issue_type)
+        
+        # 自动选中并加载第一个问题文件
+        if problem_samples:
+            first_sample_id = problem_samples[0]
+            # 查找该样本所属的数据集
+            dataset_type = self._find_sample_dataset(first_sample_id)
+            if dataset_type:
+                # 在树形控件中选中该样本
+                self._select_sample_in_tree(first_sample_id, dataset_type)
+                # 加载样本可视化
+                self.load_sample_visualization({
+                    'sample_id': first_sample_id,
+                    'dataset': dataset_type
+                })
+        
+        self.statusBar().showMessage(f"已过滤显示 {len(problem_samples)} 个 {issue_type} 问题文件")
+    
+    def _filter_tree_by_samples(self, sample_ids: list, issue_type: str):
+        """
+        过滤树形控件，只显示指定的样本
+        
+        Args:
+            sample_ids: 要显示的样本ID列表
+            issue_type: 问题类型（用于更新父节点标题）
+        """
+        sample_set = set(sample_ids)
+        
+        # 遍历所有数据集节点
+        for parent_node in [self.data_manager.train_node, 
+                           self.data_manager.val_node, 
+                           self.data_manager.test_node]:
+            visible_count = 0
+            
+            # 遍历子节点
+            for i in range(parent_node.childCount()):
+                child = parent_node.child(i)
+                node_data = child.data(0, Qt.ItemDataRole.UserRole)
+                
+                if isinstance(node_data, dict):
+                    sample_id = node_data.get('sample_id', '')
+                else:
+                    sample_id = child.text(0)
+                
+                # 根据是否在问题列表中决定显示/隐藏
+                if sample_id in sample_set:
+                    child.setHidden(False)
+                    visible_count += 1
+                else:
+                    child.setHidden(True)
+            
+            # 更新父节点标题显示过滤后的数量
+            node_data = parent_node.data(0, Qt.ItemDataRole.UserRole)
+            dataset_type = node_data.get('dataset', '') if isinstance(node_data, dict) else ''
+            
+            labels = {
+                'train': f"📂 训练集 (Train) [过滤: {visible_count}个]",
+                'val': f"📂 验证集 (Val) [过滤: {visible_count}个]",
+                'test': f"📂 测试集 (Test) [过滤: {visible_count}个]"
+            }
+            parent_node.setText(0, labels.get(dataset_type, f"未知 [{visible_count}个]"))
+            
+            # 展开有问题文件的节点
+            if visible_count > 0:
+                parent_node.setExpanded(True)
+    
+    def _find_sample_dataset(self, sample_id: str) -> str:
+        """
+        查找样本所属的数据集类型
+        
+        Args:
+            sample_id: 样本ID
+        
+        Returns:
+            str: 数据集类型 ('train', 'val', 'test') 或空字符串
+        """
+        for dataset_type in ['train', 'val', 'test']:
+            samples = self.data_manager.get_samples(dataset_type)
+            if sample_id in samples:
+                return dataset_type
+        return ''
+    
+    def clear_tree_filter(self):
+        """
+        清除树形控件过滤，恢复显示所有样本
+        """
+        for parent_node in [self.data_manager.train_node, 
+                           self.data_manager.val_node, 
+                           self.data_manager.test_node]:
+            # 显示所有子节点
+            for i in range(parent_node.childCount()):
+                child = parent_node.child(i)
+                child.setHidden(False)
+            
+            # 恢复父节点标题
+            self.data_manager._update_count(parent_node)
+        
+        self.statusBar().showMessage("已清除过滤，显示所有样本")
     
     def _update_dataset_overview(self):
         """更新数据集概览面板"""

@@ -258,6 +258,7 @@ class AnalysisPanel(QWidget):
         self._data_root: Optional[str] = None
         self._sample_count: int = 0
         self._samples_info: list = []
+        self._images_dir: str = ""
         self._labels_dir: str = ""
         
         # 元数据管理器
@@ -357,15 +358,26 @@ class AnalysisPanel(QWidget):
         self, 
         data_root: str, 
         samples_info: list,
+        images_dir: str,
         labels_dir: str
     ) -> None:
         """
         初始化统计流程（智能混合启动策略）
+        
+        Args:
+            data_root: 数据根目录
+            samples_info: [(sample_id, dataset_type), ...]
+            images_dir: 图像目录
+            labels_dir: 标签目录
         """
         self._data_root = data_root
         self._sample_count = len(samples_info)
         self._samples_info = samples_info
+        self._images_dir = images_dir
         self._labels_dir = labels_dir
+        
+        # 设置 metadata_manager 的目录
+        self.metadata_manager.set_directories(images_dir, labels_dir)
         
         # 更新控制器显示
         is_large = not self._is_below_threshold()
@@ -425,6 +437,7 @@ class AnalysisPanel(QWidget):
         self.analysis_started.emit()
         self.metadata_manager.start_calculation(
             self._samples_info,
+            self._images_dir,
             self._labels_dir
         )
     

@@ -2,6 +2,11 @@
 """
 数据集元数据缓存系统 (Dataset Metadata Cache)
 使用独立进程计算统计信息，SQLite 数据库存储
+
+全能分析流水线：一次 I/O，完成统计 + 质检
+- 类别分布统计
+- 覆盖率分析
+- 健康检查（文件缺失、损坏、尺寸不匹配、空标签、噪点等）
 """
 
 import sqlite3
@@ -13,82 +18,184 @@ from pathlib import Path
 from PySide6.QtCore import QTimer, Signal, QObject
 
 
+# ============== 问题类型常量 ==============
+ISSUE_FILE_MISSING = "file_missing"
+ISSUE_CORRUPT_FILE = "corrupt_file"
+ISSUE_DIMENSION_MISMATCH = "dimension_mismatch"
+ISSUE_EMPTY_MASK = "empty_mask"
+ISSUE_NOISE_ARTIFACT = "noise_artifact"
+
+# 问题级别
+LEVEL_FATAL = "fatal"
+LEVEL_WARNING = "warning"
+
+# 问题级别映射
+ISSUE_LEVELS = {
+    ISSUE_FILE_MISSING: LEVEL_FATAL,
+    ISSUE_CORRUPT_FILE: LEVEL_FATAL,
+    ISSUE_DIMENSION_MISMATCH: LEVEL_FATAL,
+    ISSUE_EMPTY_MASK: LEVEL_WARNING,
+    ISSUE_NOISE_ARTIFACT: LEVEL_WARNING,
+}
+
+# 噪点检测阈值（像素）
+NOISE_AREA_THRESHOLD = 5
+
+
 # ============== 独立进程中运行的计算函数 ==============
 
-def _calculate_sample_stats(args):
+def _analyze_sample_fully(args):
     """
-    计算单个样本的统计信息（在独立进程中运行）
-    
-    一次读取，同时计算：像素总量、各类别像素数、覆盖率
+    全能分析函数：一次 I/O，完成统计 + 质检
     
     Args:
-        args: (sample_id, dataset_type, label_path)
+        args: (sample_id, dataset_type, image_path, label_path)
     
     Returns:
-        dict: 样本统计信息，包含：
-            - class_pixels: 各类别像素数 {class_id: count} -> 用于全局累加
-            - class_ratios: 各类别覆盖率 {class_id: ratio} -> 用于覆盖率分析
-            - classes_present: 该样本中出现的类别列表
+        dict: 分析结果，包含：
+            - sample_id: 样本ID
+            - dataset: 数据集类型
+            - status: 'ok' | 'warning' | 'error'
+            - issues: 问题列表
+            - stats: 统计数据（仅当 status != 'error' 时有效）
     """
-    sample_id, dataset_type, label_path = args
+    import cv2
+    import numpy as np
     
-    stats = {
+    sample_id, dataset_type, image_path, label_path = args
+    
+    result = {
         'sample_id': sample_id,
         'dataset': dataset_type,
+        'image_path': image_path,
         'label_path': label_path,
-        'width': 0,
-        'height': 0,
-        'total_pixels': 0,
-        'class_pixels': {},      # {class_id: pixel_count} -> 用于全局累加
-        'class_ratios': {},      # {class_id: ratio} -> 用于覆盖率分析
-        'classes_present': [],   # 该样本中出现的类别列表
-        'error': None
+        'status': 'ok',
+        'issues': [],
+        'stats': None
     }
     
+    # --- 检查 1: 文件是否存在 (Fatal) ---
+    if not image_path or not os.path.exists(image_path):
+        result['status'] = 'error'
+        result['issues'].append(ISSUE_FILE_MISSING)
+        return result
+    
     if not label_path or not os.path.exists(label_path):
-        return stats
+        result['status'] = 'error'
+        result['issues'].append(ISSUE_FILE_MISSING)
+        return result
     
     try:
-        # 使用 PIL 读取图像（在独立进程中不能使用 Qt）
-        from PIL import Image
-        import numpy as np
+        # --- 读取文件 (I/O 瓶颈所在) ---
+        # 使用 np.fromfile + cv2.imdecode 支持中文路径
+        img = cv2.imdecode(np.fromfile(image_path, dtype=np.uint8), cv2.IMREAD_COLOR)
+        mask = cv2.imdecode(np.fromfile(label_path, dtype=np.uint8), cv2.IMREAD_UNCHANGED)
         
-        with Image.open(label_path) as img:
-            # 转换为灰度/单通道
-            if img.mode != 'L':
-                img = img.convert('L')
+        # --- 检查 2: 文件损坏 (Fatal) ---
+        if img is None:
+            result['status'] = 'error'
+            result['issues'].append(ISSUE_CORRUPT_FILE)
+            return result
+        
+        if mask is None:
+            result['status'] = 'error'
+            result['issues'].append(ISSUE_CORRUPT_FILE)
+            return result
+        
+        # --- 检查 3: 尺寸匹配 (Fatal) ---
+        img_h, img_w = img.shape[:2]
+        mask_h, mask_w = mask.shape[:2] if len(mask.shape) >= 2 else (0, 0)
+        
+        if (img_h, img_w) != (mask_h, mask_w):
+            result['status'] = 'error'
+            result['issues'].append(ISSUE_DIMENSION_MISMATCH)
+            # 尺寸不对，统计数据不可信，停止后续计算
+            result['stats'] = {
+                'width': img_w,
+                'height': img_h,
+                'mask_width': mask_w,
+                'mask_height': mask_h,
+                'total_pixels': 0,
+                'class_pixels': {},
+                'class_ratios': {},
+                'classes_present': []
+            }
+            return result
+        
+        # =========================================
+        # 到这里，说明文件是物理健康的，开始统计 + 质量分析
+        # =========================================
+        
+        # 确保 mask 是单通道
+        if len(mask.shape) == 3:
+            mask = mask[:, :, 0]
+        
+        # --- 统计逻辑 ---
+        total_pixels = mask.size
+        unique_classes, counts = np.unique(mask, return_counts=True)
+        
+        class_pixels = {}
+        class_ratios = {}
+        has_valid_foreground = False
+        
+        for cls_id, count in zip(unique_classes, counts):
+            cls_key = str(int(cls_id))
+            class_pixels[cls_key] = int(count)
+            ratio = float(count / total_pixels)
+            class_ratios[cls_key] = ratio
             
-            arr = np.array(img)
-            stats['height'], stats['width'] = arr.shape
-            total_pixels = arr.size
-            stats['total_pixels'] = total_pixels
-            
-            # 核心计算：np.unique 一次性获取所有类别和像素数
-            unique_classes, counts = np.unique(arr, return_counts=True)
-            
-            # 构建统计数据
-            for cls_id, count in zip(unique_classes, counts):
-                cls_key = str(int(cls_id))
+            # 检查是否有前景类（非背景类 0）
+            if cls_id != 0:
+                has_valid_foreground = True
+        
+        result['stats'] = {
+            'width': img_w,
+            'height': img_h,
+            'total_pixels': total_pixels,
+            'class_pixels': class_pixels,
+            'class_ratios': class_ratios,
+            'classes_present': [str(int(k)) for k in unique_classes]
+        }
+        
+        # --- 检查 4: 质量警告 (Warning) ---
+        
+        # A. 空标签检查 (Empty Mask) - 全为背景类
+        if not has_valid_foreground:
+            result['status'] = 'warning'
+            result['issues'].append(ISSUE_EMPTY_MASK)
+        
+        # B. 噪点检查 (Noise Check) - 极小连通域
+        if has_valid_foreground:
+            try:
+                # 创建前景掩码（非背景类）
+                foreground_mask = (mask > 0).astype(np.uint8)
+                num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(
+                    foreground_mask, connectivity=4
+                )
                 
-                # 记录绝对数量（用于全局累加）
-                stats['class_pixels'][cls_key] = int(count)
-                
-                # 记录覆盖率（用于单图分析）
-                ratio = count / total_pixels
-                stats['class_ratios'][cls_key] = float(ratio)
-            
-            # 记录该样本中出现的类别
-            stats['classes_present'] = [str(int(k)) for k in unique_classes]
+                # stats[:, 4] 是面积，忽略背景(index 0)
+                if num_labels > 1:
+                    areas = stats[1:, cv2.CC_STAT_AREA]
+                    min_area = np.min(areas)
+                    
+                    if min_area < NOISE_AREA_THRESHOLD:
+                        if result['status'] == 'ok':
+                            result['status'] = 'warning'
+                        result['issues'].append(ISSUE_NOISE_ARTIFACT)
+            except Exception:
+                # 噪点检测失败不影响主流程
+                pass
     
     except Exception as e:
-        stats['error'] = str(e)
+        result['status'] = 'error'
+        result['issues'].append(f"exception: {str(e)}")
     
-    return stats
+    return result
 
 
 def _worker_process(db_path, samples_queue, progress_queue, stop_event, total_samples):
     """
-    工作进程：从队列获取任务，计算统计信息，写入数据库
+    工作进程：从队列获取任务，执行全能分析，写入数据库
     
     Args:
         db_path: SQLite 数据库路径
@@ -118,25 +225,31 @@ def _worker_process(db_path, samples_queue, progress_queue, stop_event, total_sa
             if args is None:  # 结束信号
                 break
             
-            # 计算统计信息
-            stats = _calculate_sample_stats(args)
+            # 执行全能分析
+            result = _analyze_sample_fully(args)
+            
+            # 提取统计数据
+            stats = result.get('stats') or {}
             
             # 写入数据库
             cursor.execute('''
                 INSERT OR REPLACE INTO sample_stats 
-                (sample_id, dataset, label_path, width, height, total_pixels, class_pixels, class_ratios, classes_present, error, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (sample_id, dataset, image_path, label_path, width, height, total_pixels, 
+                 class_pixels, class_ratios, classes_present, status, issues, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
-                stats['sample_id'],
-                stats['dataset'],
-                stats['label_path'],
-                stats['width'],
-                stats['height'],
-                stats['total_pixels'],
-                json.dumps(stats['class_pixels']),
+                result['sample_id'],
+                result['dataset'],
+                result.get('image_path', ''),
+                result.get('label_path', ''),
+                stats.get('width', 0),
+                stats.get('height', 0),
+                stats.get('total_pixels', 0),
+                json.dumps(stats.get('class_pixels', {})),
                 json.dumps(stats.get('class_ratios', {})),
                 json.dumps(stats.get('classes_present', [])),
-                stats['error'],
+                result['status'],
+                json.dumps(result['issues']),
                 datetime.now().isoformat()
             ))
             conn.commit()
@@ -148,7 +261,7 @@ def _worker_process(db_path, samples_queue, progress_queue, stop_event, total_sa
                 last_report = processed
                 progress_queue.put({
                     'type': 'progress',
-                    'sample_id': stats['sample_id'],
+                    'sample_id': result['sample_id'],
                     'processed': processed
                 })
         
@@ -179,11 +292,12 @@ class MetadataDatabase:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
-        # 样本统计表
+        # 样本统计表（包含健康检查字段）
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS sample_stats (
                 sample_id TEXT PRIMARY KEY,
                 dataset TEXT,
+                image_path TEXT,
                 label_path TEXT,
                 width INTEGER,
                 height INTEGER,
@@ -191,6 +305,8 @@ class MetadataDatabase:
                 class_pixels TEXT,
                 class_ratios TEXT,
                 classes_present TEXT,
+                status TEXT DEFAULT 'ok',
+                issues TEXT DEFAULT '[]',
                 error TEXT,
                 updated_at TEXT
             )
@@ -207,6 +323,18 @@ class MetadataDatabase:
         if 'class_ratios' not in columns:
             cursor.execute('ALTER TABLE sample_stats ADD COLUMN class_ratios TEXT')
             print("📦 数据库升级：添加 class_ratios 列")
+        
+        if 'status' not in columns:
+            cursor.execute("ALTER TABLE sample_stats ADD COLUMN status TEXT DEFAULT 'ok'")
+            print("📦 数据库升级：添加 status 列")
+        
+        if 'issues' not in columns:
+            cursor.execute("ALTER TABLE sample_stats ADD COLUMN issues TEXT DEFAULT '[]'")
+            print("📦 数据库升级：添加 issues 列")
+        
+        if 'image_path' not in columns:
+            cursor.execute('ALTER TABLE sample_stats ADD COLUMN image_path TEXT')
+            print("📦 数据库升级：添加 image_path 列")
         
         # 元数据信息表
         cursor.execute('''
@@ -240,11 +368,10 @@ class MetadataDatabase:
     def get_aggregated_stats(self):
         """
         获取聚合统计数据（直接从数据库读取，毫秒级）
+        仅统计 status != 'error' 的样本
         
         Returns:
-            dict: 聚合统计信息，包含：
-                - class_distribution: 各类别像素总数
-                - image_counts: 各类别出现在多少张图像中
+            dict: 聚合统计信息
         """
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
@@ -255,7 +382,7 @@ class MetadataDatabase:
             'val_count': 0,
             'test_count': 0,
             'class_distribution': {},
-            'image_counts': {},  # 各类别出现在多少张图像中
+            'image_counts': {},
             'size_stats': {
                 'min_width': float('inf'),
                 'min_height': float('inf'),
@@ -266,8 +393,12 @@ class MetadataDatabase:
             }
         }
         
-        # 统计各数据集样本数
-        cursor.execute('SELECT dataset, COUNT(*) FROM sample_stats GROUP BY dataset')
+        # 统计各数据集样本数（仅统计非错误样本）
+        cursor.execute('''
+            SELECT dataset, COUNT(*) FROM sample_stats 
+            WHERE status != 'error' OR status IS NULL
+            GROUP BY dataset
+        ''')
         for dataset, count in cursor.fetchall():
             stats['total_samples'] += count
             if dataset == 'train':
@@ -277,17 +408,18 @@ class MetadataDatabase:
             elif dataset == 'test':
                 stats['test_count'] = count
         
-        # 聚合类别分布（像素计数）和图像计数
-        cursor.execute('SELECT class_pixels, classes_present FROM sample_stats WHERE class_pixels IS NOT NULL')
+        # 聚合类别分布（仅统计非错误样本）
+        cursor.execute('''
+            SELECT class_pixels, classes_present FROM sample_stats 
+            WHERE class_pixels IS NOT NULL AND (status != 'error' OR status IS NULL)
+        ''')
         for row in cursor.fetchall():
             try:
-                # 聚合像素计数
                 class_pixels = json.loads(row[0])
                 for class_id, count in class_pixels.items():
                     stats['class_distribution'][class_id] = \
                         stats['class_distribution'].get(class_id, 0) + count
                 
-                # 聚合图像计数：每个样本中出现的类别，该类别的 image_count +1
                 classes_present = json.loads(row[1]) if row[1] else list(class_pixels.keys())
                 for class_id in classes_present:
                     stats['image_counts'][class_id] = \
@@ -296,7 +428,10 @@ class MetadataDatabase:
                 pass
         
         # 统计尺寸
-        cursor.execute('SELECT width, height FROM sample_stats WHERE width > 0 AND height > 0')
+        cursor.execute('''
+            SELECT width, height FROM sample_stats 
+            WHERE width > 0 AND height > 0 AND (status != 'error' OR status IS NULL)
+        ''')
         for width, height in cursor.fetchall():
             stats['size_stats']['widths'].append(width)
             stats['size_stats']['heights'].append(height)
@@ -307,7 +442,6 @@ class MetadataDatabase:
         
         conn.close()
         
-        # 处理空数据情况
         if stats['size_stats']['min_width'] == float('inf'):
             stats['size_stats']['min_width'] = 0
             stats['size_stats']['min_height'] = 0
@@ -321,39 +455,29 @@ class MetadataDatabase:
         cursor.execute('DELETE FROM sample_stats')
         conn.commit()
         conn.close()
+
     
     def get_image_records(self, dataset_filter=None):
         """
         获取单图记录列表（用于覆盖率分析）
-        
-        兼容旧数据库：当 class_ratios 为空时，从 class_pixels 和 total_pixels 计算覆盖率
-        
-        Args:
-            dataset_filter: 可选，筛选数据集类型 ('train', 'val', 'test')
-        
-        Returns:
-            list: 单图记录列表，每条记录包含：
-                - sample_id: 样本ID
-                - dataset: 数据集类型
-                - total_pixels: 总像素数
-                - class_ratios: 各类别覆盖率 {class_id: ratio}
-                - width, height: 图像尺寸
+        仅返回 status != 'error' 的样本
         """
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
-        # 查询所有有效记录（包括 class_ratios 为空但 class_pixels 有数据的情况）
         if dataset_filter:
             cursor.execute('''
                 SELECT sample_id, dataset, total_pixels, class_ratios, class_pixels, width, height 
                 FROM sample_stats 
                 WHERE dataset = ? AND (class_ratios IS NOT NULL OR class_pixels IS NOT NULL)
+                AND (status != 'error' OR status IS NULL)
             ''', (dataset_filter,))
         else:
             cursor.execute('''
                 SELECT sample_id, dataset, total_pixels, class_ratios, class_pixels, width, height 
                 FROM sample_stats 
-                WHERE class_ratios IS NOT NULL OR class_pixels IS NOT NULL
+                WHERE (class_ratios IS NOT NULL OR class_pixels IS NOT NULL)
+                AND (status != 'error' OR status IS NULL)
             ''')
         
         records = []
@@ -367,12 +491,10 @@ class MetadataDatabase:
                 width = row[5]
                 height = row[6]
                 
-                # 优先使用 class_ratios
                 class_ratios = {}
                 if class_ratios_str:
                     class_ratios = json.loads(class_ratios_str)
                 
-                # 如果 class_ratios 为空，从 class_pixels 计算
                 if not class_ratios and class_pixels_str and total_pixels > 0:
                     class_pixels = json.loads(class_pixels_str)
                     for class_id, pixel_count in class_pixels.items():
@@ -380,7 +502,6 @@ class MetadataDatabase:
                         if ratio > 0:
                             class_ratios[class_id] = ratio
                 
-                # 只添加有有效覆盖率数据的记录
                 if class_ratios:
                     records.append({
                         'sample_id': sample_id,
@@ -390,33 +511,22 @@ class MetadataDatabase:
                         'width': width,
                         'height': height
                     })
-            except Exception as e:
-                # 静默跳过解析错误的记录
+            except:
                 pass
         
         conn.close()
         return records
     
     def get_samples_by_class(self, class_id, min_ratio=0.0):
-        """
-        获取包含指定类别的样本列表（支持点击交互过滤）
-        
-        兼容旧数据库：当 class_ratios 为空时，从 class_pixels 和 total_pixels 计算覆盖率
-        
-        Args:
-            class_id: 类别ID（字符串）
-            min_ratio: 最小覆盖率阈值
-        
-        Returns:
-            list: 符合条件的样本记录
-        """
+        """获取包含指定类别的样本列表"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
         cursor.execute('''
             SELECT sample_id, dataset, total_pixels, class_ratios, class_pixels, width, height 
             FROM sample_stats 
-            WHERE class_ratios IS NOT NULL OR class_pixels IS NOT NULL
+            WHERE (class_ratios IS NOT NULL OR class_pixels IS NOT NULL)
+            AND (status != 'error' OR status IS NULL)
         ''')
         
         records = []
@@ -430,12 +540,10 @@ class MetadataDatabase:
                 width = row[5]
                 height = row[6]
                 
-                # 优先使用 class_ratios
                 class_ratios = {}
                 if class_ratios_str:
                     class_ratios = json.loads(class_ratios_str)
                 
-                # 如果 class_ratios 为空，从 class_pixels 计算
                 if not class_ratios and class_pixels_str and total_pixels > 0:
                     class_pixels = json.loads(class_pixels_str)
                     for cid, pixel_count in class_pixels.items():
@@ -443,7 +551,6 @@ class MetadataDatabase:
                         if ratio > 0:
                             class_ratios[cid] = ratio
                 
-                # 检查是否包含指定类别且满足最小覆盖率
                 if class_id in class_ratios and class_ratios[class_id] >= min_ratio:
                     records.append({
                         'sample_id': sample_id,
@@ -454,14 +561,96 @@ class MetadataDatabase:
                         'width': width,
                         'height': height
                     })
-            except Exception as e:
+            except:
                 pass
         
         conn.close()
-        
-        # 按覆盖率降序排序
         records.sort(key=lambda x: x['ratio'], reverse=True)
         return records
+    
+    def get_health_check_issues(self):
+        """
+        获取健康检查问题汇总（用于健康检查卡片）
+        
+        Returns:
+            dict: 问题汇总，格式：
+                {
+                    'fatal': {'file_missing': ['file1', ...], 'corrupt_file': [...], ...},
+                    'warning': {'empty_mask': [...], 'noise_artifact': [...], ...},
+                    'total_samples': 总样本数,
+                    'passed_samples': 通过样本数
+                }
+        """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        # 初始化结果
+        result = {
+            'fatal': {},
+            'warning': {},
+            'total_samples': 0,
+            'passed_samples': 0
+        }
+        
+        # 查询所有样本的状态和问题
+        cursor.execute('SELECT sample_id, status, issues FROM sample_stats')
+        
+        for row in cursor.fetchall():
+            sample_id = row[0]
+            status = row[1] or 'ok'
+            issues_str = row[2] or '[]'
+            
+            result['total_samples'] += 1
+            
+            if status == 'ok':
+                result['passed_samples'] += 1
+            else:
+                try:
+                    issues = json.loads(issues_str)
+                    for issue in issues:
+                        # 确定问题级别
+                        level = ISSUE_LEVELS.get(issue, LEVEL_WARNING)
+                        level_key = 'fatal' if level == LEVEL_FATAL else 'warning'
+                        
+                        # 添加到对应级别
+                        if issue not in result[level_key]:
+                            result[level_key][issue] = []
+                        result[level_key][issue].append(sample_id)
+                except:
+                    pass
+        
+        conn.close()
+        return result
+    
+    def get_samples_by_issue(self, issue_type):
+        """
+        获取指定问题类型的样本列表
+        
+        Args:
+            issue_type: 问题类型（如 'empty_mask', 'corrupt_file' 等）
+        
+        Returns:
+            list: 样本ID列表
+        """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT sample_id, issues FROM sample_stats WHERE issues IS NOT NULL')
+        
+        samples = []
+        for row in cursor.fetchall():
+            sample_id = row[0]
+            issues_str = row[1] or '[]'
+            
+            try:
+                issues = json.loads(issues_str)
+                if issue_type in issues:
+                    samples.append(sample_id)
+            except:
+                pass
+        
+        conn.close()
+        return samples
 
 
 # ============== 元数据管理器（Qt 集成）==============
@@ -479,6 +668,8 @@ class DatasetMetadataManager:
     def __init__(self):
         self.database = None
         self.data_root = None
+        self.images_dir = None
+        self.labels_dir = None
         
         # 进程相关
         self._process = None
@@ -500,16 +691,13 @@ class DatasetMetadataManager:
         self.data_root = data_root
         self.database = MetadataDatabase(data_root)
     
+    def set_directories(self, images_dir, labels_dir):
+        """设置图像和标签目录"""
+        self.images_dir = images_dir
+        self.labels_dir = labels_dir
+    
     def is_cache_valid(self, samples_info):
-        """
-        检查缓存是否有效
-        
-        Args:
-            samples_info: [(sample_id, dataset_type), ...]
-        
-        Returns:
-            bool: 缓存是否有效
-        """
+        """检查缓存是否有效"""
         if self.database is None:
             return False
         
@@ -524,13 +712,20 @@ class DatasetMetadataManager:
             return None
         return self.database.get_aggregated_stats()
     
-    def start_calculation(self, samples_info, labels_dir):
+    def get_health_check_issues(self):
+        """获取健康检查问题汇总"""
+        if self.database is None:
+            return None
+        return self.database.get_health_check_issues()
+    
+    def start_calculation(self, samples_info, images_dir=None, labels_dir=None):
         """
-        启动后台进程计算元数据
+        启动后台进程计算元数据（全能分析）
         
         Args:
             samples_info: [(sample_id, dataset_type), ...]
-            labels_dir: 标签目录
+            images_dir: 图像目录（可选，使用已设置的目录）
+            labels_dir: 标签目录（可选，使用已设置的目录）
         """
         # 停止之前的计算
         self.stop_calculation()
@@ -538,15 +733,32 @@ class DatasetMetadataManager:
         if self.database is None:
             return
         
+        # 使用传入的目录或已设置的目录
+        images_dir = images_dir or self.images_dir
+        labels_dir = labels_dir or self.labels_dir
+        
+        if not images_dir or not labels_dir:
+            print("⚠️ 未设置图像或标签目录")
+            return
+        
         # 检查哪些样本需要计算
         cached_ids = self.database.get_sample_ids()
         samples_to_process = []
         
+        image_exts = ['.jpg', '.jpeg', '.png', '.tif', '.tiff', '.bmp']
         label_exts = ['.png', '.tif', '.tiff', '.jpg', '.jpeg', '.bmp']
         
         for sample_id, dataset_type in samples_info:
             if sample_id in cached_ids:
                 continue  # 已缓存，跳过
+            
+            # 查找图像文件
+            image_path = None
+            for ext in image_exts:
+                path = os.path.join(images_dir, f"{sample_id}{ext}")
+                if os.path.exists(path):
+                    image_path = path
+                    break
             
             # 查找标签文件
             label_path = None
@@ -556,7 +768,7 @@ class DatasetMetadataManager:
                     label_path = path
                     break
             
-            samples_to_process.append((sample_id, dataset_type, label_path))
+            samples_to_process.append((sample_id, dataset_type, image_path, label_path))
         
         if not samples_to_process:
             print("✅ 所有样本已缓存，无需计算")
@@ -564,7 +776,7 @@ class DatasetMetadataManager:
             return
         
         self._total_samples = len(samples_to_process)
-        print(f"🔄 启动后台进程计算 {self._total_samples} 个样本的元数据...")
+        print(f"🔄 启动后台进程分析 {self._total_samples} 个样本...")
         
         # 创建进程间通信对象
         self._samples_queue = multiprocessing.Queue()
@@ -604,11 +816,11 @@ class DatasetMetadataManager:
             elif msg['type'] == 'done':
                 self._poll_timer.stop()
                 self._cleanup_process()
-                print(f"✅ 元数据计算完成，共处理 {msg['processed']} 个样本")
+                print(f"✅ 全能分析完成，共处理 {msg['processed']} 个样本")
                 self.signals.finished.emit()
                 break
             elif msg['type'] == 'error':
-                print(f"⚠️ 元数据计算错误: {msg['message']}")
+                print(f"⚠️ 分析错误: {msg['message']}")
                 self.signals.error.emit(msg['message'])
     
     def stop_calculation(self):

@@ -28,6 +28,7 @@ from dataset_overview_widget import DatasetOverviewWidget
 from analysis_panel import AnalysisPanel
 from class_distribution_widget import ClassDistributionWidget
 from coverage_analysis_widget import CoverageAnalysisCard
+from health_check_widget import HealthCheckCard
 
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
@@ -280,11 +281,12 @@ class Ui_MainWindow(object):
         self.panel_coverageAnalysis.add_widget(self.widget_coverageAnalysis)
         
         # 面板3: 健康检查 (Health Check)
-        self.panel_healthCheck = self.collapsible_dataProfile.add_panel("健康检查", expanded=False)
-        self.label_healthCheck = QLabel()
-        self.label_healthCheck.setObjectName(u"label_healthCheck")
-        self.label_healthCheck.setWordWrap(True)
-        self.panel_healthCheck.add_widget(self.label_healthCheck)
+        self.panel_healthCheck = self.collapsible_dataProfile.add_panel("健康检查 (Health Check)", expanded=False)
+        self.widget_healthCheck = HealthCheckCard()
+        self.widget_healthCheck.setObjectName(u"widget_healthCheck")
+        self.panel_healthCheck.add_widget(self.widget_healthCheck)
+        # 将摘要控件添加到标题栏
+        self.panel_healthCheck.add_header_widget(self.widget_healthCheck.get_header_widget())
         
         # 将深度图表设置为 AnalysisPanel 的底部组件
         self.analysis_panel.set_charts_widget(self.collapsible_dataProfile)
@@ -593,8 +595,7 @@ class Ui_MainWindow(object):
         
         # Tab 1: 数据洞察（使用可折叠面板，标题在组件中设置）
         self.tabWidget_contextControl.setTabText(self.tabWidget_contextControl.indexOf(self.tab_dataProfile), QCoreApplication.translate("MainWindow", u"\u6570\u636e\u6d1e\u5bdf (Data Profile)", None))
-        # widget_datasetOverview, widget_classDistribution, widget_coverageAnalysis 使用自定义组件，无需设置文本
-        self.label_healthCheck.setText(QCoreApplication.translate("MainWindow", u"\u2705 \u6570\u636e\u96c6\u72b6\u6001: \u672a\u68c0\u67e5\n\n\u70b9\u51fb\u201c\u8fd0\u884c\u68c0\u67e5\u201d\u5f00\u59cb\u5065\u5eb7\u68c0\u67e5", None))
+        # widget_datasetOverview, widget_classDistribution, widget_coverageAnalysis, widget_healthCheck 使用自定义组件，无需设置文本
         
         # Tab 2: 任务配置
         self.tabWidget_contextControl.setTabText(self.tabWidget_contextControl.indexOf(self.tab_taskConfig), QCoreApplication.translate("MainWindow", u"\u4efb\u52a1\u914d\u7f6e (Task Config)", None))
