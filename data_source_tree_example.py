@@ -1022,6 +1022,10 @@ class MainWindow(QMainWindow):
             self.ui.widget_healthCheck.clear()
             return
         
+        # 设置数据根目录（用于右键菜单功能）
+        if hasattr(self, '_current_data_root') and self._current_data_root:
+            self.ui.widget_healthCheck.set_data_root(self._current_data_root)
+        
         # 设置问题数据
         issues = {
             'fatal': health_data.get('fatal', {}),

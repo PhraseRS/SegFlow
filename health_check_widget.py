@@ -18,16 +18,20 @@
 +----------------------------------------------------------+
 """
 
+import os
+import sys
+import csv
+import subprocess
 from typing import Optional, Dict, List, Any
 from dataclasses import dataclass
 from enum import Enum
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QToolButton,
-    QSizePolicy, QFrame
+    QSizePolicy, QFrame, QMenu, QApplication, QMessageBox, QFileDialog
 )
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QCursor
+from PySide6.QtCore import Qt, Signal, QRect
+from PySide6.QtGui import QCursor, QAction
 
 
 # ==================== 样式配置 ====================
@@ -42,6 +46,139 @@ ROW_HEIGHT_PX = 26           # 列表项高度（紧凑）
 ICON_SIZE_PX = 12            # 图标尺寸
 FONT_SIZE_PX = 10            # 字体大小
 COUNT_WIDTH_PX = 60          # 数量标签宽度
+# ================================================
+
+
+# ==================== 系统集成工具函数 ====================
+
+def reveal_in_explorer(file_path: str) -> bool:
+    """
+    在系统文件管理器中显示文件
+    
+    Args:
+        file_path: 文件路径
+    
+    Returns:
+        bool: 是否成功
+    """
+    if not file_path:
+        return False
+    
+    # 规范化路径
+    file_path = os.path.normpath(file_path)
+    
+    # 检查文件/目录是否存在
+    if not os.path.exists(file_path):
+        # 尝试打开父目录
+        parent_dir = os.path.dirname(file_path)
+        if os.path.exists(parent_dir):
+            file_path = parent_dir
+        else:
+            return False
+    
+    try:
+        if sys.platform == 'win32':
+            # Windows: explorer /select, <path>
+            if os.path.isfile(file_path):
+                subprocess.run(['explorer', '/select,', file_path], check=False)
+            else:
+                subprocess.run(['explorer', file_path], check=False)
+        elif sys.platform == 'darwin':
+            # macOS: open -R <path>
+            subprocess.run(['open', '-R', file_path], check=False)
+        else:
+            # Linux: xdg-open (打开所在目录)
+            if os.path.isfile(file_path):
+                subprocess.run(['xdg-open', os.path.dirname(file_path)], check=False)
+            else:
+                subprocess.run(['xdg-open', file_path], check=False)
+        return True
+    except Exception as e:
+        print(f"⚠️ 打开文件管理器失败: {e}")
+        return False
+
+
+def copy_path_to_clipboard(file_path: str) -> bool:
+    """
+    复制文件路径到剪贴板
+    
+    Args:
+        file_path: 文件路径
+    
+    Returns:
+        bool: 是否成功
+    """
+    if not file_path:
+        return False
+    
+    try:
+        clipboard = QApplication.clipboard()
+        clipboard.setText(os.path.normpath(file_path))
+        return True
+    except Exception as e:
+        print(f"⚠️ 复制到剪贴板失败: {e}")
+        return False
+
+
+def export_issues_to_csv(
+    issues_data: List[Dict[str, Any]], 
+    save_path: str,
+    data_root: str = ""
+) -> bool:
+    """
+    导出问题列表到 CSV 文件
+    
+    Args:
+        issues_data: 问题数据列表，每项包含：
+            - sample_id: 样本ID
+            - issue_type: 问题类型
+            - image_path: 图像路径
+            - label_path: 标签路径
+            - details: 详细信息（可选）
+        save_path: 保存路径
+        data_root: 数据根目录（用于计算相对路径）
+    
+    Returns:
+        bool: 是否成功
+    """
+    if not issues_data or not save_path:
+        return False
+    
+    try:
+        with open(save_path, 'w', newline='', encoding='utf-8-sig') as f:
+            writer = csv.writer(f)
+            
+            # 写入表头
+            writer.writerow([
+                '样本ID (Sample ID)',
+                '问题类型 (Issue Type)',
+                '问题描述 (Description)',
+                '图像路径 (Image Path)',
+                '标签路径 (Label Path)',
+                '详细信息 (Details)'
+            ])
+            
+            # 写入数据
+            for item in issues_data:
+                issue_type = item.get('issue_type', '')
+                config = ISSUE_TYPES.get(issue_type)
+                description = config.description if config else issue_type
+                
+                writer.writerow([
+                    item.get('sample_id', ''),
+                    issue_type,
+                    description,
+                    item.get('image_path', ''),
+                    item.get('label_path', ''),
+                    item.get('details', '')
+                ])
+        
+        return True
+    except Exception as e:
+        print(f"⚠️ 导出 CSV 失败: {e}")
+        return False
+
+
 # ================================================
 
 
@@ -130,6 +267,10 @@ class IssueRow(QWidget):
     
     # 信号：点击行
     clicked = Signal(str)  # issue_type
+    # 信号：右键菜单操作
+    revealRequested = Signal(str)      # 请求在文件管理器中显示
+    copyPathRequested = Signal(str)    # 请求复制路径
+    exportLogRequested = Signal(str)   # 请求导出问题日志
     
     def __init__(self, issue_type: str, count: int, level: IssueLevel, 
                  parent: Optional[QWidget] = None):
@@ -140,6 +281,10 @@ class IssueRow(QWidget):
         self._is_hovered = False
         self._is_selected = False
         self._setup_ui()
+        
+        # 启用右键菜单
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.customContextMenuRequested.connect(self._show_context_menu)
     
     def _setup_ui(self) -> None:
         layout = QHBoxLayout(self)
@@ -225,6 +370,29 @@ class IssueRow(QWidget):
         """更新数量"""
         self._count = count
         self.count_label.setText(f"[ {count} 项 ]")
+    
+    def _show_context_menu(self, pos) -> None:
+        """显示右键菜单"""
+        menu = QMenu(self)
+        
+        # 在文件管理器中显示
+        action_reveal = QAction("📂 在文件管理器中显示 (Reveal in Explorer)", self)
+        action_reveal.triggered.connect(lambda: self.revealRequested.emit(self._issue_type))
+        menu.addAction(action_reveal)
+        
+        # 复制路径
+        action_copy = QAction("📋 复制路径 (Copy Path)", self)
+        action_copy.triggered.connect(lambda: self.copyPathRequested.emit(self._issue_type))
+        menu.addAction(action_copy)
+        
+        menu.addSeparator()
+        
+        # 导出问题日志
+        action_export = QAction("📄 导出问题日志 (Export Issue Log)", self)
+        action_export.triggered.connect(lambda: self.exportLogRequested.emit(self._issue_type))
+        menu.addAction(action_export)
+        
+        menu.exec(self.mapToGlobal(pos))
 
 
 class HealthCheckCard(QWidget):
@@ -240,14 +408,18 @@ class HealthCheckCard(QWidget):
     rescanRequested = Signal()      # 请求重新扫描
     autoFixRequested = Signal()     # 请求自动修复
     summaryChanged = Signal(str)    # 摘要变化（供标题栏更新）
+    # 新增信号
+    requestFocusOnRect = Signal(QRect)  # 请求聚焦到指定区域（用于噪点高亮）
     
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
         self._issues: Dict[str, Dict[str, List[str]]] = {}
+        self._issue_details: Dict[str, Dict[str, Any]] = {}  # 存储详细信息（如噪点位置）
         self._rows: Dict[str, IssueRow] = {}
         self._total_samples = 0
         self._passed_samples = 0
         self._current_filter: Optional[str] = None  # 当前过滤的问题类型
+        self._data_root: str = ""  # 数据根目录
         self._setup_ui()
     
     def _setup_ui(self) -> None:
@@ -317,6 +489,24 @@ class HealthCheckCard(QWidget):
         self.btn_clear_filter.setEnabled(False)
         self.btn_clear_filter.clicked.connect(self._on_clear_filter_clicked)
         toolbar_layout.addWidget(self.btn_clear_filter)
+        
+        # 导出报告按钮
+        self.btn_export = QToolButton()
+        self.btn_export.setText("📄 导出")
+        self.btn_export.setToolTip("导出所有问题到 CSV 文件")
+        self.btn_export.setStyleSheet("""
+            QToolButton {
+                font-size: 10px;
+                padding: 4px 8px;
+                border: 1px solid palette(mid);
+                border-radius: 3px;
+                background: transparent;
+            }
+            QToolButton:hover { background-color: palette(light); }
+            QToolButton:disabled { color: gray; }
+        """)
+        self.btn_export.clicked.connect(self.export_all_issues)
+        toolbar_layout.addWidget(self.btn_export)
         
         toolbar_layout.addStretch()
         layout.addLayout(toolbar_layout)
@@ -406,6 +596,10 @@ class HealthCheckCard(QWidget):
         """添加问题行"""
         row = IssueRow(issue_type, count, level)
         row.clicked.connect(self._on_row_clicked)
+        # 连接右键菜单信号
+        row.revealRequested.connect(self._on_reveal_requested)
+        row.copyPathRequested.connect(self._on_copy_path_requested)
+        row.exportLogRequested.connect(self._on_export_log_requested)
         self.list_layout.addWidget(row)
         self._rows[issue_type] = row
     
@@ -501,3 +695,175 @@ class HealthCheckCard(QWidget):
             if issue_type in issues:
                 return issues[issue_type]
         return []
+    
+    def set_data_root(self, data_root: str) -> None:
+        """设置数据根目录"""
+        self._data_root = data_root
+    
+    def set_issue_details(self, details: Dict[str, Dict[str, Any]]) -> None:
+        """
+        设置问题详细信息（如噪点位置等）
+        
+        Args:
+            details: {sample_id: {issue_type: detail_info, ...}, ...}
+        """
+        self._issue_details = details
+    
+    def _on_reveal_requested(self, issue_type: str) -> None:
+        """处理"在文件管理器中显示"请求"""
+        files = self.get_files_by_issue(issue_type)
+        if not files:
+            QMessageBox.information(self, "提示", f"没有 {issue_type} 类型的问题文件")
+            return
+        
+        # 显示第一个文件
+        first_file = files[0]
+        
+        # 尝试构建完整路径
+        file_path = first_file
+        if self._data_root and not os.path.isabs(first_file):
+            # 尝试在常见目录中查找
+            for subdir in ['JPEGImages', 'SegmentationClass', 'images', 'labels']:
+                test_path = os.path.join(self._data_root, subdir, first_file)
+                if os.path.exists(test_path):
+                    file_path = test_path
+                    break
+                # 尝试添加扩展名
+                for ext in ['.jpg', '.png', '.jpeg', '.tif']:
+                    test_path_ext = test_path + ext
+                    if os.path.exists(test_path_ext):
+                        file_path = test_path_ext
+                        break
+        
+        if not reveal_in_explorer(file_path):
+            QMessageBox.warning(
+                self, 
+                "无法打开", 
+                f"无法在文件管理器中显示文件:\n{file_path}\n\n文件可能已被删除或移动。"
+            )
+    
+    def _on_copy_path_requested(self, issue_type: str) -> None:
+        """处理"复制路径"请求"""
+        files = self.get_files_by_issue(issue_type)
+        if not files:
+            QMessageBox.information(self, "提示", f"没有 {issue_type} 类型的问题文件")
+            return
+        
+        # 复制所有文件路径（每行一个）
+        paths = []
+        for f in files:
+            if self._data_root and not os.path.isabs(f):
+                paths.append(os.path.join(self._data_root, f))
+            else:
+                paths.append(f)
+        
+        path_text = '\n'.join(paths)
+        if copy_path_to_clipboard(path_text):
+            # 显示简短提示
+            count = len(files)
+            QMessageBox.information(
+                self, 
+                "已复制", 
+                f"已复制 {count} 个文件路径到剪贴板"
+            )
+    
+    def _on_export_log_requested(self, issue_type: str) -> None:
+        """处理"导出问题日志"请求"""
+        files = self.get_files_by_issue(issue_type)
+        if not files:
+            QMessageBox.information(self, "提示", f"没有 {issue_type} 类型的问题文件")
+            return
+        
+        # 选择保存路径
+        config = ISSUE_TYPES.get(issue_type)
+        default_name = f"health_check_{issue_type}.csv"
+        
+        save_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "导出问题日志",
+            default_name,
+            "CSV 文件 (*.csv);;所有文件 (*.*)"
+        )
+        
+        if not save_path:
+            return
+        
+        # 构建导出数据
+        export_data = []
+        for sample_id in files:
+            item = {
+                'sample_id': sample_id,
+                'issue_type': issue_type,
+                'image_path': '',
+                'label_path': '',
+                'details': ''
+            }
+            
+            # 尝试获取详细信息
+            if sample_id in self._issue_details:
+                details = self._issue_details[sample_id]
+                item['details'] = str(details.get(issue_type, ''))
+            
+            # 构建路径
+            if self._data_root:
+                for ext in ['.jpg', '.png', '.jpeg']:
+                    img_path = os.path.join(self._data_root, 'JPEGImages', f"{sample_id}{ext}")
+                    if os.path.exists(img_path):
+                        item['image_path'] = img_path
+                        break
+                for ext in ['.png', '.tif']:
+                    lbl_path = os.path.join(self._data_root, 'SegmentationClass', f"{sample_id}{ext}")
+                    if os.path.exists(lbl_path):
+                        item['label_path'] = lbl_path
+                        break
+            
+            export_data.append(item)
+        
+        # 导出
+        if export_issues_to_csv(export_data, save_path, self._data_root):
+            QMessageBox.information(
+                self, 
+                "导出成功", 
+                f"已导出 {len(export_data)} 条记录到:\n{save_path}"
+            )
+        else:
+            QMessageBox.warning(self, "导出失败", "导出 CSV 文件时发生错误")
+    
+    def export_all_issues(self) -> None:
+        """导出所有问题到 CSV"""
+        # 收集所有问题
+        all_issues = []
+        for level, issues in self._issues.items():
+            for issue_type, files in issues.items():
+                for sample_id in files:
+                    all_issues.append({
+                        'sample_id': sample_id,
+                        'issue_type': issue_type,
+                        'image_path': '',
+                        'label_path': '',
+                        'details': ''
+                    })
+        
+        if not all_issues:
+            QMessageBox.information(self, "提示", "没有问题需要导出")
+            return
+        
+        # 选择保存路径
+        save_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "导出所有问题",
+            "health_check_report.csv",
+            "CSV 文件 (*.csv);;所有文件 (*.*)"
+        )
+        
+        if not save_path:
+            return
+        
+        if export_issues_to_csv(all_issues, save_path, self._data_root):
+            QMessageBox.information(
+                self, 
+                "导出成功", 
+                f"已导出 {len(all_issues)} 条记录到:\n{save_path}"
+            )
+        else:
+            QMessageBox.warning(self, "导出失败", "导出 CSV 文件时发生错误")
