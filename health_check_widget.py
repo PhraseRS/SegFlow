@@ -63,6 +63,7 @@ class IssueTypeConfig:
 
 # 问题类型配置（key 与 dataset_metadata.py 中的常量一致）
 ISSUE_TYPES: Dict[str, IssueTypeConfig] = {
+    # === Fatal 级别 ===
     "file_missing": IssueTypeConfig(
         key="file_missing",
         name="文件缺失 (File Missing)",
@@ -81,6 +82,25 @@ ISSUE_TYPES: Dict[str, IssueTypeConfig] = {
         description="图像与标签尺寸不一致",
         level=IssueLevel.FATAL
     ),
+    "channel_mismatch": IssueTypeConfig(
+        key="channel_mismatch",
+        name="通道数异常 (Channel Mismatch)",
+        description="图像或标签通道数异常（如 3 vs 4）",
+        level=IssueLevel.FATAL
+    ),
+    "invalid_class_id": IssueTypeConfig(
+        key="invalid_class_id",
+        name="无效类别ID (Invalid Class ID)",
+        description="标签中存在定义外的类别ID",
+        level=IssueLevel.FATAL
+    ),
+    "dtype_mismatch": IssueTypeConfig(
+        key="dtype_mismatch",
+        name="位深错误 (Dtype Mismatch)",
+        description="标签位深错误（如 16bit vs 8bit）",
+        level=IssueLevel.FATAL
+    ),
+    # === Warning 级别 ===
     "empty_mask": IssueTypeConfig(
         key="empty_mask",
         name="空标签样本 (Empty Masks)",
@@ -92,6 +112,13 @@ ISSUE_TYPES: Dict[str, IssueTypeConfig] = {
         key="noise_artifact",
         name="极微小噪点 (<5px Area)",
         description="标签包含极小的噪声区域",
+        level=IssueLevel.WARNING,
+        auto_fixable=True
+    ),
+    "high_nodata_coverage": IssueTypeConfig(
+        key="high_nodata_coverage",
+        name="高无数据覆盖 (>80% Nodata)",
+        description="黑边/无数据区域超过 80%",
         level=IssueLevel.WARNING,
         auto_fixable=True
     ),

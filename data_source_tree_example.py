@@ -1477,6 +1477,14 @@ class MainWindow(QMainWindow):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    
+    # 设置默认字体，避免 QFont::setPointSize 警告
+    from PySide6.QtGui import QFont
+    default_font = app.font()
+    if default_font.pointSize() <= 0:
+        default_font.setPointSize(9)
+        app.setFont(default_font)
+    
     window = MainWindow()
     window.show()
     sys.exit(app.exec())
