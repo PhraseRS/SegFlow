@@ -1022,6 +1022,10 @@ class MainWindow(QMainWindow):
             self.ui.widget_healthCheck.clear()
             return
         
+        # 设置数据根目录（用于右键菜单功能）
+        if hasattr(self, '_current_data_root') and self._current_data_root:
+            self.ui.widget_healthCheck.set_data_root(self._current_data_root)
+        
         # 设置问题数据
         issues = {
             'fatal': health_data.get('fatal', {}),
@@ -1477,6 +1481,14 @@ class MainWindow(QMainWindow):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    
+    # 设置默认字体，避免 QFont::setPointSize 警告
+    from PySide6.QtGui import QFont
+    default_font = app.font()
+    if default_font.pointSize() <= 0:
+        default_font.setPointSize(9)
+        app.setFont(default_font)
+    
     window = MainWindow()
     window.show()
     sys.exit(app.exec())
