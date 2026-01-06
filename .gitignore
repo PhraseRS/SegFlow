@@ -54,5 +54,4 @@ compile_commands.json
 *_qmlcache.qrc
 
 #
-**/_pycache_
 **/__pycache__
