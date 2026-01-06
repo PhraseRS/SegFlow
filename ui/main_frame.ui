@@ -1,0 +1,545 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1400</width>
+    <height>900</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>遥感影像分割系统</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QVBoxLayout" name="verticalLayout_main">
+    <item>
+     <widget class="QSplitter" name="splitter_vertical">
+      <property name="orientation">
+       <enum>Qt::Orientation::Vertical</enum>
+      </property>
+      <widget class="QSplitter" name="splitter_horizontal">
+       <property name="orientation">
+        <enum>Qt::Orientation::Horizontal</enum>
+       </property>
+       <widget class="QWidget" name="leftPanel">
+        <layout class="QVBoxLayout" name="verticalLayout_left">
+         <item>
+          <widget class="QGroupBox" name="groupBox_dataSource">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
+             <horstretch>0</horstretch>
+             <verstretch>3</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="title">
+            <string>数据源管理 (Data Source Manager)</string>
+           </property>
+           <layout class="QVBoxLayout" name="verticalLayout_dataSource">
+            <item>
+             <widget class="QTreeWidget" name="treeWidget_dataSources">
+              <property name="selectionMode">
+               <enum>QAbstractItemView::SelectionMode::SingleSelection</enum>
+              </property>
+              <property name="headerHidden">
+               <bool>true</bool>
+              </property>
+              <column>
+               <property name="text">
+                <string notr="true">1</string>
+               </property>
+              </column>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="pushButton_addSample">
+              <property name="text">
+               <string>添加样本</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+         </item>
+         <item>
+          <widget class="QGroupBox" name="groupBox_layerControl">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+             <horstretch>0</horstretch>
+             <verstretch>1</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="title">
+            <string>图层控制 (Layer Control)</string>
+           </property>
+           <layout class="QVBoxLayout" name="verticalLayout_layerControl">
+            <item>
+             <widget class="QCheckBox" name="checkBox_overlayPrediction">
+              <property name="text">
+               <string>Overlay Prediction</string>
+              </property>
+              <property name="checked">
+               <bool>true</bool>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QCheckBox" name="checkBox_baseImage">
+              <property name="text">
+               <string>Base Image (RGB/False Color)</string>
+              </property>
+              <property name="checked">
+               <bool>true</bool>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <layout class="QHBoxLayout" name="horizontalLayout_opacity">
+              <item>
+               <widget class="QLabel" name="label_opacity">
+                <property name="text">
+                 <string>Opacity:</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QSlider" name="slider_opacity">
+                <property name="minimum">
+                 <number>0</number>
+                </property>
+                <property name="maximum">
+                 <number>100</number>
+                </property>
+                <property name="value">
+                 <number>70</number>
+                </property>
+                <property name="orientation">
+                 <enum>Qt::Orientation::Horizontal</enum>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLabel" name="label_opacityValue">
+                <property name="text">
+                 <string>70%</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </item>
+           </layout>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+       <widget class="QWidget" name="centerPanel">
+        <layout class="QVBoxLayout" name="verticalLayout_center">
+         <item>
+          <widget class="QGraphicsView" name="graphicsView_canvas">
+           <property name="minimumSize">
+            <size>
+             <width>600</width>
+             <height>400</height>
+            </size>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+       <widget class="QWidget" name="rightPanel">
+        <layout class="QVBoxLayout" name="verticalLayout_right">
+         <item>
+          <widget class="QGroupBox" name="groupBox_taskSwitcher">
+           <property name="title">
+            <string>任务切换 (Task Switcher)</string>
+           </property>
+           <layout class="QVBoxLayout" name="verticalLayout_taskSwitcher">
+            <item>
+             <widget class="QTabWidget" name="tabWidget_tasks">
+              <property name="currentIndex">
+               <number>0</number>
+              </property>
+              <widget class="QWidget" name="tab_train">
+               <attribute name="title">
+                <string>训练 (Train)</string>
+               </attribute>
+               <layout class="QVBoxLayout" name="verticalLayout_train">
+                <item>
+                 <widget class="QLabel" name="label_trainInfo">
+                  <property name="text">
+                   <string>训练模式配置</string>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
+              </widget>
+              <widget class="QWidget" name="tab_inference">
+               <attribute name="title">
+                <string>推理 (Inference)</string>
+               </attribute>
+               <layout class="QVBoxLayout" name="verticalLayout_inference">
+                <item>
+                 <widget class="QLabel" name="label_inferenceInfo">
+                  <property name="text">
+                   <string>推理模式配置</string>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
+              </widget>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+         </item>
+         <item>
+          <widget class="QGroupBox" name="groupBox_paramConfig">
+           <property name="title">
+            <string>参数配置 (Parameter Config)</string>
+           </property>
+           <layout class="QVBoxLayout" name="verticalLayout_paramConfig">
+            <item>
+             <widget class="QScrollArea" name="scrollArea_params">
+              <property name="widgetResizable">
+               <bool>true</bool>
+              </property>
+              <widget class="QWidget" name="scrollAreaWidgetContents">
+               <property name="geometry">
+                <rect>
+                 <x>0</x>
+                 <y>0</y>
+                 <width>256</width>
+                 <height>96</height>
+                </rect>
+               </property>
+               <layout class="QVBoxLayout" name="verticalLayout_scrollParams">
+                <item>
+                 <widget class="QLabel" name="label_paramPlaceholder">
+                  <property name="text">
+                   <string>参数配置区域
+(动态加载参数控件)</string>
+                  </property>
+                  <property name="alignment">
+                   <set>Qt::AlignmentFlag::AlignCenter</set>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <spacer name="verticalSpacer_params">
+                  <property name="orientation">
+                   <enum>Qt::Orientation::Vertical</enum>
+                  </property>
+                  <property name="sizeHint" stdset="0">
+                   <size>
+                    <width>20</width>
+                    <height>40</height>
+                   </size>
+                  </property>
+                 </spacer>
+                </item>
+               </layout>
+              </widget>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+         </item>
+         <item>
+          <widget class="QGroupBox" name="groupBox_actions">
+           <property name="title">
+            <string>操作按钮 (Action Buttons)</string>
+           </property>
+           <layout class="QVBoxLayout" name="verticalLayout_actions">
+            <item>
+             <widget class="QPushButton" name="pushButton_run">
+              <property name="text">
+               <string>运行 (Run)</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="pushButton_stop">
+              <property name="text">
+               <string>停止 (Stop)</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="pushButton_export">
+              <property name="text">
+               <string>导出 (Export)</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+         </item>
+         <item>
+          <spacer name="verticalSpacer_right">
+           <property name="orientation">
+            <enum>Qt::Orientation::Vertical</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>20</width>
+             <height>40</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+        </layout>
+       </widget>
+      </widget>
+      <widget class="QWidget" name="bottomPanel">
+       <layout class="QVBoxLayout" name="verticalLayout_bottom">
+        <item>
+         <widget class="QTabWidget" name="tabWidget_bottom">
+          <property name="currentIndex">
+           <number>0</number>
+          </property>
+          <widget class="QWidget" name="tab_logs">
+           <attribute name="title">
+            <string>日志输出 (Logs)</string>
+           </attribute>
+           <layout class="QVBoxLayout" name="verticalLayout_logs">
+            <item>
+             <widget class="QTextEdit" name="textEdit_logs">
+              <property name="readOnly">
+               <bool>true</bool>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+          <widget class="QWidget" name="tab_metrics">
+           <attribute name="title">
+            <string>训练指标 (Metrics)</string>
+           </attribute>
+           <layout class="QVBoxLayout" name="verticalLayout_metrics">
+            <item>
+             <widget class="QLabel" name="label_metricsPlaceholder">
+              <property name="text">
+               <string>实时训练指标曲线显示区域
+(可使用 matplotlib 或 pyqtgraph)</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignmentFlag::AlignCenter</set>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+          <widget class="QWidget" name="tab_progress">
+           <attribute name="title">
+            <string>进度 (Progress)</string>
+           </attribute>
+           <layout class="QVBoxLayout" name="verticalLayout_progress">
+            <item>
+             <widget class="QLabel" name="label_progressInfo">
+              <property name="text">
+               <string>当前任务进度：</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QProgressBar" name="progressBar_task">
+              <property name="value">
+               <number>0</number>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="verticalSpacer_progress">
+              <property name="orientation">
+               <enum>Qt::Orientation::Vertical</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>20</width>
+                <height>40</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+           </layout>
+          </widget>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QMenuBar" name="menubar">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>1400</width>
+     <height>33</height>
+    </rect>
+   </property>
+   <widget class="QMenu" name="menu_file">
+    <property name="title">
+     <string>文件 (&amp;F)</string>
+    </property>
+    <addaction name="action_open"/>
+    <addaction name="action_save"/>
+    <addaction name="separator"/>
+    <addaction name="action_exit"/>
+   </widget>
+   <widget class="QMenu" name="menu_edit">
+    <property name="title">
+     <string>编辑 (&amp;E)</string>
+    </property>
+    <addaction name="action_preferences"/>
+   </widget>
+   <widget class="QMenu" name="menu_view">
+    <property name="title">
+     <string>视图 (&amp;V)</string>
+    </property>
+    <addaction name="action_zoomIn"/>
+    <addaction name="action_zoomOut"/>
+    <addaction name="action_fitToWindow"/>
+   </widget>
+   <widget class="QMenu" name="menu_tools">
+    <property name="title">
+     <string>工具 (&amp;T)</string>
+    </property>
+    <addaction name="action_train"/>
+    <addaction name="action_inference"/>
+   </widget>
+   <widget class="QMenu" name="menu_help">
+    <property name="title">
+     <string>帮助 (&amp;H)</string>
+    </property>
+    <addaction name="action_about"/>
+   </widget>
+   <addaction name="menu_file"/>
+   <addaction name="menu_edit"/>
+   <addaction name="menu_view"/>
+   <addaction name="menu_tools"/>
+   <addaction name="menu_help"/>
+  </widget>
+  <widget class="QStatusBar" name="statusbar">
+   <property name="sizeGripEnabled">
+    <bool>true</bool>
+   </property>
+  </widget>
+  <widget class="QToolBar" name="toolBar">
+   <property name="windowTitle">
+    <string>工具栏</string>
+   </property>
+   <attribute name="toolBarArea">
+    <enum>TopToolBarArea</enum>
+   </attribute>
+   <attribute name="toolBarBreak">
+    <bool>false</bool>
+   </attribute>
+   <addaction name="action_open"/>
+   <addaction name="action_save"/>
+   <addaction name="separator"/>
+   <addaction name="action_zoomIn"/>
+   <addaction name="action_zoomOut"/>
+   <addaction name="separator"/>
+   <addaction name="action_train"/>
+   <addaction name="action_inference"/>
+  </widget>
+  <action name="action_open">
+   <property name="text">
+    <string>打开</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+O</string>
+   </property>
+  </action>
+  <action name="action_save">
+   <property name="text">
+    <string>保存</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+S</string>
+   </property>
+  </action>
+  <action name="action_exit">
+   <property name="text">
+    <string>退出</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Q</string>
+   </property>
+  </action>
+  <action name="action_preferences">
+   <property name="text">
+    <string>首选项</string>
+   </property>
+  </action>
+  <action name="action_zoomIn">
+   <property name="text">
+    <string>放大</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl++</string>
+   </property>
+  </action>
+  <action name="action_zoomOut">
+   <property name="text">
+    <string>缩小</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+-</string>
+   </property>
+  </action>
+  <action name="action_fitToWindow">
+   <property name="text">
+    <string>适应窗口</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+0</string>
+   </property>
+  </action>
+  <action name="action_train">
+   <property name="text">
+    <string>训练</string>
+   </property>
+   <property name="shortcut">
+    <string>F5</string>
+   </property>
+  </action>
+  <action name="action_inference">
+   <property name="text">
+    <string>推理</string>
+   </property>
+   <property name="shortcut">
+    <string>F6</string>
+   </property>
+  </action>
+  <action name="action_about">
+   <property name="text">
+    <string>关于</string>
+   </property>
+  </action>
+ </widget>
+ <resources/>
+ <connections>
+  <connection>
+   <sender>slider_opacity</sender>
+   <signal>valueChanged(int)</signal>
+   <receiver>label_opacityValue</receiver>
+   <slot>setNum(int)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>20</x>
+     <y>20</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>20</x>
+     <y>20</y>
+    </hint>
+   </hints>
+  </connection>
+ </connections>
+</ui>

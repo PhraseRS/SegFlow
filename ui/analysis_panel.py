@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtGui import QFont
 
-from dataset_metadata import DatasetMetadataManager
+from core.dataset_metadata import DatasetMetadataManager
 
 
 class AnalysisState(Enum):

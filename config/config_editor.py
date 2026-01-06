@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
     QComboBox,
 )
 
-from custom_widgets import CollapsibleBox, ParamRow
+from ui.widgets.custom_widgets import CollapsibleBox, ParamRow
 
 
 class ConfigEditor(QWidget):

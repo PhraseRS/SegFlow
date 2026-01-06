@@ -12,8 +12,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from config_editor import ConfigEditor
-from mmseg_params import mmseg_params as DEFAULT_CONFIG
+from config.config_editor import ConfigEditor
+from config.mmseg_params import mmseg_params as DEFAULT_CONFIG
 
 
 class MainWindow(QMainWindow):
