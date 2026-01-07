@@ -6,14 +6,16 @@
 
 from PySide6.QtWidgets import (QApplication, QMainWindow, QTreeWidgetItem, QFileDialog,
                                 QMessageBox, QGraphicsScene, QGraphicsPixmapItem, QSplitter,
-                                QGraphicsRectItem, QGraphicsLineItem, QListWidgetItem)
+                                QGraphicsRectItem, QGraphicsLineItem, QListWidgetItem, QLabel)
 from PySide6.QtCore import Qt, QRectF, QSize, QThread, Signal, QObject, QTimer
 from PySide6.QtGui import QIcon, QPixmap, QImage, QPainter, QColor, QPen, QBrush
-from ui.main_frame_ui import Ui_MainWindow
-from core.dataset_metadata import DatasetMetadataManager
-from core.thumbnail_manager import ThumbnailLazyLoader
+from main_frame_ui import Ui_MainWindow
+from dataset_metadata import DatasetMetadataManager
+from thumbnail_manager import ThumbnailLazyLoader
+from dataset_resplit_dialog import DatasetResplitDialog
 import sys
 import os
+import random
 
 
 # 视图模式常量
@@ -748,6 +750,9 @@ class MainWindow(QMainWindow):
         # 初始化缩略图懒加载管理器
         self.thumbnail_manager = ThumbnailLazyLoader(self.ui.listWidget_thumbnails, thumbnail_size=120)
         
+        # 推理模型相关
+        self.inference_model = None  # 加载的推理模型
+        
         # 防抖定时器（用于图层设置变化时刷新）
         self._layer_refresh_timer = QTimer()
         self._layer_refresh_timer.setSingleShot(True)
@@ -762,6 +767,9 @@ class MainWindow(QMainWindow):
         
         # 初始化视图切换
         self._init_view_switcher()
+        
+        # 初始化推理配置
+        self._init_inference_config()
     
     def _init_view_switcher(self):
         """初始化视图切换器"""
@@ -774,6 +782,9 @@ class MainWindow(QMainWindow):
         """连接所有信号"""
         # 添加样本按钮
         self.ui.pushButton_addSample.clicked.connect(self.on_add_sample)
+        
+        # 数据集概览 - 重新划分按钮
+        self.ui.widget_datasetOverview.resplit_clicked.connect(self.on_resplit_dataset)
         
         # 树控件的点击信号
         self.ui.treeWidget_dataSources.currentItemChanged.connect(self.on_tree_item_changed)
@@ -805,12 +816,11 @@ class MainWindow(QMainWindow):
         self.ui.widget_healthCheck.filterRequested.connect(self._on_health_filter_requested)
         self.ui.widget_healthCheck.clearFilterRequested.connect(self.clear_tree_filter)
         
-        # 推理面板信号连接
-        self.ui.inference_panel.log_message.connect(self._log_to_bottom)
-        self.ui.inference_panel.model_loaded.connect(self._on_inference_model_loaded)
-        self.ui.inference_panel.inference_started.connect(self._on_inference_started)
-        self.ui.inference_panel.inference_finished.connect(self._on_inference_finished)
-        self.ui.inference_panel.inference_error.connect(self._on_inference_error)
+        # 推理配置 - 模型加载区
+        self.ui.pushButton_browseConfig.clicked.connect(self._browse_config_file)
+        self.ui.pushButton_browseCheckpoint.clicked.connect(self._browse_checkpoint_file)
+        self.ui.lineEdit_configFile.textChanged.connect(self._on_config_file_changed)
+        self.ui.pushButton_loadModel.clicked.connect(self._load_inference_model)
     
     def _init_layer_controls(self):
         """初始化图层控制"""
@@ -818,6 +828,37 @@ class MainWindow(QMainWindow):
         self.ui.label_opacityValue.setText(f"{self.ui.slider_opacity.value()}%")
         # 设置初始卷帘位置显示
         self.ui.label_swipeValue.setText(f"{self.ui.slider_swipe.value()}%")
+    
+    def _init_inference_config(self):
+        """初始化推理配置"""
+        # 检测可用的 CUDA 设备
+        cuda_available = self._check_cuda_available()
+        
+        if cuda_available:
+            # 如果 CUDA 可用，默认选择 Auto
+            self.ui.comboBox_device.setCurrentIndex(0)  # Auto
+            print("🎮 [推理配置] CUDA 可用，默认设备: Auto")
+        else:
+            # 如果 CUDA 不可用，默认选择 CPU，并禁用 CUDA 选项
+            self.ui.comboBox_device.setCurrentIndex(2)  # CPU
+            # 禁用 CUDA:0 选项
+            model = self.ui.comboBox_device.model()
+            item = model.item(1)  # CUDA:0 是索引 1
+            if item:
+                item.setEnabled(False)
+                item.setToolTip("CUDA 不可用")
+            print("⚠️  [推理配置] CUDA 不可用，默认设备: CPU")
+    
+    def _check_cuda_available(self) -> bool:
+        """检测 CUDA 是否可用"""
+        try:
+            import torch
+            return torch.cuda.is_available()
+        except ImportError:
+            # PyTorch 未安装
+            return False
+        except Exception:
+            return False
     
     def on_add_sample(self):
         """添加样本按钮点击事件 - 从VOC格式数据集加载"""
@@ -878,14 +919,134 @@ class MainWindow(QMainWindow):
         self.ui.analysis_panel.analysis_error.connect(self._on_analysis_error)
         
         # 启动智能分析流程
-        images_dir = self.data_manager.images_dir
         labels_dir = self.data_manager.labels_dir
         self.ui.analysis_panel.initialize_statistics_flow(
             data_root, 
             samples_info, 
-            images_dir,
             labels_dir
         )
+    
+    def on_resplit_dataset(self):
+        """重新划分数据集"""
+        # 获取当前数据集统计
+        train_count = len(self.data_manager.get_samples('train'))
+        val_count = len(self.data_manager.get_samples('val'))
+        test_count = len(self.data_manager.get_samples('test'))
+        
+        if train_count + val_count + test_count == 0:
+            QMessageBox.warning(self, "无数据", "请先加载数据集")
+            return
+        
+        # 创建并显示重新划分对话框
+        dialog = DatasetResplitDialog(train_count, val_count, test_count, self)
+        dialog.resplit_confirmed.connect(self._perform_resplit)
+        dialog.exec()
+    
+    def _perform_resplit(self, mode, params):
+        """执行数据集重新划分
+        
+        Args:
+            mode: 'auto' 或 'custom'
+            params: 划分参数字典
+        """
+        # 收集所有样本
+        all_samples = []
+        for dataset_type in ['train', 'val', 'test']:
+            samples = self.data_manager.get_samples(dataset_type)
+            all_samples.extend(samples)
+        
+        total_samples = len(all_samples)
+        
+        if mode == 'auto':
+            # 自动化划分
+            train_ratio = params['train_ratio']
+            val_ratio = params['val_ratio']
+            test_ratio = params['test_ratio']
+            shuffle = params['shuffle']
+            seed = params['seed']
+            
+            # 随机打乱
+            if shuffle:
+                random.seed(seed)
+                random.shuffle(all_samples)
+            
+            # 计算划分点
+            train_count = int(total_samples * train_ratio)
+            val_count = int(total_samples * val_ratio)
+            
+            train_samples = all_samples[:train_count]
+            val_samples = all_samples[train_count:train_count + val_count]
+            test_samples = all_samples[train_count + val_count:]
+            
+            print(f"✅ 自动划分: Train={len(train_samples)}, Val={len(val_samples)}, Test={len(test_samples)}")
+            
+        else:
+            # 自定义划分
+            train_count = params['train_count']
+            val_count = params['val_count']
+            test_count = params['test_count']
+            
+            # 简单按顺序划分（也可以添加随机选项）
+            train_samples = all_samples[:train_count]
+            val_samples = all_samples[train_count:train_count + val_count]
+            test_samples = all_samples[train_count + val_count:]
+            
+            print(f"✅ 自定义划分: Train={len(train_samples)}, Val={len(val_samples)}, Test={len(test_samples)}")
+        
+        # 清空现有数据集
+        self.data_manager.clear_dataset('train')
+        self.data_manager.clear_dataset('val')
+        self.data_manager.clear_dataset('test')
+        
+        # 重新添加样本
+        for sample_id in train_samples:
+            self.data_manager.add_sample('train', sample_id)
+        for sample_id in val_samples:
+            self.data_manager.add_sample('val', sample_id)
+        for sample_id in test_samples:
+            self.data_manager.add_sample('test', sample_id)
+        
+        # 更新数据集概览
+        self._update_dataset_overview()
+        
+        # 保存到 txt 文件（如果有数据根目录）
+        if hasattr(self, '_current_data_root') and self._current_data_root:
+            self._save_split_to_txt()
+        
+        self.statusBar().showMessage("数据集重新划分完成")
+        QMessageBox.information(
+            self,
+            "划分完成",
+            f"数据集已重新划分:\n"
+            f"Train: {len(train_samples)} 样本\n"
+            f"Val: {len(val_samples)} 样本\n"
+            f"Test: {len(test_samples)} 样本"
+        )
+    
+    def _save_split_to_txt(self):
+        """保存划分结果到 txt 文件"""
+        if not hasattr(self, '_current_data_root') or not self._current_data_root:
+            return
+        
+        # VOC格式路径
+        txt_dir = os.path.join(self._current_data_root, 'ImageSets', 'Segmentation')
+        
+        # 如果目录不存在，创建它
+        os.makedirs(txt_dir, exist_ok=True)
+        
+        # 保存各个数据集
+        for dataset_type in ['train', 'val', 'test']:
+            samples = self.data_manager.get_samples(dataset_type)
+            txt_path = os.path.join(txt_dir, f'{dataset_type}.txt')
+            
+            try:
+                with open(txt_path, 'w', encoding='utf-8') as f:
+                    for sample_id in samples:
+                        f.write(f"{sample_id}\n")
+                print(f"✅ 已保存 {dataset_type}.txt ({len(samples)} 样本)")
+            except Exception as e:
+                print(f"❌ 保存 {txt_path} 失败: {e}")
+
     
     def _on_analysis_started(self):
         """分析开始回调"""
@@ -947,7 +1108,7 @@ class MainWindow(QMainWindow):
         print(f"⚠️ 元数据计算错误: {error_msg}")
     
     def _on_metadata_ready(self):
-        """元数据准备就绪，更新UI（从数据库读取）- UI 层分流逻辑"""
+        """元数据准备就绪，更新UI（从数据库读取）"""
         # 优先从 AnalysisPanel 获取统计数据
         stats = self.ui.analysis_panel.get_aggregated_stats()
         if not stats:
@@ -955,17 +1116,17 @@ class MainWindow(QMainWindow):
             stats = self.metadata_manager.get_aggregated_stats()
         
         if stats:
-            # 1. 更新类别分布卡片（传递 image_counts）
+            # 1. 更新类别分布（传递 image_counts）
             self._update_class_distribution(
                 stats.get('class_distribution', {}),
                 stats.get('image_counts', {})
             )
-            
-            # 2. 更新覆盖率分析卡片
+            # 2. 更新覆盖率分析
             self._update_coverage_analysis()
-            
-            # 3. 更新健康检查卡片
+            # 3. 更新健康检查
             self._update_health_check()
+            # 4. 更新尺度分析
+            self._update_scale_analysis(stats.get('size_stats', {}))
     
     def _update_class_distribution(self, class_distribution, image_counts=None):
         """更新类别分布面板
@@ -1000,6 +1161,32 @@ class MainWindow(QMainWindow):
         
         self.ui.widget_classDistribution.set_data(stats)
     
+    def _update_scale_analysis(self, size_stats):
+        """更新尺度分析面板"""
+        widths = size_stats.get('widths', [])
+        heights = size_stats.get('heights', [])
+        
+        if not widths or not heights:
+            self.ui.label_scaleAnalysis.setText("影像尺寸统计:\n- 暂无数据")
+            return
+        
+        min_w = size_stats.get('min_width', 0)
+        min_h = size_stats.get('min_height', 0)
+        max_w = size_stats.get('max_width', 0)
+        max_h = size_stats.get('max_height', 0)
+        
+        avg_w = sum(widths) / len(widths) if widths else 0
+        avg_h = sum(heights) / len(heights) if heights else 0
+        
+        text = (
+            f"影像尺寸统计:\n"
+            f"- 最小: {min_w} × {min_h}\n"
+            f"- 最大: {max_w} × {max_h}\n"
+            f"- 平均: {avg_w:.0f} × {avg_h:.0f}\n"
+            f"- 样本数: {len(widths)}"
+        )
+        self.ui.label_scaleAnalysis.setText(text)
+    
     def _update_coverage_analysis(self):
         """更新覆盖率分析面板"""
         # 从 AnalysisPanel 的 metadata_manager 获取数据库
@@ -1029,11 +1216,7 @@ class MainWindow(QMainWindow):
             self.ui.widget_healthCheck.clear()
             return
         
-        # 设置数据根目录（用于右键菜单功能）
-        if hasattr(self, '_current_data_root') and self._current_data_root:
-            self.ui.widget_healthCheck.set_data_root(self._current_data_root)
-        
-        # 设置问题数据
+        # 提取问题数据
         issues = {
             'fatal': health_data.get('fatal', {}),
             'warning': health_data.get('warning', {})
@@ -1043,130 +1226,52 @@ class MainWindow(QMainWindow):
         self.ui.widget_healthCheck.set_issues(issues, total_samples)
     
     def _on_health_filter_requested(self, issue_type: str):
-        """
-        健康检查卡片过滤请求回调
-        
-        交互流程：
-        1. 用户点击问题行（如 "🔴 尺寸不匹配 [ 2 项 ]"）
-        2. 左侧文件列表过滤显示问题文件
-        3. 自动加载第一个问题文件到主视图
-        
-        Args:
-            issue_type: 问题类型（如 'empty_mask', 'corrupt_file' 等）
-        """
-        print(f"🔍 健康检查过滤请求: {issue_type}")
-        
-        # 从数据库获取问题文件列表
-        database = self.ui.analysis_panel.metadata_manager.database
-        if database is None:
+        """健康检查过滤请求处理"""
+        # 获取问题文件列表
+        files = self.ui.widget_healthCheck.get_files_by_issue(issue_type)
+        if not files:
             return
         
-        problem_samples = database.get_samples_by_issue(issue_type)
-        if not problem_samples:
-            self.statusBar().showMessage(f"未找到 {issue_type} 类型的问题文件")
-            return
-        
-        print(f"📋 找到 {len(problem_samples)} 个问题文件: {problem_samples[:5]}...")
-        
-        # 过滤树形控件：隐藏非问题文件，只显示问题文件
-        self._filter_tree_by_samples(problem_samples, issue_type)
-        
-        # 自动选中并加载第一个问题文件
-        if problem_samples:
-            first_sample_id = problem_samples[0]
-            # 查找该样本所属的数据集
-            dataset_type = self._find_sample_dataset(first_sample_id)
-            if dataset_type:
-                # 在树形控件中选中该样本
-                self._select_sample_in_tree(first_sample_id, dataset_type)
-                # 加载样本可视化
-                self.load_sample_visualization({
-                    'sample_id': first_sample_id,
-                    'dataset': dataset_type
-                })
-        
-        self.statusBar().showMessage(f"已过滤显示 {len(problem_samples)} 个 {issue_type} 问题文件")
+        # 过滤树形控件，只显示有问题的样本
+        self._filter_tree_by_files(files)
     
-    def _filter_tree_by_samples(self, sample_ids: list, issue_type: str):
-        """
-        过滤树形控件，只显示指定的样本
-        
-        Args:
-            sample_ids: 要显示的样本ID列表
-            issue_type: 问题类型（用于更新父节点标题）
-        """
-        sample_set = set(sample_ids)
-        
-        # 遍历所有数据集节点
-        for parent_node in [self.data_manager.train_node, 
-                           self.data_manager.val_node, 
-                           self.data_manager.test_node]:
-            visible_count = 0
+    def _filter_tree_by_files(self, file_list):
+        """根据文件列表过滤树形控件"""
+        # 隐藏所有不在列表中的样本
+        for dataset_type in ['train', 'val', 'test']:
+            parent_node = {
+                'train': self.data_manager.train_node,
+                'val': self.data_manager.val_node,
+                'test': self.data_manager.test_node
+            }.get(dataset_type)
             
-            # 遍历子节点
+            if not parent_node:
+                continue
+            
             for i in range(parent_node.childCount()):
                 child = parent_node.child(i)
-                node_data = child.data(0, Qt.ItemDataRole.UserRole)
-                
-                if isinstance(node_data, dict):
-                    sample_id = node_data.get('sample_id', '')
-                else:
-                    sample_id = child.text(0)
-                
-                # 根据是否在问题列表中决定显示/隐藏
-                if sample_id in sample_set:
-                    child.setHidden(False)
-                    visible_count += 1
-                else:
-                    child.setHidden(True)
-            
-            # 更新父节点标题显示过滤后的数量
-            node_data = parent_node.data(0, Qt.ItemDataRole.UserRole)
-            dataset_type = node_data.get('dataset', '') if isinstance(node_data, dict) else ''
-            
-            labels = {
-                'train': f"📂 训练集 (Train) [过滤: {visible_count}个]",
-                'val': f"📂 验证集 (Val) [过滤: {visible_count}个]",
-                'test': f"📂 测试集 (Test) [过滤: {visible_count}个]"
-            }
-            parent_node.setText(0, labels.get(dataset_type, f"未知 [{visible_count}个]"))
-            
-            # 展开有问题文件的节点
-            if visible_count > 0:
-                parent_node.setExpanded(True)
-    
-    def _find_sample_dataset(self, sample_id: str) -> str:
-        """
-        查找样本所属的数据集类型
-        
-        Args:
-            sample_id: 样本ID
-        
-        Returns:
-            str: 数据集类型 ('train', 'val', 'test') 或空字符串
-        """
-        for dataset_type in ['train', 'val', 'test']:
-            samples = self.data_manager.get_samples(dataset_type)
-            if sample_id in samples:
-                return dataset_type
-        return ''
+                sample_info = self.data_manager.get_sample_info(child)
+                if sample_info:
+                    sample_id = sample_info['sample_id']
+                    # 检查样本是否在问题列表中
+                    child.setHidden(sample_id not in file_list)
     
     def clear_tree_filter(self):
-        """
-        清除树形控件过滤，恢复显示所有样本
-        """
-        for parent_node in [self.data_manager.train_node, 
-                           self.data_manager.val_node, 
-                           self.data_manager.test_node]:
-            # 显示所有子节点
+        """清除树形控件过滤"""
+        # 显示所有样本
+        for dataset_type in ['train', 'val', 'test']:
+            parent_node = {
+                'train': self.data_manager.train_node,
+                'val': self.data_manager.val_node,
+                'test': self.data_manager.test_node
+            }.get(dataset_type)
+            
+            if not parent_node:
+                continue
+            
             for i in range(parent_node.childCount()):
                 child = parent_node.child(i)
                 child.setHidden(False)
-            
-            # 恢复父节点标题
-            self.data_manager._update_count(parent_node)
-        
-        self.statusBar().showMessage("已清除过滤，显示所有样本")
     
     def _update_dataset_overview(self):
         """更新数据集概览面板"""
@@ -1486,51 +1591,387 @@ class MainWindow(QMainWindow):
                 break
     
     # ========================================
-    # 推理面板回调方法
+    # 推理配置相关方法
     # ========================================
     
-    def _on_inference_model_loaded(self, model_info: dict):
-        """推理模型加载完成回调"""
-        self.statusBar().showMessage("推理模型已加载")
-        self._log_to_bottom(f"✅ 模型加载完成: {model_info.get('config', 'unknown')}")
+    def _browse_config_file(self):
+        """浏览并选择MMSeg配置文件"""
+        from config_parser import parse_mmseg_config
+        
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "选择 MMSegmentation 配置文件",
+            "",
+            "Python Files (*.py);;All Files (*.*)"
+        )
+        
+        if not file_path:
+            return
+        
+        # 设置配置文件路径
+        self.ui.lineEdit_configFile.setText(file_path)
+        
+        # 验证配置文件格式
+        if not self._validate_config_file(file_path):
+            return
+        
+        # 自动解析模型名称
+        try:
+            config_info = parse_mmseg_config(file_path)
+            model_name = config_info['model_name']
+            
+            # 更新模型名称显示
+            self.ui.label_modelNameValue.setText(model_name)
+            self.ui.label_modelNameValue.setStyleSheet("color: #000; font-style: normal; font-weight: bold;")
+            
+            # 输出详细信息
+            print(f"✅ [推理配置] 已加载配置文件: {os.path.basename(file_path)}")
+            print(f"   📝 模型名称: {model_name}")
+            if config_info.get('model_type'):
+                print(f"   🏗️  模型类型: {config_info['model_type']}")
+            if config_info.get('backbone'):
+                print(f"   🔧 Backbone: {config_info['backbone']}")
+            if config_info.get('num_classes'):
+                print(f"   🎯 类别数: {config_info['num_classes']}")
+            
+            # 智能推荐权重文件
+            self._suggest_checkpoint_file(file_path, model_name)
+            
+        except Exception as e:
+            self.ui.label_modelNameValue.setText("解析失败")
+            self.ui.label_modelNameValue.setStyleSheet("color: #f00; font-style: italic;")
+            print(f"❌ [推理配置] 配置文件解析失败: {e}")
+            QMessageBox.warning(
+                self,
+                "配置文件解析失败",
+                f"无法解析配置文件，可能不是有效的 MMSegmentation 配置。\n\n错误信息: {e}"
+            )
     
-    def _on_inference_started(self):
-        """推理开始回调"""
-        self.statusBar().showMessage("正在执行推理...")
+    def _validate_config_file(self, file_path: str) -> bool:
+        """验证配置文件格式"""
+        try:
+            # 读取文件内容
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            # 检查是否包含基本的配置关键字
+            required_keywords = ['model', 'dict']
+            has_keywords = any(keyword in content for keyword in required_keywords)
+            
+            if not has_keywords:
+                QMessageBox.warning(
+                    self,
+                    "配置文件格式错误",
+                    "所选文件可能不是有效的 MMSegmentation 配置文件。\n\n"
+                    "有效的配置文件应包含 'model' 定义。"
+                )
+                return False
+            
+            return True
+            
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "文件读取错误",
+                f"无法读取配置文件。\n\n错误信息: {e}"
+            )
+            return False
     
-    def _on_inference_finished(self, result: dict):
-        """推理完成回调"""
-        self.statusBar().showMessage("推理完成")
-        self._log_to_bottom("✅ 推理完成")
+    def _suggest_checkpoint_file(self, config_path: str, model_name: str):
+        """智能推荐权重文件"""
+        # 获取配置文件所在目录
+        config_dir = os.path.dirname(config_path)
+        
+        # 可能的权重文件位置
+        search_dirs = [
+            config_dir,  # 配置文件同目录
+            os.path.join(config_dir, 'checkpoints'),  # checkpoints 子目录
+            os.path.join(config_dir, '..', 'checkpoints'),  # 上级目录的 checkpoints
+            os.path.join(config_dir, 'work_dirs'),  # work_dirs 目录
+        ]
+        
+        # 搜索匹配的权重文件
+        found_checkpoints = []
+        for search_dir in search_dirs:
+            if not os.path.exists(search_dir):
+                continue
+            
+            try:
+                for file in os.listdir(search_dir):
+                    if file.endswith(('.pth', '.pt')):
+                        # 检查文件名是否与模型名称相关
+                        file_lower = file.lower()
+                        model_lower = model_name.lower().replace('-', '').replace(' ', '')
+                        
+                        if model_lower in file_lower.replace('-', '').replace('_', ''):
+                            found_checkpoints.append(os.path.join(search_dir, file))
+            except:
+                continue
+        
+        # 如果找到匹配的权重文件
+        if found_checkpoints:
+            # 选择最新的文件（按修改时间）
+            latest_checkpoint = max(found_checkpoints, key=os.path.getmtime)
+            
+            # 询问用户是否使用推荐的权重文件
+            reply = QMessageBox.question(
+                self,
+                "发现匹配的权重文件",
+                f"找到与模型 '{model_name}' 匹配的权重文件：\n\n"
+                f"{os.path.basename(latest_checkpoint)}\n\n"
+                f"是否使用此权重文件？",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes
+            )
+            
+            if reply == QMessageBox.StandardButton.Yes:
+                self.ui.lineEdit_checkpointFile.setText(latest_checkpoint)
+                print(f"💡 [推理配置] 自动选择权重文件: {os.path.basename(latest_checkpoint)}")
     
-    def _on_inference_error(self, error_msg: str):
-        """推理错误回调"""
-        self.statusBar().showMessage(f"推理错误: {error_msg}")
-        self._log_to_bottom(f"❌ 推理错误: {error_msg}")
+    def _browse_checkpoint_file(self):
+        """浏览并选择模型权重文件"""
+        # 获取起始目录（如果已选择配置文件，从配置文件目录开始）
+        start_dir = ""
+        config_path = self.ui.lineEdit_configFile.text()
+        if config_path and os.path.exists(config_path):
+            start_dir = os.path.dirname(config_path)
+        
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "选择模型权重文件",
+            start_dir,
+            "PyTorch Checkpoint (*.pth *.pt);;All Files (*.*)"
+        )
+        
+        if file_path:
+            self.ui.lineEdit_checkpointFile.setText(file_path)
+            
+            # 获取文件大小
+            file_size = os.path.getsize(file_path)
+            size_mb = file_size / (1024 * 1024)
+            
+            print(f"✅ [推理配置] 已选择权重文件: {os.path.basename(file_path)}")
+            print(f"   📦 文件大小: {size_mb:.2f} MB")
+    
+    def _on_config_file_changed(self, text):
+        """配置文件路径变化时触发"""
+        if not text:
+            # 清空时重置模型名称显示
+            self.ui.label_modelNameValue.setText("未加载配置")
+            self.ui.label_modelNameValue.setStyleSheet("color: #888; font-style: italic;")
+    
+    def _load_inference_model(self):
+        """加载推理模型"""
+        # 验证必要的文件是否已选择
+        config_path = self.ui.lineEdit_configFile.text().strip()
+        checkpoint_path = self.ui.lineEdit_checkpointFile.text().strip()
+        
+        if not config_path:
+            self._log_to_bottom("⚠️  请先选择配置文件")
+            QMessageBox.warning(self, "缺少配置文件", "请先选择 MMSegmentation 配置文件。")
+            return
+        
+        if not checkpoint_path:
+            self._log_to_bottom("⚠️  请先选择权重文件")
+            QMessageBox.warning(self, "缺少权重文件", "请先选择模型权重文件。")
+            return
+        
+        # 验证文件是否存在
+        if not os.path.exists(config_path):
+            self._log_to_bottom(f"❌ 配置文件不存在: {config_path}")
+            QMessageBox.critical(self, "配置文件不存在", f"配置文件不存在:\n{config_path}")
+            return
+        
+        if not os.path.exists(checkpoint_path):
+            self._log_to_bottom(f"❌ 权重文件不存在: {checkpoint_path}")
+            QMessageBox.critical(self, "权重文件不存在", f"权重文件不存在:\n{checkpoint_path}")
+            return
+        
+        # 获取选择的设备
+        device_text = self.ui.comboBox_device.currentText()
+        device_map = {
+            "Auto": "cuda:0",
+            "CUDA:0": "cuda:0",
+            "CPU": "cpu"
+        }
+        device = device_map.get(device_text, "cpu")
+        
+        # 如果选择 Auto，检测 CUDA 可用性
+        if device_text == "Auto":
+            if not self._check_cuda_available():
+                device = "cpu"
+        
+        # 更新 UI 状态 - 开始加载
+        self.ui.pushButton_loadModel.setEnabled(False)
+        self._log_to_bottom("🔄 正在加载模型...")
+        
+        # 强制刷新 UI
+        QApplication.processEvents()
+        
+        # 使用 QTimer 延迟执行实际加载，避免阻塞 UI
+        QTimer.singleShot(100, lambda: self._do_load_inference_model(config_path, checkpoint_path, device))
+    
+    def _do_load_inference_model(self, config_path: str, checkpoint_path: str, device: str):
+        """实际执行模型加载（在延迟后执行）"""
+        try:
+            # 这里是模型加载的占位符
+            # 实际项目中需要使用 MMSegmentation 的 API 加载模型
+            # 例如:
+            # from mmseg.apis import init_model
+            # self.inference_model = init_model(config_path, checkpoint_path, device=device)
+            
+            # 模拟加载过程（实际使用时删除这部分）
+            import time
+            time.sleep(1)  # 模拟加载时间
+            
+            # 解析配置文件获取类别和调色板信息
+            try:
+                from config_parser import parse_mmseg_config
+                config_info = parse_mmseg_config(config_path)
+            except Exception as parse_error:
+                # 配置解析失败不应该导致模型加载失败
+                self._log_to_bottom(f"⚠️  配置解析警告: {parse_error}")
+                config_info = {
+                    'classes': None,
+                    'palette': None,
+                    'model_name': None
+                }
+            
+            # 保存模型信息
+            self.inference_model = {
+                'config': config_path,
+                'checkpoint': checkpoint_path,
+                'device': device,
+                'classes': config_info.get('classes'),
+                'palette': config_info.get('palette')
+            }  # 占位符，实际应该是真实的模型对象
+            
+            # 更新 UI 状态 - 加载成功
+            self.ui.pushButton_loadModel.setEnabled(True)
+            self.ui.label_modelStatus.setText("模型已就绪")
+            self.ui.label_modelStatus.setStyleSheet("color: #28a745; font-weight: bold;")
+            
+            # 显示类别图例（即使为空也不会失败）
+            try:
+                self._display_classes_legend(config_info.get('classes'), config_info.get('palette'))
+            except Exception as legend_error:
+                self._log_to_bottom(f"⚠️  类别图例显示警告: {legend_error}")
+            
+            # 底部日志显示
+            self._log_to_bottom("✅ 模型已就绪 (Model Ready)")
+            
+        except Exception as e:
+            # 更新 UI 状态 - 加载失败
+            self.ui.pushButton_loadModel.setEnabled(True)
+            self.ui.label_modelStatus.setText("加载失败")
+            self.ui.label_modelStatus.setStyleSheet("color: #dc3545; font-weight: bold;")
+            
+            # 底部日志显示 - 添加详细的错误信息
+            import traceback
+            error_details = traceback.format_exc()
+            self._log_to_bottom(f"❌ 模型加载失败: {e}")
+            self._log_to_bottom(f"详细错误:\n{error_details}")
+            
+            QMessageBox.critical(self, "模型加载失败", f"模型加载过程中发生错误。\n\n错误信息:\n{str(e)}\n\n详细信息请查看日志面板。")
+    
+    def _display_classes_legend(self, classes, palette):
+        """显示类别图例"""
+        try:
+            # 清空之前的内容
+            layout = self.ui.verticalLayout_classes
+            while layout.count():
+                child = layout.takeAt(0)
+                if child.widget():
+                    child.widget().deleteLater()
+            
+            # 安全检查：确保 classes 和 palette 不是 None
+            if classes is None:
+                classes = []
+            if palette is None:
+                palette = []
+            
+            if not classes or not palette:
+                # 如果没有类别信息，隐藏图例区域
+                self.ui.scrollArea_classesLegend.setVisible(False)
+                self._log_to_bottom("⚠️  配置文件中未找到 CLASSES 或 PALETTE 信息")
+                return
+            
+            # 显示图例区域
+            self.ui.scrollArea_classesLegend.setVisible(True)
+            
+            # 为每个类别创建一个标签
+            for idx, class_name in enumerate(classes):
+                try:
+                    # 获取对应的颜色
+                    if idx < len(palette):
+                        color = palette[idx]
+                        # 确保颜色是有效的三元组
+                        if isinstance(color, (list, tuple)) and len(color) >= 3:
+                            r, g, b = int(color[0]), int(color[1]), int(color[2])
+                        else:
+                            r, g, b = 128, 128, 128  # 默认灰色
+                    else:
+                        # 如果调色板不够，使用默认颜色
+                        r, g, b = 128, 128, 128
+                    
+                    # 创建类别标签
+                    class_label = QLabel(self.ui.scrollAreaWidgetContents_classes)
+                    class_label.setObjectName(f"label_class_{idx}")
+                    
+                    # 设置样式：颜色块 + 类别名称
+                    class_label.setText(f"  {str(class_name)}")
+                    class_label.setStyleSheet(
+                        f"background-color: rgb({r}, {g}, {b}); "
+                        f"color: {'white' if (r + g + b) < 384 else 'black'}; "
+                        f"padding: 3px 8px; "
+                        f"border-radius: 3px; "
+                        f"font-size: 11px;"
+                    )
+                    
+                    layout.addWidget(class_label)
+                except Exception as label_error:
+                    # 单个标签创建失败不应该影响整个过程
+                    self._log_to_bottom(f"⚠️  创建类别标签 {idx} 失败: {label_error}")
+                    continue
+            
+            # 添加弹性空间
+            layout.addStretch()
+            
+            # 日志输出
+            if classes:
+                self._log_to_bottom(f"📊 已加载 {len(classes)} 个类别")
+            
+        except Exception as e:
+            # 整个方法失败也不应该影响模型加载
+            self._log_to_bottom(f"⚠️  类别图例显示失败: {e}")
+            # 隐藏图例区域
+            try:
+                self.ui.scrollArea_classesLegend.setVisible(False)
+            except:
+                pass
     
     def _log_to_bottom(self, message: str):
         """输出日志到底部日志面板"""
+        # 获取当前时间
         from datetime import datetime
         timestamp = datetime.now().strftime("%H:%M:%S")
+        
+        # 格式化日志消息
         log_message = f"[{timestamp}] {message}"
         
+        # 输出到控制台
         print(log_message)
+        
+        # 输出到底部日志 TextEdit
         self.ui.textEdit_logs.append(log_message)
         
+        # 滚动到底部
         scrollbar = self.ui.textEdit_logs.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
 
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    
-    # 设置默认字体，避免 QFont::setPointSize 警告
-    from PySide6.QtGui import QFont
-    default_font = app.font()
-    if default_font.pointSize() <= 0:
-        default_font.setPointSize(9)
-        app.setFont(default_font)
-    
     window = MainWindow()
     window.show()
     sys.exit(app.exec())
