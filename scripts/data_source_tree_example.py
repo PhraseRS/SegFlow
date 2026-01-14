@@ -775,6 +775,9 @@ class MainWindow(QMainWindow):
         # 添加样本按钮
         self.ui.pushButton_addSample.clicked.connect(self.on_add_sample)
         
+        # 数据集概览 - 重新划分按钮
+        self.ui.widget_datasetOverview.resplit_clicked.connect(self.on_resplit_dataset)
+        
         # 树控件的点击信号
         self.ui.treeWidget_dataSources.currentItemChanged.connect(self.on_tree_item_changed)
         self.ui.treeWidget_dataSources.itemClicked.connect(self.on_tree_item_clicked)
@@ -1519,6 +1522,165 @@ class MainWindow(QMainWindow):
         
         scrollbar = self.ui.textEdit_logs.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
+    
+    def on_resplit_dataset(self):
+        """重新划分数据集"""
+        # 获取当前数据集统计
+        train_count = len(self.data_manager.get_samples('train'))
+        val_count = len(self.data_manager.get_samples('val'))
+        test_count = len(self.data_manager.get_samples('test'))
+        
+        if train_count + val_count + test_count == 0:
+            QMessageBox.information(self, "提示", "当前没有加载任何数据集，请先加载数据。")
+            return
+        
+        # 导入重新划分对话框
+        from ui.widgets.dataset_resplit_dialog import DatasetResplitDialog
+        
+        # 创建并显示重新划分对话框
+        dialog = DatasetResplitDialog(train_count, val_count, test_count, self)
+        dialog.resplit_confirmed.connect(self._perform_resplit)
+        
+        # 设置真实样本数据
+        train_samples = self.data_manager.get_samples('train')
+        val_samples = self.data_manager.get_samples('val')
+        test_samples = self.data_manager.get_samples('test')
+        dialog.set_sample_data(train_samples, val_samples, test_samples)
+        
+        dialog.exec()
+    
+    def _perform_resplit(self, mode, params):
+        """执行数据集重新划分
+        
+        Args:
+            mode: 划分模式 ('auto', 'custom_count', 'custom_select')
+            params: 划分参数
+        """
+        import random
+        
+        # 获取所有样本
+        all_samples = []
+        all_samples.extend(self.data_manager.get_samples('train'))
+        all_samples.extend(self.data_manager.get_samples('val'))
+        all_samples.extend(self.data_manager.get_samples('test'))
+        
+        if not all_samples:
+            QMessageBox.warning(self, "错误", "没有可用的样本进行重新划分。")
+            return
+        
+        # 根据模式执行不同的划分逻辑
+        if mode == 'auto':
+            # 自动化划分
+            if params.get('shuffle', True):
+                random.seed(params.get('seed', 42))
+                random.shuffle(all_samples)
+            
+            total_count = len(all_samples)
+            train_count = int(total_count * params['train_ratio'])
+            val_count = int(total_count * params['val_ratio'])
+            test_count = total_count - train_count - val_count
+            
+            train_samples = all_samples[:train_count]
+            val_samples = all_samples[train_count:train_count + val_count]
+            test_samples = all_samples[train_count + val_count:]
+            
+        elif mode == 'custom_count':
+            # 数量模式
+            random.shuffle(all_samples)
+            
+            train_count = params['train_count']
+            val_count = params['val_count']
+            test_count = params['test_count']
+            
+            train_samples = all_samples[:train_count]
+            val_samples = all_samples[train_count:train_count + val_count]
+            test_samples = all_samples[train_count + val_count:train_count + val_count + test_count]
+            
+        elif mode == 'custom_select':
+            # 选择模式
+            train_samples = []
+            val_samples = []
+            test_samples = []
+            
+            # 根据用户的分配构建样本列表
+            for assignment in params['sample_assignments']:
+                sample_name = assignment['name']
+                split_type = assignment['split']
+                
+                if split_type == 'Train':
+                    train_samples.append(sample_name)
+                elif split_type == 'Val':
+                    val_samples.append(sample_name)
+                elif split_type == 'Test':
+                    test_samples.append(sample_name)
+        
+        else:
+            QMessageBox.warning(self, "错误", f"未知的划分模式: {mode}")
+            return
+        
+        # 清空现有数据集
+        self.data_manager.clear_dataset('train')
+        self.data_manager.clear_dataset('val')
+        self.data_manager.clear_dataset('test')
+        
+        # 添加新的样本分配
+        self.data_manager.add_samples_batch('train', train_samples)
+        self.data_manager.add_samples_batch('val', val_samples)
+        self.data_manager.add_samples_batch('test', test_samples)
+        
+        # 保存新的划分到txt文件
+        if hasattr(self.data_manager, 'data_root') and self.data_manager.data_root:
+            self._save_split_to_txt()
+        
+        # 更新数据集概览
+        self.ui.widget_datasetOverview.update_data(len(train_samples), len(val_samples), len(test_samples))
+        
+        self.statusBar().showMessage("数据集重新划分完成")
+        
+        QMessageBox.information(
+            self,
+            "划分完成",
+            f"数据集已重新划分:\n"
+            f"Train: {len(train_samples)} 样本\n"
+            f"Val: {len(val_samples)} 样本\n"
+            f"Test: {len(test_samples)} 样本"
+        )
+    
+    def _save_split_to_txt(self):
+        """保存数据集划分到txt文件"""
+        if not hasattr(self.data_manager, 'data_root') or not self.data_manager.data_root:
+            return
+        
+        data_root = self.data_manager.data_root
+        
+        # 检查是否为VOC格式（存在ImageSets/Segmentation目录）
+        voc_txt_dir = os.path.join(data_root, 'ImageSets', 'Segmentation')
+        
+        # 确定保存路径
+        if os.path.exists(voc_txt_dir):
+            # VOC格式，保存到ImageSets/Segmentation/
+            save_dir = voc_txt_dir
+        else:
+            # 其他格式，保存到数据根目录
+            save_dir = data_root
+        
+        # 保存各个数据集
+        datasets = {
+            'train': self.data_manager.get_samples('train'),
+            'val': self.data_manager.get_samples('val'),
+            'test': self.data_manager.get_samples('test')
+        }
+        
+        for dataset_type, samples in datasets.items():
+            txt_path = os.path.join(save_dir, f'{dataset_type}.txt')
+            try:
+                with open(txt_path, 'w', encoding='utf-8') as f:
+                    for sample_id in samples:
+                        f.write(f"{sample_id}\n")
+                print(f"✅ 已保存 {dataset_type}.txt: {len(samples)} 个样本")
+            except Exception as e:
+                print(f"❌ 保存 {txt_path} 失败: {e}")
+                QMessageBox.warning(self, "保存失败", f"无法保存 {dataset_type}.txt: {e}")
 
 
 if __name__ == "__main__":
