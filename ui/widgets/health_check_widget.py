@@ -767,59 +767,6 @@ class HealthCheckCard(QWidget):
                 f"已复制 {count} 个文件路径到剪贴板"
             )
     
-    def _find_sample_paths(self, sample_id: str) -> tuple:
-        """
-        查找样本的图像和标签路径
-        
-        Args:
-            sample_id: 样本ID
-        
-        Returns:
-            tuple: (image_path, label_path)
-        """
-        image_path = ''
-        label_path = ''
-        
-        if not self._data_root:
-            return image_path, label_path
-        
-        # 图像目录候选
-        image_dirs = ['JPEGImages', 'images', 'img']
-        # 标签目录候选
-        label_dirs = ['SegmentationClass', 'labels', 'masks']
-        # 图像扩展名
-        image_exts = ['.jpg', '.png', '.jpeg', '.tif', '.tiff', '.bmp']
-        # 标签扩展名
-        label_exts = ['.png', '.tif', '.tiff']
-        
-        # 查找图像路径
-        for img_dir in image_dirs:
-            dir_path = os.path.join(self._data_root, img_dir)
-            if not os.path.isdir(dir_path):
-                continue
-            for ext in image_exts:
-                img_path = os.path.join(dir_path, f"{sample_id}{ext}")
-                if os.path.exists(img_path):
-                    image_path = img_path
-                    break
-            if image_path:
-                break
-        
-        # 查找标签路径
-        for lbl_dir in label_dirs:
-            dir_path = os.path.join(self._data_root, lbl_dir)
-            if not os.path.isdir(dir_path):
-                continue
-            for ext in label_exts:
-                lbl_path = os.path.join(dir_path, f"{sample_id}{ext}")
-                if os.path.exists(lbl_path):
-                    label_path = lbl_path
-                    break
-            if label_path:
-                break
-        
-        return image_path, label_path
-    
     def _on_export_log_requested(self, issue_type: str) -> None:
         """处理"导出问题日志"请求"""
         files = self.get_files_by_issue(issue_type)
@@ -844,14 +791,11 @@ class HealthCheckCard(QWidget):
         # 构建导出数据
         export_data = []
         for sample_id in files:
-            # 使用统一的路径查找方法
-            image_path, label_path = self._find_sample_paths(sample_id)
-            
             item = {
                 'sample_id': sample_id,
                 'issue_type': issue_type,
-                'image_path': image_path,
-                'label_path': label_path,
+                'image_path': '',
+                'label_path': '',
                 'details': ''
             }
             
@@ -859,6 +803,19 @@ class HealthCheckCard(QWidget):
             if sample_id in self._issue_details:
                 details = self._issue_details[sample_id]
                 item['details'] = str(details.get(issue_type, ''))
+            
+            # 构建路径
+            if self._data_root:
+                for ext in ['.jpg', '.png', '.jpeg']:
+                    img_path = os.path.join(self._data_root, 'JPEGImages', f"{sample_id}{ext}")
+                    if os.path.exists(img_path):
+                        item['image_path'] = img_path
+                        break
+                for ext in ['.png', '.tif']:
+                    lbl_path = os.path.join(self._data_root, 'SegmentationClass', f"{sample_id}{ext}")
+                    if os.path.exists(lbl_path):
+                        item['label_path'] = lbl_path
+                        break
             
             export_data.append(item)
         
@@ -879,23 +836,13 @@ class HealthCheckCard(QWidget):
         for level, issues in self._issues.items():
             for issue_type, files in issues.items():
                 for sample_id in files:
-                    # 使用统一的路径查找方法
-                    image_path, label_path = self._find_sample_paths(sample_id)
-                    
-                    item = {
+                    all_issues.append({
                         'sample_id': sample_id,
                         'issue_type': issue_type,
-                        'image_path': image_path,
-                        'label_path': label_path,
+                        'image_path': '',
+                        'label_path': '',
                         'details': ''
-                    }
-                    
-                    # 尝试获取详细信息
-                    if sample_id in self._issue_details:
-                        details = self._issue_details[sample_id]
-                        item['details'] = str(details.get(issue_type, ''))
-                    
-                    all_issues.append(item)
+                    })
         
         if not all_issues:
             QMessageBox.information(self, "提示", "没有问题需要导出")
