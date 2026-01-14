@@ -775,8 +775,8 @@ class MainWindow(QMainWindow):
         # 添加样本按钮
         self.ui.pushButton_addSample.clicked.connect(self.on_add_sample)
         
-        # 数据集概览 - 重新划分按钮
-        self.ui.widget_datasetOverview.resplit_clicked.connect(self.on_resplit_dataset)
+        # 数据集概览 - 重新划分按钮（通过 Header action）
+        self.ui.btn_resplit.clicked.connect(self.on_resplit_dataset)
         
         # 树控件的点击信号
         self.ui.treeWidget_dataSources.currentItemChanged.connect(self.on_tree_item_changed)
@@ -1178,6 +1178,9 @@ class MainWindow(QMainWindow):
         test_count = len(self.data_manager.get_samples('test'))
         
         self.ui.widget_datasetOverview.update_data(train_count, val_count, test_count)
+        # 有数据时启用 Resplit 按钮
+        total = train_count + val_count + test_count
+        self.ui.btn_resplit.setEnabled(total > 0)
     
     def _validate_voc_structure(self, data_root):
         """

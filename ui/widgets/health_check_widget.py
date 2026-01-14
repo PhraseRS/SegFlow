@@ -3,19 +3,8 @@
 健康检查卡片 (Health Check Card)
 汇总数据集中的错误和警告，支持问题过滤和自动修复
 
-布局：
-+----------------------------------------------------------+
-| ▼ 健康检查 (Health Check)   [ 🔴 5 | 🟠 125 ]            | <--- 标题带统计
-+----------------------------------------------------------+
-| [ 🔄 重新扫描 ]  [ 🔧 一键清理 ]                          | <--- 顶部工具栏
-+----------------------------------------------------------+
-| 🔴 尺寸不匹配 (Size Mismatch)              [ 2 项 ] >    | <--- 问题列表
-| 🔴 文件损坏 (Corrupt Files)                [ 3 项 ] >    |
-| 🟠 空标签样本 (Empty Masks)                [ 120 项 ] >  |
-| 🟠 极微小噪点 (<5px Area)                  [ 5 项 ] >    |
-+----------------------------------------------------------+
-| ( 🟢 1,200 个样本通过检查 )                               | <--- 底部统计
-+----------------------------------------------------------+
+关键约束：禁止使用 CSS/QSS (setStyleSheet)
+必须通过 Qt 原生组件属性或 qtawesome 来实现样式控制
 """
 
 import os
@@ -31,45 +20,34 @@ from PySide6.QtWidgets import (
     QSizePolicy, QFrame, QMenu, QApplication, QMessageBox, QFileDialog
 )
 from PySide6.QtCore import Qt, Signal, QRect
-from PySide6.QtGui import QCursor, QAction
+from PySide6.QtGui import QCursor, QAction, QPalette, QColor, QPainter
+
+from ui.widgets.ui_utils import create_flat_button, create_toolbar_separator
 
 
-# ==================== 样式配置 ====================
-# 颜色
-COLOR_FATAL = "#E57373"      # 柔和红色（严重错误）
-COLOR_WARNING = "#FFB74D"    # 琥珀色（警告）
-COLOR_SUCCESS = "#81C784"    # 柔和绿色（通过）
-COLOR_LABEL = "#666"         # 标签颜色
+# ==================== 颜色配置 ====================
+COLOR_FATAL = QColor(229, 115, 115)      # 柔和红色（严重错误）
+COLOR_WARNING = QColor(255, 183, 77)     # 琥珀色（警告）
+COLOR_SUCCESS = QColor(129, 199, 132)    # 柔和绿色（通过）
+COLOR_LABEL = QColor(102, 102, 102)      # 标签颜色
 
 # 尺寸
-ROW_HEIGHT_PX = 26           # 列表项高度（紧凑）
-ICON_SIZE_PX = 12            # 图标尺寸
-FONT_SIZE_PX = 10            # 字体大小
-COUNT_WIDTH_PX = 60          # 数量标签宽度
-# ================================================
+ROW_HEIGHT_PX = 26
+ICON_SIZE_PX = 12
+FONT_SIZE_PX = 10
+COUNT_WIDTH_PX = 60
 
 
 # ==================== 系统集成工具函数 ====================
 
 def reveal_in_explorer(file_path: str) -> bool:
-    """
-    在系统文件管理器中显示文件
-    
-    Args:
-        file_path: 文件路径
-    
-    Returns:
-        bool: 是否成功
-    """
+    """在系统文件管理器中显示文件"""
     if not file_path:
         return False
     
-    # 规范化路径
     file_path = os.path.normpath(file_path)
     
-    # 检查文件/目录是否存在
     if not os.path.exists(file_path):
-        # 尝试打开父目录
         parent_dir = os.path.dirname(file_path)
         if os.path.exists(parent_dir):
             file_path = parent_dir
@@ -78,16 +56,13 @@ def reveal_in_explorer(file_path: str) -> bool:
     
     try:
         if sys.platform == 'win32':
-            # Windows: explorer /select, <path>
             if os.path.isfile(file_path):
                 subprocess.run(['explorer', '/select,', file_path], check=False)
             else:
                 subprocess.run(['explorer', file_path], check=False)
         elif sys.platform == 'darwin':
-            # macOS: open -R <path>
             subprocess.run(['open', '-R', file_path], check=False)
         else:
-            # Linux: xdg-open (打开所在目录)
             if os.path.isfile(file_path):
                 subprocess.run(['xdg-open', os.path.dirname(file_path)], check=False)
             else:
@@ -99,15 +74,7 @@ def reveal_in_explorer(file_path: str) -> bool:
 
 
 def copy_path_to_clipboard(file_path: str) -> bool:
-    """
-    复制文件路径到剪贴板
-    
-    Args:
-        file_path: 文件路径
-    
-    Returns:
-        bool: 是否成功
-    """
+    """复制文件路径到剪贴板"""
     if not file_path:
         return False
     
@@ -125,30 +92,13 @@ def export_issues_to_csv(
     save_path: str,
     data_root: str = ""
 ) -> bool:
-    """
-    导出问题列表到 CSV 文件
-    
-    Args:
-        issues_data: 问题数据列表，每项包含：
-            - sample_id: 样本ID
-            - issue_type: 问题类型
-            - image_path: 图像路径
-            - label_path: 标签路径
-            - details: 详细信息（可选）
-        save_path: 保存路径
-        data_root: 数据根目录（用于计算相对路径）
-    
-    Returns:
-        bool: 是否成功
-    """
+    """导出问题列表到 CSV 文件"""
     if not issues_data or not save_path:
         return False
     
     try:
         with open(save_path, 'w', newline='', encoding='utf-8-sig') as f:
             writer = csv.writer(f)
-            
-            # 写入表头
             writer.writerow([
                 '样本ID (Sample ID)',
                 '问题类型 (Issue Type)',
@@ -158,7 +108,6 @@ def export_issues_to_csv(
                 '详细信息 (Details)'
             ])
             
-            # 写入数据
             for item in issues_data:
                 issue_type = item.get('issue_type', '')
                 config = ISSUE_TYPES.get(issue_type)
@@ -179,8 +128,7 @@ def export_issues_to_csv(
         return False
 
 
-# ================================================
-
+# ==================== 数据类型定义 ====================
 
 class IssueLevel(Enum):
     """问题级别枚举"""
@@ -198,9 +146,7 @@ class IssueTypeConfig:
     auto_fixable: bool = False
 
 
-# 问题类型配置（key 与 dataset_metadata.py 中的常量一致）
 ISSUE_TYPES: Dict[str, IssueTypeConfig] = {
-    # === Fatal 级别 ===
     "file_missing": IssueTypeConfig(
         key="file_missing",
         name="文件缺失 (File Missing)",
@@ -222,7 +168,7 @@ ISSUE_TYPES: Dict[str, IssueTypeConfig] = {
     "channel_mismatch": IssueTypeConfig(
         key="channel_mismatch",
         name="通道数异常 (Channel Mismatch)",
-        description="图像或标签通道数异常（如 3 vs 4）",
+        description="图像或标签通道数异常",
         level=IssueLevel.FATAL
     ),
     "invalid_class_id": IssueTypeConfig(
@@ -234,14 +180,13 @@ ISSUE_TYPES: Dict[str, IssueTypeConfig] = {
     "dtype_mismatch": IssueTypeConfig(
         key="dtype_mismatch",
         name="位深错误 (Dtype Mismatch)",
-        description="标签位深错误（如 16bit vs 8bit）",
+        description="标签位深错误",
         level=IssueLevel.FATAL
     ),
-    # === Warning 级别 ===
     "empty_mask": IssueTypeConfig(
         key="empty_mask",
         name="空标签样本 (Empty Masks)",
-        description="标签全为背景类（无前景目标）",
+        description="标签全为背景类",
         level=IssueLevel.WARNING,
         auto_fixable=True
     ),
@@ -262,18 +207,43 @@ ISSUE_TYPES: Dict[str, IssueTypeConfig] = {
 }
 
 
+# ==================== 状态指示器组件 ====================
+
+class StatusDot(QWidget):
+    """状态圆点指示器（替代 stylesheet 实现）"""
+    
+    def __init__(self, color: QColor, parent: Optional[QWidget] = None):
+        super().__init__(parent)
+        self._color = color
+        self.setFixedSize(ICON_SIZE_PX, ICON_SIZE_PX)
+    
+    def set_color(self, color: QColor) -> None:
+        self._color = color
+        self.update()
+    
+    def paintEvent(self, event) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(self._color)
+        painter.drawEllipse(self.rect())
+
+
 class IssueRow(QWidget):
     """问题类型行组件"""
     
-    # 信号：点击行
-    clicked = Signal(str)  # issue_type
-    # 信号：右键菜单操作
-    revealRequested = Signal(str)      # 请求在文件管理器中显示
-    copyPathRequested = Signal(str)    # 请求复制路径
-    exportLogRequested = Signal(str)   # 请求导出问题日志
+    clicked = Signal(str)
+    revealRequested = Signal(str)
+    copyPathRequested = Signal(str)
+    exportLogRequested = Signal(str)
     
-    def __init__(self, issue_type: str, count: int, level: IssueLevel, 
-                 parent: Optional[QWidget] = None):
+    def __init__(
+        self, 
+        issue_type: str, 
+        count: int, 
+        level: IssueLevel, 
+        parent: Optional[QWidget] = None
+    ):
         super().__init__(parent)
         self._issue_type = issue_type
         self._count = count
@@ -282,7 +252,6 @@ class IssueRow(QWidget):
         self._is_selected = False
         self._setup_ui()
         
-        # 启用右键菜单
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self._show_context_menu)
     
@@ -291,104 +260,111 @@ class IssueRow(QWidget):
         layout.setContentsMargins(4, 0, 4, 0)
         layout.setSpacing(6)
         
-        # 图标（圆点）
-        self.icon_label = QLabel()
-        self.icon_label.setFixedSize(ICON_SIZE_PX, ICON_SIZE_PX)
+        # 状态圆点
         color = COLOR_FATAL if self._level == IssueLevel.FATAL else COLOR_WARNING
-        self.icon_label.setStyleSheet(f"""
-            background-color: {color};
-            border-radius: {ICON_SIZE_PX // 2}px;
-        """)
-        layout.addWidget(self.icon_label)
+        self.status_dot = StatusDot(color)
+        layout.addWidget(self.status_dot)
         
         # 问题描述
         config = ISSUE_TYPES.get(self._issue_type)
         name = config.name if config else self._issue_type
         self.name_label = QLabel(name)
-        self.name_label.setStyleSheet(f"font-size: {FONT_SIZE_PX}px; color: {COLOR_LABEL};")
+        name_font = self.name_label.font()
+        name_font.setPointSize(FONT_SIZE_PX)
+        self.name_label.setFont(name_font)
+        self._set_label_color(self.name_label, COLOR_LABEL)
         self.name_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         if config:
             self.name_label.setToolTip(config.description)
         layout.addWidget(self.name_label, 1)
         
-        # 数量（格式：[ X 项 ]）
+        # 数量
         self.count_label = QLabel(f"[ {self._count} 项 ]")
         self.count_label.setFixedWidth(COUNT_WIDTH_PX)
         self.count_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self.count_label.setStyleSheet(f"font-size: {FONT_SIZE_PX}px; color: {COLOR_LABEL};")
+        count_font = self.count_label.font()
+        count_font.setPointSize(FONT_SIZE_PX)
+        self.count_label.setFont(count_font)
+        self._set_label_color(self.count_label, COLOR_LABEL)
         layout.addWidget(self.count_label)
         
         # 箭头
         self.arrow_label = QLabel(">")
-        self.arrow_label.setStyleSheet(f"font-size: {FONT_SIZE_PX}px; color: #999;")
+        arrow_font = self.arrow_label.font()
+        arrow_font.setPointSize(FONT_SIZE_PX)
+        self.arrow_label.setFont(arrow_font)
+        self._set_label_color(self.arrow_label, QColor(153, 153, 153))
         layout.addWidget(self.arrow_label)
         
         self.setFixedHeight(ROW_HEIGHT_PX)
         self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        self._update_style()
+    
+    def _set_label_color(self, label: QLabel, color: QColor) -> None:
+        """使用 palette 设置标签颜色"""
+        palette = label.palette()
+        palette.setColor(QPalette.ColorRole.WindowText, color)
+        label.setPalette(palette)
     
     def _update_style(self) -> None:
-        """更新背景样式（与 QTreeWidget 选中效果一致）"""
+        """更新背景样式"""
         if self._is_selected:
-            # 选中状态：使用系统高亮色，文字使用高亮文字色
-            self.setStyleSheet("background-color: palette(highlight);")
-            self.name_label.setStyleSheet(f"font-size: {FONT_SIZE_PX}px; color: palette(highlighted-text);")
-            self.count_label.setStyleSheet(f"font-size: {FONT_SIZE_PX}px; color: palette(highlighted-text);")
-            self.arrow_label.setStyleSheet(f"font-size: {FONT_SIZE_PX}px; color: palette(highlighted-text);")
+            self.setAutoFillBackground(True)
+            palette = self.palette()
+            palette.setColor(QPalette.ColorRole.Window, palette.color(QPalette.ColorRole.Highlight))
+            self.setPalette(palette)
+            # 选中时文字使用高亮文字色
+            highlight_text = self.palette().color(QPalette.ColorRole.HighlightedText)
+            self._set_label_color(self.name_label, highlight_text)
+            self._set_label_color(self.count_label, highlight_text)
+            self._set_label_color(self.arrow_label, highlight_text)
         elif self._is_hovered:
-            self.setStyleSheet("background-color: palette(light);")
-            self.name_label.setStyleSheet(f"font-size: {FONT_SIZE_PX}px; color: {COLOR_LABEL};")
-            self.count_label.setStyleSheet(f"font-size: {FONT_SIZE_PX}px; color: {COLOR_LABEL};")
-            self.arrow_label.setStyleSheet(f"font-size: {FONT_SIZE_PX}px; color: #999;")
+            self.setAutoFillBackground(True)
+            palette = self.palette()
+            palette.setColor(QPalette.ColorRole.Window, palette.color(QPalette.ColorRole.Light))
+            self.setPalette(palette)
+            self._set_label_color(self.name_label, COLOR_LABEL)
+            self._set_label_color(self.count_label, COLOR_LABEL)
+            self._set_label_color(self.arrow_label, QColor(153, 153, 153))
         else:
-            self.setStyleSheet("background-color: transparent;")
-            self.name_label.setStyleSheet(f"font-size: {FONT_SIZE_PX}px; color: {COLOR_LABEL};")
-            self.count_label.setStyleSheet(f"font-size: {FONT_SIZE_PX}px; color: {COLOR_LABEL};")
-            self.arrow_label.setStyleSheet(f"font-size: {FONT_SIZE_PX}px; color: #999;")
+            self.setAutoFillBackground(False)
+            self._set_label_color(self.name_label, COLOR_LABEL)
+            self._set_label_color(self.count_label, COLOR_LABEL)
+            self._set_label_color(self.arrow_label, QColor(153, 153, 153))
     
     def set_selected(self, selected: bool) -> None:
-        """设置选中状态"""
         self._is_selected = selected
         self._update_style()
     
     def enterEvent(self, event) -> None:
-        """鼠标进入"""
         self._is_hovered = True
         self._update_style()
     
     def leaveEvent(self, event) -> None:
-        """鼠标离开"""
         self._is_hovered = False
         self._update_style()
     
     def mousePressEvent(self, event) -> None:
-        """鼠标点击"""
         if event.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit(self._issue_type)
     
     def update_count(self, count: int) -> None:
-        """更新数量"""
         self._count = count
         self.count_label.setText(f"[ {count} 项 ]")
     
     def _show_context_menu(self, pos) -> None:
-        """显示右键菜单"""
         menu = QMenu(self)
         
-        # 在文件管理器中显示
-        action_reveal = QAction("📂 在文件管理器中显示 (Reveal in Explorer)", self)
+        action_reveal = QAction("📂 在文件管理器中显示", self)
         action_reveal.triggered.connect(lambda: self.revealRequested.emit(self._issue_type))
         menu.addAction(action_reveal)
         
-        # 复制路径
-        action_copy = QAction("📋 复制路径 (Copy Path)", self)
+        action_copy = QAction("📋 复制路径", self)
         action_copy.triggered.connect(lambda: self.copyPathRequested.emit(self._issue_type))
         menu.addAction(action_copy)
         
         menu.addSeparator()
         
-        # 导出问题日志
-        action_export = QAction("📄 导出问题日志 (Export Issue Log)", self)
+        action_export = QAction("📄 导出问题日志", self)
         action_export.triggered.connect(lambda: self.exportLogRequested.emit(self._issue_type))
         menu.addAction(action_export)
         
@@ -399,27 +375,25 @@ class HealthCheckCard(QWidget):
     """
     健康检查卡片
     
-    汇总数据集中的错误和警告，支持问题过滤和自动修复。
+    工具栏使用 QToolButton + autoRaise 实现扁平按钮风格
     """
     
-    # 信号
-    filterRequested = Signal(str)   # 请求过滤指定问题类型
-    clearFilterRequested = Signal() # 请求清除过滤
-    rescanRequested = Signal()      # 请求重新扫描
-    autoFixRequested = Signal()     # 请求自动修复
-    summaryChanged = Signal(str)    # 摘要变化（供标题栏更新）
-    # 新增信号
-    requestFocusOnRect = Signal(QRect)  # 请求聚焦到指定区域（用于噪点高亮）
+    filterRequested = Signal(str)
+    clearFilterRequested = Signal()
+    rescanRequested = Signal()
+    autoFixRequested = Signal()
+    summaryChanged = Signal(str)
+    requestFocusOnRect = Signal(QRect)
     
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
         self._issues: Dict[str, Dict[str, List[str]]] = {}
-        self._issue_details: Dict[str, Dict[str, Any]] = {}  # 存储详细信息（如噪点位置）
+        self._issue_details: Dict[str, Dict[str, Any]] = {}
         self._rows: Dict[str, IssueRow] = {}
         self._total_samples = 0
         self._passed_samples = 0
-        self._current_filter: Optional[str] = None  # 当前过滤的问题类型
-        self._data_root: str = ""  # 数据根目录
+        self._current_filter: Optional[str] = None
+        self._data_root: str = ""
         self._setup_ui()
     
     def _setup_ui(self) -> None:
@@ -429,83 +403,54 @@ class HealthCheckCard(QWidget):
         layout.setSpacing(4)
         layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         
-        # === 工具栏 ===
+        # === 工具栏（使用 flat buttons）===
         toolbar_layout = QHBoxLayout()
         toolbar_layout.setSpacing(4)
         toolbar_layout.setContentsMargins(0, 0, 0, 4)
         
-        # 重新扫描按钮
-        self.btn_rescan = QToolButton()
-        self.btn_rescan.setText("🔄 重新扫描 (Re-scan)")
-        self.btn_rescan.setToolTip("重新运行健康检查")
-        self.btn_rescan.setStyleSheet("""
-            QToolButton {
-                font-size: 10px;
-                padding: 4px 8px;
-                border: 1px solid palette(mid);
-                border-radius: 3px;
-                background: transparent;
-            }
-            QToolButton:hover { background-color: palette(light); }
-            QToolButton:disabled { color: gray; }
-        """)
-        self.btn_rescan.clicked.connect(self.rescanRequested.emit)
+        # Re-scan 按钮
+        self.btn_rescan = create_flat_button(
+            text="Re-scan",
+            icon_name='fa5s.search',
+            icon_color='default',
+            tooltip="重新运行健康检查",
+            on_clicked=self.rescanRequested.emit
+        )
         toolbar_layout.addWidget(self.btn_rescan)
         
-        # 自动修复按钮
-        self.btn_autofix = QToolButton()
-        self.btn_autofix.setText("🔧 一键清理 (Auto-Fix)")
-        self.btn_autofix.setToolTip("自动修复可修复的警告（如删除空样本）")
-        self.btn_autofix.setStyleSheet("""
-            QToolButton {
-                font-size: 10px;
-                padding: 4px 8px;
-                border: 1px solid palette(mid);
-                border-radius: 3px;
-                background: transparent;
-            }
-            QToolButton:hover { background-color: palette(light); }
-            QToolButton:disabled { color: gray; }
-        """)
-        self.btn_autofix.setEnabled(False)
-        self.btn_autofix.clicked.connect(self.autoFixRequested.emit)
+        # Auto-Fix 按钮
+        self.btn_autofix = create_flat_button(
+            text="Auto-Fix",
+            icon_name='fa5s.magic',
+            icon_color='default',
+            tooltip="自动修复可修复的警告",
+            enabled=False,
+            on_clicked=self.autoFixRequested.emit
+        )
         toolbar_layout.addWidget(self.btn_autofix)
         
-        # 清除过滤按钮
-        self.btn_clear_filter = QToolButton()
-        self.btn_clear_filter.setText("✕ 清除过滤")
-        self.btn_clear_filter.setToolTip("清除过滤，显示所有样本")
-        self.btn_clear_filter.setStyleSheet("""
-            QToolButton {
-                font-size: 10px;
-                padding: 4px 8px;
-                border: 1px solid palette(mid);
-                border-radius: 3px;
-                background: transparent;
-            }
-            QToolButton:hover { background-color: palette(light); }
-            QToolButton:disabled { color: gray; }
-        """)
-        self.btn_clear_filter.setEnabled(False)
-        self.btn_clear_filter.clicked.connect(self._on_clear_filter_clicked)
+        # 分隔线
+        toolbar_layout.addWidget(create_toolbar_separator())
+        
+        # Clear Filter 按钮
+        self.btn_clear_filter = create_flat_button(
+            text="Clear Filter",
+            icon_name='fa5s.filter',
+            icon_color='default',
+            tooltip="清除过滤，显示所有样本",
+            enabled=False,
+            on_clicked=self._on_clear_filter_clicked
+        )
         toolbar_layout.addWidget(self.btn_clear_filter)
         
-        # 导出报告按钮
-        self.btn_export = QToolButton()
-        self.btn_export.setText("📄 导出")
-        self.btn_export.setToolTip("导出所有问题到 CSV 文件")
-        self.btn_export.setStyleSheet("""
-            QToolButton {
-                font-size: 10px;
-                padding: 4px 8px;
-                border: 1px solid palette(mid);
-                border-radius: 3px;
-                background: transparent;
-            }
-            QToolButton:hover { background-color: palette(light); }
-            QToolButton:disabled { color: gray; }
-        """)
-        self.btn_export.clicked.connect(self.export_all_issues)
+        # Export 按钮
+        self.btn_export = create_flat_button(
+            text="Export",
+            icon_name='fa5s.file-export',
+            icon_color='default',
+            tooltip="导出所有问题到 CSV 文件",
+            on_clicked=self.export_all_issues
+        )
         toolbar_layout.addWidget(self.btn_export)
         
         toolbar_layout.addStretch()
@@ -522,20 +467,22 @@ class HealthCheckCard(QWidget):
         # === 底部通过统计 ===
         self.passed_label = QLabel()
         self.passed_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        self.passed_label.setStyleSheet(f"font-size: {FONT_SIZE_PX}px; color: {COLOR_SUCCESS}; padding: 4px;")
+        passed_font = self.passed_label.font()
+        passed_font.setPointSize(FONT_SIZE_PX)
+        self.passed_label.setFont(passed_font)
+        self._set_label_color(self.passed_label, COLOR_SUCCESS)
         layout.addWidget(self.passed_label)
         
-        # 底部弹性空间
         layout.addStretch()
-        
-        # 设置尺寸策略
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        
-        # 初始状态
         self._update_ui()
     
+    def _set_label_color(self, label: QLabel, color: QColor) -> None:
+        palette = label.palette()
+        palette.setColor(QPalette.ColorRole.WindowText, color)
+        label.setPalette(palette)
+    
     def _count_issues(self) -> tuple:
-        """统计问题数量，返回 (fatal_count, warning_count, has_fixable)"""
         fatal_count = 0
         warning_count = 0
         has_fixable = False
@@ -554,13 +501,9 @@ class HealthCheckCard(QWidget):
         return fatal_count, warning_count, has_fixable
     
     def _update_ui(self) -> None:
-        """更新UI状态"""
         fatal_count, warning_count, has_fixable = self._count_issues()
-        
-        # 更新自动修复按钮状态
         self.btn_autofix.setEnabled(has_fixable)
         
-        # 更新底部通过统计
         if self._total_samples > 0:
             self._passed_samples = self._total_samples - fatal_count - warning_count
             self.passed_label.setText(f"( 🟢 {self._passed_samples:,} 个样本通过检查 )")
@@ -568,35 +511,28 @@ class HealthCheckCard(QWidget):
         else:
             self.passed_label.setVisible(False)
         
-        # 发射摘要变化信号
         summary = self.get_header_summary()
         self.summaryChanged.emit(summary)
     
     def _rebuild_list(self) -> None:
-        """重建问题列表"""
-        # 清除旧行
         for row in self._rows.values():
             row.setParent(None)
             row.deleteLater()
         self._rows.clear()
         
-        # 先添加严重错误
         if "fatal" in self._issues:
             for issue_type, files in self._issues["fatal"].items():
                 if len(files) > 0:
                     self._add_row(issue_type, len(files), IssueLevel.FATAL)
         
-        # 再添加警告
         if "warning" in self._issues:
             for issue_type, files in self._issues["warning"].items():
                 if len(files) > 0:
                     self._add_row(issue_type, len(files), IssueLevel.WARNING)
     
     def _add_row(self, issue_type: str, count: int, level: IssueLevel) -> None:
-        """添加问题行"""
         row = IssueRow(issue_type, count, level)
         row.clicked.connect(self._on_row_clicked)
-        # 连接右键菜单信号
         row.revealRequested.connect(self._on_reveal_requested)
         row.copyPathRequested.connect(self._on_copy_path_requested)
         row.exportLogRequested.connect(self._on_export_log_requested)
@@ -604,40 +540,28 @@ class HealthCheckCard(QWidget):
         self._rows[issue_type] = row
     
     def _on_row_clicked(self, issue_type: str) -> None:
-        """问题行点击处理（支持切换过滤）"""
         if self._current_filter == issue_type:
-            # 再次点击同一行，清除过滤
             self._clear_filter()
         else:
-            # 点击新行，应用过滤
             self._current_filter = issue_type
             self.btn_clear_filter.setEnabled(True)
             self._update_row_selection()
             self.filterRequested.emit(issue_type)
     
     def _on_clear_filter_clicked(self) -> None:
-        """清除过滤按钮点击"""
         self._clear_filter()
     
     def _clear_filter(self) -> None:
-        """清除过滤状态"""
         self._current_filter = None
         self.btn_clear_filter.setEnabled(False)
         self._update_row_selection()
         self.clearFilterRequested.emit()
     
     def _update_row_selection(self) -> None:
-        """更新行选中状态的视觉反馈"""
         for issue_type, row in self._rows.items():
             row.set_selected(self._current_filter and issue_type == self._current_filter)
     
     def get_header_summary(self) -> str:
-        """
-        获取标题栏摘要文本（供折叠面板标题栏显示）
-        
-        Returns:
-            str: 如 "[ 🔴 5 | 🟠 125 ]" 或 "[ 🟢 All Passed ]"
-        """
         fatal_count, warning_count, _ = self._count_issues()
         
         if fatal_count > 0 and warning_count > 0:
@@ -650,39 +574,21 @@ class HealthCheckCard(QWidget):
             return "[ 🟢 All Passed ]"
     
     def get_header_widget(self) -> QLabel:
-        """
-        获取标题栏摘要控件（供添加到折叠面板标题栏）
-        
-        Returns:
-            QLabel: 摘要标签控件
-        """
         label = QLabel(self.get_header_summary())
-        label.setStyleSheet(f"font-size: 10px; color: {COLOR_LABEL};")
-        
-        # 连接信号以自动更新
+        label_font = label.font()
+        label_font.setPointSize(10)
+        label.setFont(label_font)
+        self._set_label_color(label, COLOR_LABEL)
         self.summaryChanged.connect(label.setText)
-        
         return label
     
     def set_issues(self, issues: Dict[str, Dict[str, List[str]]], total_samples: int = 0) -> None:
-        """
-        设置问题数据
-        
-        Args:
-            issues: 问题数据，格式：
-                {
-                    'fatal': {'size_mismatch': ['file1', 'file2'], 'corrupt': []},
-                    'warning': {'empty_mask': ['file3', ...], 'noise': ['file10']}
-                }
-            total_samples: 总样本数（用于计算通过数）
-        """
         self._issues = issues
         self._total_samples = total_samples
         self._rebuild_list()
         self._update_ui()
     
     def clear(self) -> None:
-        """清空数据"""
         self._issues = {}
         self._total_samples = 0
         self._passed_samples = 0
@@ -690,45 +596,33 @@ class HealthCheckCard(QWidget):
         self._update_ui()
     
     def get_files_by_issue(self, issue_type: str) -> List[str]:
-        """获取指定问题类型的文件列表"""
         for level, issues in self._issues.items():
             if issue_type in issues:
                 return issues[issue_type]
         return []
     
     def set_data_root(self, data_root: str) -> None:
-        """设置数据根目录"""
         self._data_root = data_root
     
     def set_issue_details(self, details: Dict[str, Dict[str, Any]]) -> None:
-        """
-        设置问题详细信息（如噪点位置等）
-        
-        Args:
-            details: {sample_id: {issue_type: detail_info, ...}, ...}
-        """
         self._issue_details = details
+
     
     def _on_reveal_requested(self, issue_type: str) -> None:
-        """处理"在文件管理器中显示"请求"""
         files = self.get_files_by_issue(issue_type)
         if not files:
             QMessageBox.information(self, "提示", f"没有 {issue_type} 类型的问题文件")
             return
         
-        # 显示第一个文件
         first_file = files[0]
-        
-        # 尝试构建完整路径
         file_path = first_file
+        
         if self._data_root and not os.path.isabs(first_file):
-            # 尝试在常见目录中查找
             for subdir in ['JPEGImages', 'SegmentationClass', 'images', 'labels']:
                 test_path = os.path.join(self._data_root, subdir, first_file)
                 if os.path.exists(test_path):
                     file_path = test_path
                     break
-                # 尝试添加扩展名
                 for ext in ['.jpg', '.png', '.jpeg', '.tif']:
                     test_path_ext = test_path + ext
                     if os.path.exists(test_path_ext):
@@ -739,17 +633,15 @@ class HealthCheckCard(QWidget):
             QMessageBox.warning(
                 self, 
                 "无法打开", 
-                f"无法在文件管理器中显示文件:\n{file_path}\n\n文件可能已被删除或移动。"
+                f"无法在文件管理器中显示文件:\n{file_path}"
             )
     
     def _on_copy_path_requested(self, issue_type: str) -> None:
-        """处理"复制路径"请求"""
         files = self.get_files_by_issue(issue_type)
         if not files:
             QMessageBox.information(self, "提示", f"没有 {issue_type} 类型的问题文件")
             return
         
-        # 复制所有文件路径（每行一个）
         paths = []
         for f in files:
             if self._data_root and not os.path.isabs(f):
@@ -759,36 +651,24 @@ class HealthCheckCard(QWidget):
         
         path_text = '\n'.join(paths)
         if copy_path_to_clipboard(path_text):
-            # 显示简短提示
-            count = len(files)
-            QMessageBox.information(
-                self, 
-                "已复制", 
-                f"已复制 {count} 个文件路径到剪贴板"
-            )
+            QMessageBox.information(self, "已复制", f"已复制 {len(files)} 个文件路径到剪贴板")
     
     def _on_export_log_requested(self, issue_type: str) -> None:
-        """处理"导出问题日志"请求"""
         files = self.get_files_by_issue(issue_type)
         if not files:
             QMessageBox.information(self, "提示", f"没有 {issue_type} 类型的问题文件")
             return
         
-        # 选择保存路径
         config = ISSUE_TYPES.get(issue_type)
         default_name = f"health_check_{issue_type}.csv"
         
         save_path, _ = QFileDialog.getSaveFileName(
-            self,
-            "导出问题日志",
-            default_name,
-            "CSV 文件 (*.csv);;所有文件 (*.*)"
+            self, "导出问题日志", default_name, "CSV 文件 (*.csv);;所有文件 (*.*)"
         )
         
         if not save_path:
             return
         
-        # 构建导出数据
         export_data = []
         for sample_id in files:
             item = {
@@ -799,12 +679,10 @@ class HealthCheckCard(QWidget):
                 'details': ''
             }
             
-            # 尝试获取详细信息
             if sample_id in self._issue_details:
                 details = self._issue_details[sample_id]
                 item['details'] = str(details.get(issue_type, ''))
             
-            # 构建路径
             if self._data_root:
                 for ext in ['.jpg', '.png', '.jpeg']:
                     img_path = os.path.join(self._data_root, 'JPEGImages', f"{sample_id}{ext}")
@@ -819,19 +697,12 @@ class HealthCheckCard(QWidget):
             
             export_data.append(item)
         
-        # 导出
         if export_issues_to_csv(export_data, save_path, self._data_root):
-            QMessageBox.information(
-                self, 
-                "导出成功", 
-                f"已导出 {len(export_data)} 条记录到:\n{save_path}"
-            )
+            QMessageBox.information(self, "导出成功", f"已导出 {len(export_data)} 条记录到:\n{save_path}")
         else:
             QMessageBox.warning(self, "导出失败", "导出 CSV 文件时发生错误")
     
     def export_all_issues(self) -> None:
-        """导出所有问题到 CSV"""
-        # 收集所有问题
         all_issues = []
         for level, issues in self._issues.items():
             for issue_type, files in issues.items():
@@ -848,22 +719,14 @@ class HealthCheckCard(QWidget):
             QMessageBox.information(self, "提示", "没有问题需要导出")
             return
         
-        # 选择保存路径
         save_path, _ = QFileDialog.getSaveFileName(
-            self,
-            "导出所有问题",
-            "health_check_report.csv",
-            "CSV 文件 (*.csv);;所有文件 (*.*)"
+            self, "导出所有问题", "health_check_report.csv", "CSV 文件 (*.csv);;所有文件 (*.*)"
         )
         
         if not save_path:
             return
         
         if export_issues_to_csv(all_issues, save_path, self._data_root):
-            QMessageBox.information(
-                self, 
-                "导出成功", 
-                f"已导出 {len(all_issues)} 条记录到:\n{save_path}"
-            )
+            QMessageBox.information(self, "导出成功", f"已导出 {len(all_issues)} 条记录到:\n{save_path}")
         else:
             QMessageBox.warning(self, "导出失败", "导出 CSV 文件时发生错误")

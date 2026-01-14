@@ -261,6 +261,14 @@ class Ui_MainWindow(object):
         self.widget_datasetOverview = DatasetOverviewWidget()
         self.widget_datasetOverview.setObjectName(u"widget_datasetOverview")
         self.panel_datasetOverview.add_widget(self.widget_datasetOverview)
+        # 添加 Resplit 按钮到 Header（蓝色强调）
+        self.btn_resplit = self.panel_datasetOverview.add_header_action(
+            text="Resplit",
+            icon_name='fa5s.sync-alt',
+            icon_color='#2196F3',
+            tooltip="重新划分数据集 (Train/Val/Test)"
+        )
+        self.btn_resplit.setEnabled(False)  # 默认禁用，有数据时启用
         self.analysis_panel.set_overview_widget(self.panel_datasetOverview)
         
         # === 底部：深度图表（可折叠面板容器）===
