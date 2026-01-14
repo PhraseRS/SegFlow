@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal, QTimer
 import os
+import numpy as np
 
 
 class InferencePanel(QWidget):
@@ -27,6 +28,7 @@ class InferencePanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.inference_model = None
+        self.last_inference_result = None  # 保存最后一次推理结果
         self._setup_ui()
         self._connect_signals()
         self._init_inference_config()
@@ -239,6 +241,16 @@ class InferencePanel(QWidget):
         self.groupBox_actionExport = QGroupBox("执行与导出 (Action & Export)")
         form_layout = QFormLayout(self.groupBox_actionExport)
         
+        # 自定义预测脚本
+        self.label_customScript = QLabel("自定义预测脚本:")
+        custom_script_layout = QHBoxLayout()
+        self.lineEdit_customScript = QLineEdit()
+        self.lineEdit_customScript.setPlaceholderText("选择自定义预测脚本 (.py) - 可选")
+        self.pushButton_browseCustomScript = QPushButton("浏览...")
+        custom_script_layout.addWidget(self.lineEdit_customScript)
+        custom_script_layout.addWidget(self.pushButton_browseCustomScript)
+        form_layout.addRow(self.label_customScript, custom_script_layout)
+        
         # 运行推理按钮
         self.pushButton_runInference = QPushButton("运行推理 (Run Inference)")
         form_layout.addRow(self.pushButton_runInference)
@@ -316,6 +328,9 @@ class InferencePanel(QWidget):
         
         # 批量目录浏览
         self.pushButton_browseBatchDir.clicked.connect(self._browse_batch_dir)
+        
+        # 自定义脚本浏览
+        self.pushButton_browseCustomScript.clicked.connect(self._browse_custom_script)
         
         # 导出目录浏览
         self.pushButton_browseExportDir.clicked.connect(self._browse_export_dir)
@@ -424,35 +439,36 @@ class InferencePanel(QWidget):
             return False
     
     def _parse_config_file(self, file_path: str) -> dict:
-        """解析配置文件获取模型信息"""
-        # 尝试导入外部解析器
+        """解析配置文件获取模型信息 - 使用增强解析器"""
         try:
-            from config.config_parser import parse_mmseg_config
-            return parse_mmseg_config(file_path)
-        except ImportError:
-            pass
-        
-        # 简单解析
-        config_info = {
-            'model_name': os.path.splitext(os.path.basename(file_path))[0],
-            'classes': None,
-            'palette': None
-        }
-        
-        try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                content = f.read()
+            # 使用增强的配置解析器
+            from core.config_parser import ConfigParser
+            parser = ConfigParser()
             
-            # 尝试提取模型类型
-            import re
-            model_match = re.search(r"type\s*=\s*['\"](\w+)['\"]", content)
-            if model_match:
-                config_info['model_type'] = model_match.group(1)
+            # 解析配置文件
+            classes, palette = parser.parse_config_file(file_path)
+            model_name = parser.extract_model_name(file_path)
+            model_type = parser.extract_model_type(file_path)
             
-        except Exception:
-            pass
-        
-        return config_info
+            # 构建配置信息
+            config_info = {
+                'model_name': model_name or os.path.splitext(os.path.basename(file_path))[0],
+                'model_type': model_type,
+                'classes': classes,
+                'palette': palette
+            }
+            
+            return config_info
+            
+        except Exception as e:
+            # 优雅降级 - 不影响模型加载
+            self._emit_log(f"⚠️  配置解析警告: {e}")
+            return {
+                'model_name': os.path.splitext(os.path.basename(file_path))[0],
+                'model_type': None,
+                'classes': None,
+                'palette': None
+            }
     
     def _suggest_checkpoint_file(self, config_path: str, model_name: str):
         """智能推荐权重文件"""
@@ -549,6 +565,43 @@ class InferencePanel(QWidget):
         if dir_path:
             self.lineEdit_batchDir.setText(dir_path)
     
+    def _browse_custom_script(self):
+        """浏览自定义预测脚本"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "选择自定义预测脚本",
+            "",
+            "Python Files (*.py);;All Files (*.*)"
+        )
+        
+        if not file_path:
+            return
+        
+        self.lineEdit_customScript.setText(file_path)
+        
+        # 验证脚本文件
+        if not os.path.exists(file_path):
+            self._emit_log(f"⚠️  脚本文件不存在: {file_path}")
+            return
+        
+        self._emit_log(f"✅ [推理配置] 已选择自定义脚本: {os.path.basename(file_path)}")
+        
+        # 可选：验证脚本是否包含必要的函数
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            # 检查是否包含常见的推理函数
+            has_inference_func = any(keyword in content for keyword in ['def inference', 'def predict', 'def run'])
+            
+            if has_inference_func:
+                self._emit_log(f"   ✓ 脚本包含推理函数")
+            else:
+                self._emit_log(f"   ⚠️  脚本可能不包含推理函数，请确认")
+        
+        except Exception as e:
+            self._emit_log(f"⚠️  脚本验证失败: {e}")
+    
     def _browse_export_dir(self):
         """浏览导出目录"""
         dir_path = QFileDialog.getExistingDirectory(
@@ -599,14 +652,14 @@ class InferencePanel(QWidget):
         QTimer.singleShot(100, lambda: self._do_load_inference_model(config_path, checkpoint_path, device))
     
     def _do_load_inference_model(self, config_path: str, checkpoint_path: str, device: str):
-        """实际执行模型加载"""
+        """实际执行模型加载 - 增强版本"""
         try:
-            # 解析配置文件获取类别和调色板信息
-            try:
-                config_info = self._parse_config_file(config_path)
-            except Exception as parse_error:
-                self._emit_log(f"⚠️  配置解析警告: {parse_error}")
-                config_info = {'classes': None, 'palette': None, 'model_name': None}
+            # 解析配置文件 - 使用健壮解析器
+            config_info = self._parse_config_file_robust(config_path)
+            
+            # 即使配置解析失败，也继续模型加载
+            if config_info.get('classes') is None:
+                self._emit_log("⚠️  未找到类别信息，将使用默认设置")
             
             # 保存模型信息（实际项目中应使用 MMSegmentation API 加载真实模型）
             self.inference_model = {
@@ -614,16 +667,17 @@ class InferencePanel(QWidget):
                 'checkpoint': checkpoint_path,
                 'device': device,
                 'classes': config_info.get('classes'),
-                'palette': config_info.get('palette')
+                'palette': config_info.get('palette'),
+                'model_name': config_info.get('model_name', 'Unknown Model')
             }
             
             self.pushButton_loadModel.setEnabled(True)
             self.label_modelStatus.setText("模型已就绪")
             self.label_modelStatus.setStyleSheet("color: #28a745; font-weight: bold;")
             
-            # 显示类别图例
+            # 显示类别图例 - 安全版本
             try:
-                self._display_classes_legend(config_info.get('classes'), config_info.get('palette'))
+                self._display_classes_legend_safe(config_info.get('classes'), config_info.get('palette'))
             except Exception as legend_error:
                 self._emit_log(f"⚠️  类别图例显示警告: {legend_error}")
             
@@ -631,16 +685,57 @@ class InferencePanel(QWidget):
             self.model_loaded.emit(self.inference_model)
             
         except Exception as e:
-            self.pushButton_loadModel.setEnabled(True)
-            self.label_modelStatus.setText("加载失败")
-            self.label_modelStatus.setStyleSheet("color: #dc3545; font-weight: bold;")
+            self._handle_model_loading_error(e)
+    
+    def _parse_config_file_robust(self, file_path: str) -> dict:
+        """健壮的配置文件解析"""
+        try:
+            from core.config_parser import ConfigParser
+            parser = ConfigParser()
+            classes, palette = parser.parse_config_file(file_path)
+            model_name = parser.extract_model_name(file_path)
+            model_type = parser.extract_model_type(file_path)
             
-            import traceback
-            error_details = traceback.format_exc()
-            self._emit_log(f"❌ 模型加载失败: {e}")
-            self._emit_log(f"详细错误:\n{error_details}")
-            
-            QMessageBox.critical(self, "模型加载失败", f"模型加载过程中发生错误。\n\n错误信息:\n{str(e)}")
+            return {
+                'classes': classes,
+                'palette': palette,
+                'model_name': model_name,
+                'model_type': model_type
+            }
+        except Exception as e:
+            # 记录警告但不抛出异常
+            self._emit_log(f"⚠️  配置解析失败: {e}")
+            return {
+                'classes': None, 
+                'palette': None, 
+                'model_name': os.path.splitext(os.path.basename(file_path))[0],
+                'model_type': None
+            }
+
+    def _display_classes_legend_safe(self, classes, palette):
+        """安全的类别图例显示"""
+        try:
+            self._display_classes_legend(classes, palette)
+        except Exception as e:
+            self._emit_log(f"⚠️  类别图例显示失败: {e}")
+            # 隐藏图例区域但不影响其他功能
+            try:
+                self.scrollArea_classesLegend.setVisible(False)
+            except:
+                pass
+    
+    def _handle_model_loading_error(self, error: Exception):
+        """处理模型加载错误"""
+        self.pushButton_loadModel.setEnabled(True)
+        self.label_modelStatus.setText("加载失败")
+        self.label_modelStatus.setStyleSheet("color: #dc3545; font-weight: bold;")
+        
+        import traceback
+        error_details = traceback.format_exc()
+        self._emit_log(f"❌ 模型加载失败: {error}")
+        self._emit_log(f"详细错误:\n{error_details}")
+        
+        QMessageBox.critical(self, "模型加载失败", f"模型加载过程中发生错误。\n\n错误信息:\n{str(error)}")
     
     def _display_classes_legend(self, classes, palette):
         """显示类别图例"""
@@ -704,15 +799,240 @@ class InferencePanel(QWidget):
     
     def _run_inference(self):
         """运行单图推理"""
+        # 1. 检查模型是否已加载
         if not self.inference_model:
+            self._emit_log("⚠️  模型未加载，无法执行推理")
             QMessageBox.warning(self, "模型未加载", "请先加载推理模型。")
             return
         
+        # 2. 弹出文件选择对话框选择图片
+        image_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "选择要推理的图像",
+            "",
+            "Image Files (*.png *.jpg *.jpeg *.tif *.tiff *.bmp);;All Files (*.*)"
+        )
+        
+        if not image_path:
+            self._emit_log("⚠️  未选择图像文件")
+            return
+        
+        # 3. 读取选择的图片（验证）
+        if not os.path.exists(image_path):
+            self._emit_log(f"❌ 图像文件不存在: {image_path}")
+            QMessageBox.critical(self, "文件不存在", f"图像文件不存在:\n{image_path}")
+            return
+        
+        try:
+            from PIL import Image
+            
+            # 针对大尺寸遥感影像，提高PIL的像素限制
+            # 默认限制约为178MB像素，这里提高到10GB像素
+            Image.MAX_IMAGE_PIXELS = 10000000000
+            
+            img = Image.open(image_path)
+            img_width, img_height = img.size
+            img_size_mb = os.path.getsize(image_path) / (1024 * 1024)
+            
+            self._emit_log(f"📷 已加载图像: {os.path.basename(image_path)}")
+            self._emit_log(f"   尺寸: {img_width} x {img_height} ({img_width * img_height / 1000000:.1f}M 像素)")
+            self._emit_log(f"   文件大小: {img_size_mb:.2f} MB")
+            
+            # 对于超大图像给出警告和建议
+            if img_width * img_height > 100000000:  # 超过1亿像素
+                self._emit_log(f"⚠️  检测到超大尺寸图像，建议使用滑窗推理")
+                
+                # 如果当前选择的是全图缩放，提示用户切换
+                if self.radioButton_resize.isChecked():
+                    reply = QMessageBox.question(
+                        self,
+                        "超大图像警告",
+                        f"检测到超大尺寸图像 ({img_width} x {img_height})。\n\n"
+                        f"当前选择的是'全图缩放'模式，可能导致内存不足。\n"
+                        f"建议切换到'滑窗推理'模式。\n\n"
+                        f"是否继续使用全图缩放模式？",
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                        QMessageBox.StandardButton.No
+                    )
+                    
+                    if reply == QMessageBox.StandardButton.No:
+                        self._emit_log("⚠️  用户取消推理")
+                        return
+            
+        except Exception as e:
+            self._emit_log(f"❌ 图像读取失败: {e}")
+            QMessageBox.critical(self, "图像读取失败", f"无法读取图像文件。\n\n错误信息:\n{str(e)}")
+            return
+        
+        # 发送推理开始信号
         self.inference_started.emit()
         self._emit_log("🚀 开始单图推理...")
         
-        # TODO: 实现实际的推理逻辑
-        self.label_inferenceResult.setText("推理功能待实现...\n\n请在实际项目中集成 MMSegmentation 推理 API。")
+        # 禁用推理按钮，防止重复点击
+        self.pushButton_runInference.setEnabled(False)
+        self.progressBar_inference.setValue(0)
+        
+        # 获取推理配置
+        strategy = 'resize' if self.radioButton_resize.isChecked() else 'sliding_window'
+        inference_params = {
+            'crop_size': self.spinBox_cropSize.value(),
+            'stride': self.spinBox_stride.value(),
+            'batch_size': self.spinBox_batchSize.value(),
+            'enable_tta': self.checkBox_enableTTA.isChecked(),
+            'conf_threshold': self.doubleSpinBox_confThreshold.value()
+        }
+        
+        self._emit_log(f"   策略模式: {strategy}")
+        if strategy == 'sliding_window':
+            self._emit_log(f"   窗口大小: {inference_params['crop_size']}")
+            self._emit_log(f"   步长: {inference_params['stride']}")
+            self._emit_log(f"   批大小: {inference_params['batch_size']}")
+        self._emit_log(f"   TTA增强: {'启用' if inference_params['enable_tta'] else '禁用'}")
+        
+        # 使用 QTimer 异步执行推理，避免阻塞UI
+        QApplication.processEvents()
+        QTimer.singleShot(100, lambda: self._do_run_inference(image_path, strategy, inference_params))
+    
+    def _do_run_inference(self, image_path: str, strategy: str, inference_params: dict):
+        """实际执行推理任务"""
+        try:
+            # 4. 根据策略模式调用不同推理方法
+            from core.inference_engine import InferenceEngine
+            
+            # 创建推理引擎
+            engine = InferenceEngine(self.inference_model)
+            
+            # 更新进度条
+            self.progressBar_inference.setValue(30)
+            QApplication.processEvents()
+            
+            # 执行推理
+            if strategy == 'sliding_window':
+                result = engine.sliding_window_inference(
+                    image_path,
+                    crop_size=inference_params['crop_size'],
+                    stride=inference_params['stride'],
+                    batch_size=inference_params['batch_size'],
+                    enable_tta=inference_params['enable_tta']
+                )
+            else:  # resize
+                result = engine.resize_inference(
+                    image_path,
+                    enable_tta=inference_params['enable_tta']
+                )
+            
+            # 更新进度条
+            self.progressBar_inference.setValue(80)
+            QApplication.processEvents()
+            
+            # 5. 处理预测结果
+            if result.get('success', False):
+                self._handle_inference_success(image_path, result, inference_params)
+            else:
+                self._handle_inference_error(result.get('error', '未知错误'))
+            
+            # 完成进度条
+            self.progressBar_inference.setValue(100)
+            
+        except Exception as e:
+            self._handle_inference_error(str(e))
+        
+        finally:
+            # 重新启用推理按钮
+            self.pushButton_runInference.setEnabled(True)
+    
+    def _handle_inference_success(self, image_path: str, result: dict, inference_params: dict):
+        """处理推理成功的结果"""
+        try:
+            # 提取结果信息
+            mask = result.get('mask')
+            image_shape = result.get('image_shape', (0, 0))
+            strategy = result.get('strategy', 'unknown')
+            params = result.get('params', {})
+            
+            # 构建结果显示文本
+            result_text = f"✅ 推理完成！\n\n"
+            result_text += f"📷 图像: {os.path.basename(image_path)}\n"
+            result_text += f"📐 尺寸: {image_shape[1]} x {image_shape[0]}\n"
+            result_text += f"🎯 策略: {strategy}\n\n"
+            
+            if strategy == 'sliding_window':
+                result_text += f"窗口参数:\n"
+                result_text += f"  • 窗口大小: {params.get('crop_size', 'N/A')}\n"
+                result_text += f"  • 步长: {params.get('stride', 'N/A')}\n"
+                result_text += f"  • 批大小: {params.get('batch_size', 'N/A')}\n"
+                result_text += f"  • 窗口总数: {params.get('total_windows', 'N/A')}\n"
+            
+            result_text += f"\n推理配置:\n"
+            result_text += f"  • TTA增强: {'启用' if params.get('enable_tta', False) else '禁用'}\n"
+            result_text += f"  • 置信度阈值: {inference_params.get('conf_threshold', 0.5)}\n"
+            
+            # 统计类别分布
+            unique_classes = []  # 初始化变量
+            if mask is not None:
+                unique_classes = np.unique(mask)
+                result_text += f"\n检测到的类别: {len(unique_classes)} 个\n"
+                
+                classes = result.get('classes', [])
+                if classes:
+                    result_text += f"\n类别分布:\n"
+                    for cls_id in unique_classes[:10]:  # 最多显示10个类别
+                        if cls_id < len(classes):
+                            cls_name = classes[cls_id]
+                            pixel_count = np.sum(mask == cls_id)
+                            percentage = (pixel_count / mask.size) * 100
+                            result_text += f"  • {cls_name}: {percentage:.2f}%\n"
+            else:
+                result_text += f"\n⚠️  未生成预测掩码\n"
+            
+            # 更新结果显示
+            self.label_inferenceResult.setText(result_text)
+            
+            # 保存推理结果供导出使用
+            self.last_inference_result = {
+                'image_path': image_path,
+                'mask': mask,
+                'result': result,
+                'params': inference_params
+            }
+            
+            # 发送推理完成信号
+            self.inference_finished.emit(result)
+            
+            self._emit_log("✅ 推理完成")
+            self._emit_log(f"   检测到 {len(unique_classes)} 个类别")
+            
+            # 提示用户可以导出结果
+            QMessageBox.information(
+                self,
+                "推理完成",
+                f"推理已成功完成！\n\n"
+                f"图像: {os.path.basename(image_path)}\n"
+                f"策略: {strategy}\n\n"
+                f"您可以在下方查看详细结果，或点击'导出结果'保存推理结果。"
+            )
+            
+        except Exception as e:
+            self._emit_log(f"⚠️  结果处理警告: {e}")
+            self.label_inferenceResult.setText(f"推理完成，但结果处理出现问题:\n{str(e)}")
+    
+    def _handle_inference_error(self, error_msg: str):
+        """处理推理错误"""
+        self.progressBar_inference.setValue(0)
+        
+        error_text = f"❌ 推理失败\n\n错误信息:\n{error_msg}"
+        self.label_inferenceResult.setText(error_text)
+        
+        self._emit_log(f"❌ 推理失败: {error_msg}")
+        
+        # 发送错误信号
+        self.inference_error.emit(error_msg)
+        
+        QMessageBox.critical(
+            self,
+            "推理失败",
+            f"推理过程中发生错误。\n\n错误信息:\n{error_msg}"
+        )
     
     def _run_batch_inference(self):
         """运行批量推理"""
@@ -749,6 +1069,7 @@ class InferencePanel(QWidget):
             'config_file': self.lineEdit_configFile.text(),
             'checkpoint_file': self.lineEdit_checkpointFile.text(),
             'device': self.comboBox_device.currentText(),
+            'custom_script': self.lineEdit_customScript.text(),
             'inference_mode': 'batch' if self.radioButton_batchInference.isChecked() else 'single',
             'batch_dir': self.lineEdit_batchDir.text(),
             'strategy_mode': 'resize' if self.radioButton_resize.isChecked() else 'sliding_window',
