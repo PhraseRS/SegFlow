@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 image_0001
 image_0002
 image_0003
@@ -9,15 +8,3 @@ image_0007
 image_0008
 image_0009
 image_0010
-=======
-image_0001
-image_0002
-image_0003
-image_0004
-image_0005
-image_0006
-image_0007
-image_0008
-image_0009
-image_0010
->>>>>>> scl

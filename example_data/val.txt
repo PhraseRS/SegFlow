@@ -1,9 +1,3 @@
-<<<<<<< HEAD
 image_0011
 image_0012
 image_0013
-=======
-image_0011
-image_0012
-image_0013
->>>>>>> scl
