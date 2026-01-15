@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QGrap
     QVBoxLayout, QWidget, QListWidget, QListWidgetItem, QListView)
 from ui.widgets.collapsible_widget import CollapsibleContainer, CollapsiblePanel
 from ui.widgets.dataset_overview_widget import DatasetOverviewWidget
+from ui.widgets.smart_canvas import SmartCanvas
 from ui.analysis_panel import AnalysisPanel
 from ui.widgets.class_distribution_widget import ClassDistributionWidget
 from ui.widgets.coverage_analysis_widget import CoverageAnalysisCard
@@ -207,7 +208,7 @@ class Ui_MainWindow(object):
         self.verticalLayout_detailView = QVBoxLayout(self.page_detailView)
         self.verticalLayout_detailView.setObjectName(u"verticalLayout_detailView")
         self.verticalLayout_detailView.setContentsMargins(0, 0, 0, 0)
-        self.graphicsView_canvas = QGraphicsView(self.page_detailView)
+        self.graphicsView_canvas = SmartCanvas(self.page_detailView)
         self.graphicsView_canvas.setObjectName(u"graphicsView_canvas")
         self.graphicsView_canvas.setMinimumSize(QSize(600, 400))
         self.verticalLayout_detailView.addWidget(self.graphicsView_canvas)
