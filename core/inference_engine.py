@@ -68,38 +68,58 @@ class InferenceEngine:
         Returns:
             推理结果字典
         """
-        # 读取图像
-        image = Image.open(image_path)
-        img_array = np.array(image)
-        h, w = img_array.shape[:2]
-        
-        # TODO: 实际项目中使用 MMSegmentation 滑窗推理
-        # from mmseg.apis import inference_segmentor
-        # result = inference_segmentor(self.model, image_path)
-        
-        # 模拟推理结果
-        result_mask = np.zeros((h, w), dtype=np.uint8)
-        
-        # 计算滑窗数量
-        num_windows_h = (h - crop_size) // stride + 1 if h > crop_size else 1
-        num_windows_w = (w - crop_size) // stride + 1 if w > crop_size else 1
-        total_windows = num_windows_h * num_windows_w
-        
-        return {
-            'success': True,
-            'mask': result_mask,
-            'image_shape': (h, w),
-            'strategy': 'sliding_window',
-            'params': {
-                'crop_size': crop_size,
-                'stride': stride,
-                'batch_size': batch_size,
-                'enable_tta': enable_tta,
-                'total_windows': total_windows
-            },
-            'classes': self.model_info.get('classes', []),
-            'palette': self.model_info.get('palette', [])
-        }
+        try:
+            # 读取图像（只获取尺寸，不加载到内存）
+            image = Image.open(image_path)
+            w, h = image.size  # 注意：PIL的size是(width, height)
+            
+            print(f"[推理引擎] 图像尺寸: {w} x {h}")
+            print(f"[推理引擎] 窗口大小: {crop_size}, 步长: {stride}")
+            
+            # 计算滑窗数量
+            num_windows_h = max(1, (h - crop_size) // stride + 1) if h > crop_size else 1
+            num_windows_w = max(1, (w - crop_size) // stride + 1) if w > crop_size else 1
+            total_windows = num_windows_h * num_windows_w
+            
+            print(f"[推理引擎] 窗口数量: {num_windows_h} x {num_windows_w} = {total_windows}")
+            
+            # TODO: 实际项目中使用 MMSegmentation 滑窗推理
+            # from mmseg.apis import inference_segmentor
+            # result = inference_segmentor(self.model, image_path)
+            
+            # 模拟推理结果（不实际加载整个图像到内存）
+            # 对于超大图像，只返回元数据，不创建完整的掩码数组
+            if w * h > 100000000:  # 超过1亿像素
+                print(f"[推理引擎] 检测到超大图像，使用轻量级模式")
+                result_mask = None  # 不创建完整掩码，节省内存
+            else:
+                result_mask = np.zeros((h, w), dtype=np.uint8)
+            
+            return {
+                'success': True,
+                'mask': result_mask,
+                'image_shape': (h, w),
+                'strategy': 'sliding_window',
+                'params': {
+                    'crop_size': crop_size,
+                    'stride': stride,
+                    'batch_size': batch_size,
+                    'enable_tta': enable_tta,
+                    'total_windows': total_windows
+                },
+                'classes': self.model_info.get('classes', []),
+                'palette': self.model_info.get('palette', [])
+            }
+            
+        except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
+            print(f"[推理引擎] 滑窗推理失败: {e}")
+            print(f"[推理引擎] 详细错误:\n{error_details}")
+            return {
+                'success': False,
+                'error': f'滑窗推理失败: {str(e)}\n\n详细信息:\n{error_details}'
+            }
     
     def resize_inference(
         self,
@@ -116,8 +136,46 @@ class InferenceEngine:
         Returns:
             推理结果字典
         """
-        # 读取图像
-        image = Image.open(image_path)
+        try:
+            # 读取图像（只获取尺寸）
+            image = Image.open(image_path)
+            w, h = image.size
+            
+            print(f"[推理引擎] 图像尺寸: {w} x {h}")
+            print(f"[推理引擎] 使用全图缩放推理")
+            
+            # TODO: 实际项目中使用 MMSegmentation 推理
+            # from mmseg.apis import inference_segmentor
+            # result = inference_segmentor(self.model, image_path)
+            
+            # 模拟推理结果
+            if w * h > 100000000:  # 超过1亿像素
+                print(f"[推理引擎] 检测到超大图像，使用轻量级模式")
+                result_mask = None
+            else:
+                result_mask = np.zeros((h, w), dtype=np.uint8)
+            
+            return {
+                'success': True,
+                'mask': result_mask,
+                'image_shape': (h, w),
+                'strategy': 'resize',
+                'params': {
+                    'enable_tta': enable_tta
+                },
+                'classes': self.model_info.get('classes', []),
+                'palette': self.model_info.get('palette', [])
+            }
+            
+        except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
+            print(f"[推理引擎] 全图缩放推理失败: {e}")
+            print(f"[推理引擎] 详细错误:\n{error_details}")
+            return {
+                'success': False,
+                'error': f'全图缩放推理失败: {str(e)}\n\n详细信息:\n{error_details}'
+            }
         img_array = np.array(image)
         h, w = img_array.shape[:2]
         

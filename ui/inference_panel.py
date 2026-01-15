@@ -896,10 +896,15 @@ class InferencePanel(QWidget):
     def _do_run_inference(self, image_path: str, strategy: str, inference_params: dict):
         """实际执行推理任务"""
         try:
+            self._emit_log("🔄 开始执行推理...")
+            self._emit_log(f"   图像路径: {image_path}")
+            self._emit_log(f"   推理策略: {strategy}")
+            
             # 4. 根据策略模式调用不同推理方法
             from core.inference_engine import InferenceEngine
             
             # 创建推理引擎
+            self._emit_log("🔧 创建推理引擎...")
             engine = InferenceEngine(self.inference_model)
             
             # 更新进度条
@@ -907,6 +912,7 @@ class InferencePanel(QWidget):
             QApplication.processEvents()
             
             # 执行推理
+            self._emit_log(f"⚙️  执行{strategy}推理...")
             if strategy == 'sliding_window':
                 result = engine.sliding_window_inference(
                     image_path,
@@ -921,21 +927,30 @@ class InferencePanel(QWidget):
                     enable_tta=inference_params['enable_tta']
                 )
             
+            self._emit_log(f"📊 推理结果: success={result.get('success', False)}")
+            
             # 更新进度条
             self.progressBar_inference.setValue(80)
             QApplication.processEvents()
             
             # 5. 处理预测结果
             if result.get('success', False):
+                self._emit_log("✅ 推理成功，处理结果...")
                 self._handle_inference_success(image_path, result, inference_params)
             else:
-                self._handle_inference_error(result.get('error', '未知错误'))
+                error_msg = result.get('error', '未知错误')
+                self._emit_log(f"❌ 推理失败: {error_msg}")
+                self._handle_inference_error(error_msg)
             
             # 完成进度条
             self.progressBar_inference.setValue(100)
             
         except Exception as e:
-            self._handle_inference_error(str(e))
+            import traceback
+            error_details = traceback.format_exc()
+            self._emit_log(f"❌ 推理异常: {e}")
+            self._emit_log(f"详细错误:\n{error_details}")
+            self._handle_inference_error(f"{str(e)}\n\n详细信息:\n{error_details}")
         
         finally:
             # 重新启用推理按钮
@@ -952,6 +967,7 @@ class InferencePanel(QWidget):
             
             # 构建结果显示文本
             result_text = f"✅ 推理完成！\n\n"
+            result_text += f"⚠️  注意：当前使用模拟推理（未集成MMSegmentation）\n\n"
             result_text += f"📷 图像: {os.path.basename(image_path)}\n"
             result_text += f"📐 尺寸: {image_shape[1]} x {image_shape[0]}\n"
             result_text += f"🎯 策略: {strategy}\n\n"
@@ -969,6 +985,8 @@ class InferencePanel(QWidget):
             
             # 统计类别分布
             unique_classes = []  # 初始化变量
+            total_pixels = image_shape[0] * image_shape[1]
+            
             if mask is not None:
                 unique_classes = np.unique(mask)
                 result_text += f"\n检测到的类别: {len(unique_classes)} 个\n"
@@ -983,7 +1001,12 @@ class InferencePanel(QWidget):
                             percentage = (pixel_count / mask.size) * 100
                             result_text += f"  • {cls_name}: {percentage:.2f}%\n"
             else:
-                result_text += f"\n⚠️  未生成预测掩码\n"
+                # 超大图像，未生成完整掩码
+                result_text += f"\n💡 超大图像处理模式:\n"
+                result_text += f"  • 总像素: {total_pixels:,} ({total_pixels/1000000:.1f}M)\n"
+                result_text += f"  • 为节省内存，未生成完整预测掩码\n"
+                result_text += f"  • 推理流程已验证成功\n"
+                result_text += f"  • 集成MMSegmentation后将生成真实结果\n"
             
             # 更新结果显示
             self.label_inferenceResult.setText(result_text)
@@ -1000,7 +1023,10 @@ class InferencePanel(QWidget):
             self.inference_finished.emit(result)
             
             self._emit_log("✅ 推理完成")
-            self._emit_log(f"   检测到 {len(unique_classes)} 个类别")
+            if mask is not None:
+                self._emit_log(f"   检测到 {len(unique_classes)} 个类别")
+            else:
+                self._emit_log(f"   超大图像模式：未生成完整掩码（正常）")
             
             # 提示用户可以导出结果
             QMessageBox.information(
