@@ -472,6 +472,10 @@ class MainWindow(QMainWindow):
         self.ui.inference_panel.inference_started.connect(self._on_inference_started)
         self.ui.inference_panel.inference_finished.connect(self._on_inference_finished)
         self.ui.inference_panel.inference_error.connect(self._on_inference_error)
+        
+        # ========== 核心：主 Tab 与侧边栏联动 ==========
+        # 右侧 Tab 切换时，自动切换左侧侧边栏
+        self.ui.tabWidget_contextControl.currentChanged.connect(self._on_main_tab_changed)
     
     def _init_layer_controls(self):
         """初始化图层控制"""
@@ -1050,6 +1054,48 @@ class MainWindow(QMainWindow):
         """卷帘位置滑块变化"""
         self.image_viewer.set_swipe_position(value)
         self.ui.label_swipeValue.setText(f"{value}%")
+    
+    # ==================== 主 Tab 与侧边栏联动 ====================
+    
+    # 视图模式常量
+    VIEW_MODE_GIS = 2  # GIS 视图（推理模式）
+    
+    def _on_main_tab_changed(self, index: int):
+        """
+        主 Tab 切换时的处理槽函数
+        
+        Tab Index 与 Sidebar Stack Index 映射关系:
+        - Tab 0 (Data Profile)    -> Sidebar 0 (SampleManagementSidebar), View 0/1 (Detail/Grid)
+        - Tab 1 (Task Config)     -> Sidebar 0 (SampleManagementSidebar), View 0/1 (Detail/Grid)
+        - Tab 2 (Inference)       -> Sidebar 1 (GISLayerControlSidebar), View 2 (GIS)
+        
+        Args:
+            index: 当前激活的 Tab 索引
+        """
+        # 定义 Tab Index 到 Sidebar Index 的映射
+        TAB_TO_SIDEBAR_MAP = {
+            0: 0,  # Data Profile -> SampleManagement
+            1: 0,  # Task Config  -> SampleManagement
+            2: 1,  # Inference    -> GISLayerControl
+        }
+        
+        sidebar_index = TAB_TO_SIDEBAR_MAP.get(index, 0)
+        self.ui.sidebar_stack.setCurrentIndex(sidebar_index)
+        
+        # 切换到推理模式时，显示 GIS 视图
+        if index == 2:
+            self.ui.stackedWidget_views.setCurrentIndex(2)  # GIS View
+        else:
+            # 非推理模式，恢复到之前的视图模式（Detail 或 Grid）
+            self.ui.stackedWidget_views.setCurrentIndex(self.current_view_mode)
+        
+        # 根据模式更新状态栏提示
+        mode_names = {
+            0: "数据洞察模式",
+            1: "任务配置模式", 
+            2: "推理可视化模式"
+        }
+        self.statusBar().showMessage(f"已切换到 {mode_names.get(index, '未知模式')}")
     
     def on_switch_to_detail_view(self):
         """切换到详情视图"""

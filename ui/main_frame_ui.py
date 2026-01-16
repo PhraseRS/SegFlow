@@ -26,6 +26,8 @@ from PySide6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QGrap
 from ui.widgets.collapsible_widget import CollapsibleContainer, CollapsiblePanel
 from ui.widgets.dataset_overview_widget import DatasetOverviewWidget
 from ui.widgets.smart_canvas import SmartCanvas
+from ui.widgets.sidebar_widgets import SampleManagementSidebar, GISLayerControlSidebar, TaskConfigSidebar
+from ui.widgets.gis_canvas import GISCanvasWidget
 from ui.analysis_panel import AnalysisPanel
 from ui.widgets.class_distribution_widget import ClassDistributionWidget
 from ui.widgets.coverage_analysis_widget import CoverageAnalysisCard
@@ -74,124 +76,40 @@ class Ui_MainWindow(object):
         self.splitter_horizontal = QSplitter(self.splitter_vertical)
         self.splitter_horizontal.setObjectName(u"splitter_horizontal")
         self.splitter_horizontal.setOrientation(Qt.Orientation.Horizontal)
-        self.leftPanel = QWidget(self.splitter_horizontal)
-        self.leftPanel.setObjectName(u"leftPanel")
-        self.verticalLayout_left = QVBoxLayout(self.leftPanel)
-        self.verticalLayout_left.setObjectName(u"verticalLayout_left")
-        self.verticalLayout_left.setContentsMargins(0, 0, 0, 0)
-        self.groupBox_dataSource = QGroupBox(self.leftPanel)
-        self.groupBox_dataSource.setObjectName(u"groupBox_dataSource")
-        sizePolicy = QSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(3)
-        sizePolicy.setHeightForWidth(self.groupBox_dataSource.sizePolicy().hasHeightForWidth())
-        self.groupBox_dataSource.setSizePolicy(sizePolicy)
-        self.verticalLayout_dataSource = QVBoxLayout(self.groupBox_dataSource)
-        self.verticalLayout_dataSource.setObjectName(u"verticalLayout_dataSource")
-        self.treeWidget_dataSources = QTreeWidget(self.groupBox_dataSource)
-        __qtreewidgetitem = QTreeWidgetItem()
-        __qtreewidgetitem.setText(0, u"1");
-        self.treeWidget_dataSources.setHeaderItem(__qtreewidgetitem)
-        self.treeWidget_dataSources.setObjectName(u"treeWidget_dataSources")
-        self.treeWidget_dataSources.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.treeWidget_dataSources.setHeaderHidden(True)
-
-        self.verticalLayout_dataSource.addWidget(self.treeWidget_dataSources)
-
-        self.pushButton_addSample = QPushButton(self.groupBox_dataSource)
-        self.pushButton_addSample.setObjectName(u"pushButton_addSample")
-
-        self.verticalLayout_dataSource.addWidget(self.pushButton_addSample)
-
-
-        self.verticalLayout_left.addWidget(self.groupBox_dataSource)
-
-        self.groupBox_layerControl = QGroupBox(self.leftPanel)
-        self.groupBox_layerControl.setObjectName(u"groupBox_layerControl")
-        sizePolicy1 = QSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
-        sizePolicy1.setHorizontalStretch(0)
-        sizePolicy1.setVerticalStretch(1)
-        sizePolicy1.setHeightForWidth(self.groupBox_layerControl.sizePolicy().hasHeightForWidth())
-        self.groupBox_layerControl.setSizePolicy(sizePolicy1)
-        self.verticalLayout_layerControl = QVBoxLayout(self.groupBox_layerControl)
-        self.verticalLayout_layerControl.setObjectName(u"verticalLayout_layerControl")
-        self.checkBox_overlayPrediction = QCheckBox(self.groupBox_layerControl)
-        self.checkBox_overlayPrediction.setObjectName(u"checkBox_overlayPrediction")
-        self.checkBox_overlayPrediction.setChecked(True)
-
-        self.verticalLayout_layerControl.addWidget(self.checkBox_overlayPrediction)
-
-        self.checkBox_baseImage = QCheckBox(self.groupBox_layerControl)
-        self.checkBox_baseImage.setObjectName(u"checkBox_baseImage")
-        self.checkBox_baseImage.setChecked(True)
-
-        self.verticalLayout_layerControl.addWidget(self.checkBox_baseImage)
-
-        self.checkBox_labelOnly = QCheckBox(self.groupBox_layerControl)
-        self.checkBox_labelOnly.setObjectName(u"checkBox_labelOnly")
-        self.checkBox_labelOnly.setChecked(False)
-
-        self.verticalLayout_layerControl.addWidget(self.checkBox_labelOnly)
-
-        self.horizontalLayout_opacity = QHBoxLayout()
-        self.horizontalLayout_opacity.setObjectName(u"horizontalLayout_opacity")
-        self.label_opacity = QLabel(self.groupBox_layerControl)
-        self.label_opacity.setObjectName(u"label_opacity")
-
-        self.horizontalLayout_opacity.addWidget(self.label_opacity)
-
-        self.slider_opacity = QSlider(self.groupBox_layerControl)
-        self.slider_opacity.setObjectName(u"slider_opacity")
-        self.slider_opacity.setMinimum(0)
-        self.slider_opacity.setMaximum(100)
-        self.slider_opacity.setValue(70)
-        self.slider_opacity.setOrientation(Qt.Orientation.Horizontal)
-
-        self.horizontalLayout_opacity.addWidget(self.slider_opacity)
-
-        self.label_opacityValue = QLabel(self.groupBox_layerControl)
-        self.label_opacityValue.setObjectName(u"label_opacityValue")
-
-        self.horizontalLayout_opacity.addWidget(self.label_opacityValue)
-
-
-        self.verticalLayout_layerControl.addLayout(self.horizontalLayout_opacity)
-
-        self.checkBox_swipeCompare = QCheckBox(self.groupBox_layerControl)
-        self.checkBox_swipeCompare.setObjectName(u"checkBox_swipeCompare")
-        self.checkBox_swipeCompare.setChecked(False)
-
-        self.verticalLayout_layerControl.addWidget(self.checkBox_swipeCompare)
-
-        self.horizontalLayout_swipe = QHBoxLayout()
-        self.horizontalLayout_swipe.setObjectName(u"horizontalLayout_swipe")
-        self.label_swipe = QLabel(self.groupBox_layerControl)
-        self.label_swipe.setObjectName(u"label_swipe")
-
-        self.horizontalLayout_swipe.addWidget(self.label_swipe)
-
-        self.slider_swipe = QSlider(self.groupBox_layerControl)
-        self.slider_swipe.setObjectName(u"slider_swipe")
-        self.slider_swipe.setMinimum(0)
-        self.slider_swipe.setMaximum(100)
-        self.slider_swipe.setValue(50)
-        self.slider_swipe.setOrientation(Qt.Orientation.Horizontal)
-        self.slider_swipe.setEnabled(False)
-
-        self.horizontalLayout_swipe.addWidget(self.slider_swipe)
-
-        self.label_swipeValue = QLabel(self.groupBox_layerControl)
-        self.label_swipeValue.setObjectName(u"label_swipeValue")
-
-        self.horizontalLayout_swipe.addWidget(self.label_swipeValue)
-
-
-        self.verticalLayout_layerControl.addLayout(self.horizontalLayout_swipe)
-
-
-        self.verticalLayout_left.addWidget(self.groupBox_layerControl)
-
-        self.splitter_horizontal.addWidget(self.leftPanel)
+        
+        # ========== 左侧面板：上下文感知侧边栏 (Context-Aware Sidebar) ==========
+        # 使用 QStackedWidget 实现动态切换
+        # Index 映射:
+        #   0 -> SampleManagementSidebar (Data Profile / Task Config 模式)
+        #   1 -> GISLayerControlSidebar (Inference 模式)
+        self.sidebar_stack = QStackedWidget()
+        self.sidebar_stack.setObjectName(u"sidebar_stack")
+        self.sidebar_stack.setMinimumWidth(250)
+        self.sidebar_stack.setMaximumWidth(400)
+        
+        # Sidebar Index 0: 样本管理侧边栏 (用于 Data Profile 和 Task Config)
+        self.sidebar_sampleManagement = SampleManagementSidebar()
+        self.sidebar_sampleManagement.setObjectName(u"sidebar_sampleManagement")
+        self.sidebar_stack.addWidget(self.sidebar_sampleManagement)
+        
+        # Sidebar Index 1: GIS 图层控制侧边栏 (用于 Inference)
+        self.sidebar_gisLayerControl = GISLayerControlSidebar()
+        self.sidebar_gisLayerControl.setObjectName(u"sidebar_gisLayerControl")
+        self.sidebar_stack.addWidget(self.sidebar_gisLayerControl)
+        
+        # 为了向后兼容，创建别名引用
+        self.treeWidget_dataSources = self.sidebar_sampleManagement.treeWidget_dataSources
+        self.pushButton_addSample = self.sidebar_sampleManagement.pushButton_addSample
+        self.checkBox_overlayPrediction = self.sidebar_sampleManagement.checkBox_overlayPrediction
+        self.checkBox_baseImage = self.sidebar_sampleManagement.checkBox_baseImage
+        self.checkBox_labelOnly = self.sidebar_sampleManagement.checkBox_labelOnly
+        self.slider_opacity = self.sidebar_sampleManagement.slider_opacity
+        self.label_opacityValue = self.sidebar_sampleManagement.label_opacityValue
+        self.checkBox_swipeCompare = self.sidebar_sampleManagement.checkBox_swipeCompare
+        self.slider_swipe = self.sidebar_sampleManagement.slider_swipe
+        self.label_swipeValue = self.sidebar_sampleManagement.label_swipeValue
+        
+        self.splitter_horizontal.addWidget(self.sidebar_stack)
         self.centerPanel = QWidget(self.splitter_horizontal)
         self.centerPanel.setObjectName(u"centerPanel")
         self.verticalLayout_center = QVBoxLayout(self.centerPanel)
@@ -232,6 +150,21 @@ class Ui_MainWindow(object):
         self.listWidget_thumbnails.setMinimumSize(QSize(600, 400))
         self.verticalLayout_gridView.addWidget(self.listWidget_thumbnails)
         self.stackedWidget_views.addWidget(self.page_gridView)
+        
+        # 页面2: GIS 视图 (用于推理可视化)
+        self.page_gisView = QWidget()
+        self.page_gisView.setObjectName(u"page_gisView")
+        self.verticalLayout_gisView = QVBoxLayout(self.page_gisView)
+        self.verticalLayout_gisView.setObjectName(u"verticalLayout_gisView")
+        self.verticalLayout_gisView.setContentsMargins(0, 0, 0, 0)
+        self.gisCanvas = GISCanvasWidget(self.page_gisView)
+        self.gisCanvas.setObjectName(u"gisCanvas")
+        self.gisCanvas.setMinimumSize(QSize(600, 400))
+        self.verticalLayout_gisView.addWidget(self.gisCanvas)
+        self.stackedWidget_views.addWidget(self.page_gisView)
+        
+        # 连接 GIS 侧边栏与 GIS 画布
+        self.sidebar_gisLayerControl.set_canvas(self.gisCanvas)
 
         self.verticalLayout_center.addWidget(self.stackedWidget_views)
 
@@ -507,7 +440,7 @@ class Ui_MainWindow(object):
         self.toolBar.addAction(self.action_gridView)
 
         self.retranslateUi(MainWindow)
-        self.slider_opacity.valueChanged.connect(self.label_opacityValue.setNum)
+        # slider_opacity 信号连接已移至 SampleManagementSidebar 内部
 
         self.tabWidget_tasks.setCurrentIndex(0)
         self.tabWidget_bottom.setCurrentIndex(0)
@@ -554,17 +487,7 @@ class Ui_MainWindow(object):
         self.action_about.setText(QCoreApplication.translate("MainWindow", u"\u5173\u4e8e", None))
         self.action_detailView.setText(QCoreApplication.translate("MainWindow", u"\u8be6\u60c5\u89c6\u56fe (Detail)", None))
         self.action_gridView.setText(QCoreApplication.translate("MainWindow", u"\u7f51\u683c\u89c6\u56fe (Grid)", None))
-        self.groupBox_dataSource.setTitle(QCoreApplication.translate("MainWindow", u"\u6570\u636e\u6e90\u7ba1\u7406 (Data Source Manager)", None))
-        self.pushButton_addSample.setText(QCoreApplication.translate("MainWindow", u"\u6dfb\u52a0\u6837\u672c", None))
-        self.groupBox_layerControl.setTitle(QCoreApplication.translate("MainWindow", u"\u56fe\u5c42\u63a7\u5236 (Layer Control)", None))
-        self.checkBox_overlayPrediction.setText(QCoreApplication.translate("MainWindow", u"Overlay Prediction", None))
-        self.checkBox_baseImage.setText(QCoreApplication.translate("MainWindow", u"Base Image (RGB/False Color)", None))
-        self.checkBox_labelOnly.setText(QCoreApplication.translate("MainWindow", u"Label Only", None))
-        self.label_opacity.setText(QCoreApplication.translate("MainWindow", u"Opacity:", None))
-        self.label_opacityValue.setText(QCoreApplication.translate("MainWindow", u"70%", None))
-        self.checkBox_swipeCompare.setText(QCoreApplication.translate("MainWindow", u"\u5377\u5e18\u5bf9\u6bd4 (Swipe Compare)", None))
-        self.label_swipe.setText(QCoreApplication.translate("MainWindow", u"Position:", None))
-        self.label_swipeValue.setText(QCoreApplication.translate("MainWindow", u"50%", None))
+        # 侧边栏组件内部已设置文本，无需在此翻译
         
         # Tab 1: 数据洞察（使用可折叠面板，标题在组件中设置）
         self.tabWidget_contextControl.setTabText(self.tabWidget_contextControl.indexOf(self.tab_dataProfile), QCoreApplication.translate("MainWindow", u"\u6570\u636e\u6d1e\u5bdf (Data Profile)", None))
