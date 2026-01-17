@@ -177,9 +177,14 @@ class ImageLoaderThread(QThread):
                 self.msleep(50)
     
     def stop(self):
+        """停止线程"""
         self._running = False
         self._worker.cancel()
-        self.wait()
+        # 等待线程结束 (最多5秒)
+        if not self.wait(5000):
+            print("⚠️ ImageLoaderThread: 强制终止")
+            self.terminate()
+            self.wait()
 
 
 class ImageLayerInfo:
@@ -364,8 +369,21 @@ class SmartCanvas(QGraphicsView):
         self._loader_thread.finished.connect(self._on_layer_loaded)
         self._loader_thread.start()
         
+        # 确保销毁时停止线程
+        self.destroyed.connect(self._cleanup_thread)
+        
         # 交互状态
         self._is_panning = False
+        
+        # 保存上一次的视图变换 (用于 Zoom to Last)
+        self._last_transform: Optional[QTransform] = None
+        self._last_center: Optional[QPointF] = None
+        
+        # 是否处于"视口原始分辨率"模式 (只加载了视口区域)
+        self._is_native_viewport_mode = False
+        
+        # 右键菜单
+        self._setup_context_menu()
         
     def _setup_view(self):
         self.setRenderHint(QPainter.RenderHint.Antialiasing, False)
@@ -380,6 +398,165 @@ class SmartCanvas(QGraphicsView):
         
         # 禁用视口缓存提升性能
         self.setCacheMode(QGraphicsView.CacheModeFlag.CacheNone)
+        
+        # 启用右键菜单
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+    
+    def _setup_context_menu(self):
+        """创建右键菜单"""
+        self._context_menu = QMenu(self)
+        
+        # Zoom Full - 适应窗口
+        self._action_zoom_full = QAction("🔲 适应窗口 (Zoom Full)", self)
+        self._action_zoom_full.triggered.connect(self._on_zoom_full)
+        self._context_menu.addAction(self._action_zoom_full)
+        
+        # Zoom to Native Resolution - 原始分辨率 (1:1)
+        self._action_zoom_native = QAction("🔍 原始分辨率 (1:1)", self)
+        self._action_zoom_native.triggered.connect(self._on_zoom_native)
+        self._context_menu.addAction(self._action_zoom_native)
+        
+        self._context_menu.addSeparator()
+        
+        # Zoom to Last - 恢复上次缩放
+        self._action_zoom_last = QAction("↩️ 恢复上次视图 (Zoom to Last)", self)
+        self._action_zoom_last.triggered.connect(self._on_zoom_last)
+        self._action_zoom_last.setEnabled(False)  # 初始禁用
+        self._context_menu.addAction(self._action_zoom_last)
+        
+        # 连接菜单显示信号
+        self.customContextMenuRequested.connect(self._show_context_menu)
+    
+    def _show_context_menu(self, pos):
+        """显示右键菜单"""
+        # 更新菜单项状态
+        self._action_zoom_last.setEnabled(self._last_transform is not None)
+        
+        # 在鼠标位置显示菜单
+        self._context_menu.exec(self.mapToGlobal(pos))
+    
+    def _save_current_view(self):
+        """保存当前视图状态"""
+        self._last_transform = QTransform(self.transform())
+        self._last_center = self.mapToScene(self.viewport().rect().center())
+    
+    def _on_zoom_full(self):
+        """Zoom Full - 适应窗口显示完整图像"""
+        self._save_current_view()
+        self.fit_to_view()
+    
+    def _on_zoom_native(self):
+        """Zoom to Native Resolution - 缩放到原始分辨率 (1:1)"""
+        self._save_current_view()
+        
+        # 获取当前视图中心 (在场景坐标中)
+        current_center = self.mapToScene(self.viewport().rect().center())
+        
+        # 重置变换到 1:1
+        self.resetTransform()
+        
+        # 保持当前视图中心不变
+        self.centerOn(current_center)
+        
+        # 停止防抖定时器
+        self._lod_update_timer.stop()
+        
+        # 获取当前视口在场景中的矩形 (1:1 缩放后)
+        viewport_rect = self.mapToScene(self.viewport().rect()).boundingRect()
+        
+        # 同步加载视口区域的原始分辨率
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            self._current_lod_level = 1
+            self._is_native_viewport_mode = True  # 标记进入视口原始分辨率模式
+            for z_value, layer_info in self._layers.items():
+                print(f"🔍 加载视口区域原始分辨率: z={z_value}")
+                self._load_viewport_at_native(layer_info, viewport_rect)
+            self.lod_changed.emit(1)
+        finally:
+            QApplication.restoreOverrideCursor()
+    
+    def _load_viewport_at_native(self, layer_info: ImageLayerInfo, viewport_rect: QRectF):
+        """仅加载视口区域的原始分辨率"""
+        if not HAS_RASTERIO:
+            return
+        
+        path = layer_info.path
+        
+        # 计算视口对应的像素区域 (加边距)
+        margin = 512  # 边距像素
+        x1 = max(0, int(viewport_rect.left()) - margin)
+        y1 = max(0, int(viewport_rect.top()) - margin)
+        x2 = min(layer_info.width, int(viewport_rect.right()) + margin)
+        y2 = min(layer_info.height, int(viewport_rect.bottom()) + margin)
+        
+        win_w = x2 - x1
+        win_h = y2 - y1
+        
+        if win_w <= 0 or win_h <= 0:
+            return
+        
+        print(f"   视口区域: ({x1}, {y1}) - ({x2}, {y2}), 尺寸: {win_w} x {win_h}")
+        
+        try:
+            with rasterio.open(path) as src:
+                window = Window(x1, y1, win_w, win_h)
+                
+                if src.count == 1:
+                    data = src.read(1, window=window)
+                elif src.count >= 3:
+                    r = src.read(1, window=window)
+                    g = src.read(2, window=window)
+                    b = src.read(3, window=window)
+                    data = cv2.merge([b, g, r])
+                else:
+                    data = src.read(1, window=window)
+                
+                print(f"   已读取: shape={data.shape}")
+                
+                if layer_info.apply_colormap and data.ndim == 2:
+                    data = self._apply_voc_colormap(data)
+                
+                pixmap = self._numpy_to_pixmap(data)
+                
+                # 创建或更新 item，设置正确的位置偏移
+                if layer_info.item is None:
+                    layer_info.item = QGraphicsPixmapItem(pixmap)
+                    layer_info.item.setZValue(layer_info.z_value)
+                    layer_info.item.setOpacity(layer_info.opacity)
+                    self._scene.addItem(layer_info.item)
+                else:
+                    layer_info.item.setPixmap(pixmap)
+                
+                layer_info.item.setTransformationMode(Qt.TransformationMode.SmoothTransformation)
+                layer_info.item.setScale(1.0)  # 1:1 显示
+                layer_info.item.setPos(x1, y1)  # 设置位置偏移
+                layer_info.current_level = 1
+                
+                print(f"   ✅ 视口区域已加载")
+                
+        except Exception as e:
+            print(f"   ⚠️ 加载失败: {e}")
+    
+    def _on_zoom_last(self):
+        """Zoom to Last - 恢复上一次的缩放状态"""
+        if self._last_transform is None:
+            return
+        
+        # 交换当前和上次的变换
+        current_transform = QTransform(self.transform())
+        current_center = self.mapToScene(self.viewport().rect().center())
+        
+        # 恢复上次变换
+        self.setTransform(self._last_transform)
+        if self._last_center:
+            self.centerOn(self._last_center)
+        
+        # 保存当前作为新的"上次"
+        self._last_transform = current_transform
+        self._last_center = current_center
+        
+        self._schedule_lod_update(self.LOD_UPDATE_DELAY_ZOOM)
 
     def load_image_layer(
         self, path: str, pos: Tuple[int, int] = (0, 0), 
@@ -440,10 +617,12 @@ class SmartCanvas(QGraphicsView):
             self._schedule_lod_update(self.LOD_UPDATE_DELAY_ZOOM)
 
     def zoom_in(self, *args):
+        self._save_current_view()
         self.scale(1.2, 1.2)
         self._schedule_lod_update(self.LOD_UPDATE_DELAY_ZOOM)
 
     def zoom_out(self, *args):
+        self._save_current_view()
         self.scale(1 / 1.2, 1 / 1.2)
         self._schedule_lod_update(self.LOD_UPDATE_DELAY_ZOOM)
 
@@ -526,6 +705,33 @@ class SmartCanvas(QGraphicsView):
         
         self.lod_changed.emit(required_level)
     
+    def _force_lod_level(self, level: int):
+        """强制加载指定的LOD级别 (用于1:1缩放等场景)"""
+        if not self._layers:
+            return
+        
+        # 停止防抖定时器，避免被自动更新覆盖
+        self._lod_update_timer.stop()
+        
+        print(f"🔄 强制 LOD 级别: {level}")
+        self._current_lod_level = level
+        
+        for z_value, layer_info in self._layers.items():
+            # 检查缓存
+            cached = layer_info.cache.get(level)
+            if cached:
+                pixmap, scale, offset = cached
+                self._apply_pixmap(layer_info, pixmap, scale, offset, level)
+            else:
+                # 后台加载
+                if layer_info.loading_level != level:
+                    layer_info.loading_level = level
+                    self._loader_thread.add_task(
+                        z_value, layer_info.path, level, layer_info.apply_colormap
+                    )
+        
+        self.lod_changed.emit(level)
+    
     def _on_layer_loaded(self, z_value: int, level: int, pixmap: QPixmap, scale: float, offset: tuple):
         """后台加载完成回调"""
         if z_value not in self._layers:
@@ -537,8 +743,17 @@ class SmartCanvas(QGraphicsView):
         layer_info.cache.put(level, pixmap, scale, offset)
         layer_info.loading_level = 0
         
-        # 如果仍是当前需要的级别，应用
-        if level == self._current_lod_level or layer_info.current_level == 0:
+        # 应用条件：
+        # 1. 加载的级别等于当前需要的级别
+        # 2. 或者加载的是更高分辨率（更小的level值）
+        # 3. 或者当前还没有加载过
+        should_apply = (
+            level == self._current_lod_level or 
+            level < layer_info.current_level or
+            layer_info.current_level == 0
+        )
+        
+        if should_apply:
             self._apply_pixmap(layer_info, pixmap, scale, offset, level)
     
     def _apply_pixmap(self, layer_info: ImageLayerInfo, pixmap: QPixmap, scale: float, offset: tuple, level: int):
@@ -557,17 +772,52 @@ class SmartCanvas(QGraphicsView):
         layer_info.current_level = level
     
     def _load_layer_sync(self, layer_info: ImageLayerInfo, level: int):
-        """同步加载 (初始加载用)"""
+        """同步加载"""
         data, scale, offset = DynamicImageReader.read_at_level(layer_info.path, level)
         if data is None:
+            print(f"⚠️ 同步加载失败: level={level}")
             return
+        
+        print(f"✅ 已加载: level={level}, shape={data.shape}, scale={scale}, "
+              f"原始尺寸=({layer_info.width}, {layer_info.height})")
         
         if layer_info.apply_colormap and data.ndim == 2:
             data = self._apply_voc_colormap(data)
         
         pixmap = self._numpy_to_pixmap(data)
+        print(f"   Pixmap: {pixmap.width()}x{pixmap.height()}")
+        
         layer_info.cache.put(level, pixmap, scale, offset)
         self._apply_pixmap(layer_info, pixmap, scale, offset, level)
+    
+    def _restore_cached_overview(self):
+        """从缓存恢复低分辨率整图 (退出视口原始分辨率模式时)"""
+        view_scale = self._get_view_scale()
+        target_level = DynamicImageReader.get_required_level(view_scale)
+        
+        print(f"🔄 恢复缓存概览图: target_level={target_level}")
+        
+        for z_value, layer_info in self._layers.items():
+            # 尝试从缓存获取合适级别的图像
+            # 按优先级尝试: target_level, 然后更低分辨率的级别
+            levels_to_try = [target_level, target_level * 2, target_level * 4, 8, 16, 32]
+            
+            restored = False
+            for level in levels_to_try:
+                cached = layer_info.cache.get(level)
+                if cached:
+                    pixmap, scale, offset = cached
+                    print(f"   ✅ 从缓存恢复 level={level}")
+                    self._apply_pixmap(layer_info, pixmap, scale, offset, level)
+                    restored = True
+                    break
+            
+            if not restored:
+                # 缓存中没有，同步加载一个低分辨率版本
+                print(f"   ⚠️ 缓存未命中，同步加载 level={target_level}")
+                self._load_layer_sync(layer_info, max(target_level, 8))
+        
+        self._current_lod_level = target_level
 
     def _update_scene_rect(self):
         if not self._layers:
@@ -627,12 +877,28 @@ class SmartCanvas(QGraphicsView):
     # ========== Events ==========
     
     def wheelEvent(self, event: QWheelEvent):
+        # 保存当前状态 (仅在显著缩放时)
+        if not hasattr(self, '_wheel_save_pending'):
+            self._wheel_save_pending = False
+        
+        if not self._wheel_save_pending:
+            self._save_current_view()
+            self._wheel_save_pending = True
+            # 500ms后重置标志
+            QTimer.singleShot(500, lambda: setattr(self, '_wheel_save_pending', False))
+        
         factor = 1.15 if event.angleDelta().y() > 0 else 1 / 1.15
         old_pos = self.mapToScene(event.position().toPoint())
         self.scale(factor, factor)
         new_pos = self.mapToScene(event.position().toPoint())
         delta = new_pos - old_pos
         self.translate(delta.x(), delta.y())
+        
+        # 如果从"视口原始分辨率"模式退出，立即恢复缓存的低分辨率图像
+        if self._is_native_viewport_mode:
+            self._is_native_viewport_mode = False
+            self._restore_cached_overview()
+        
         self._schedule_lod_update(self.LOD_UPDATE_DELAY_ZOOM)
 
     def mouseMoveEvent(self, event: QMouseEvent):
@@ -662,5 +928,11 @@ class SmartCanvas(QGraphicsView):
         self.setBackgroundBrush(palette.color(QPalette.ColorRole.Window))
     
     def closeEvent(self, event):
-        self._loader_thread.stop()
+        self._cleanup_thread()
         super().closeEvent(event)
+    
+    def _cleanup_thread(self):
+        """清理后台线程"""
+        if hasattr(self, '_loader_thread') and self._loader_thread is not None:
+            if self._loader_thread.isRunning():
+                self._loader_thread.stop()
