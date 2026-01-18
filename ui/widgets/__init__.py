@@ -19,6 +19,15 @@ from ui.widgets.dataset_overview_widget import DatasetOverviewWidget
 from ui.widgets.health_check_widget import HealthCheckCard
 from ui.widgets.class_distribution_widget import ClassDistributionWidget
 
+from ui.widgets.layer_manager import (
+    LayerManager,
+    LayerSlot,
+    TaskGroup,
+    SlotType,
+    ZOrder,
+    create_layer_manager
+)
+
 __all__ = [
     # UI Utils
     'create_flat_button',
@@ -34,4 +43,12 @@ __all__ = [
     'DatasetOverviewWidget',
     'HealthCheckCard',
     'ClassDistributionWidget',
+    # Layer Manager
+    'LayerManager',
+    'LayerSlot',
+    'TaskGroup',
+    'SlotType',
+    'ZOrder',
+    'create_layer_manager',
 ]
+

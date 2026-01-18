@@ -98,7 +98,10 @@ class ImageLoaderWorker(QObject):
                 return
             
             # 应用伪彩色
-            if apply_colormap and data.ndim == 2:
+            if apply_colormap:
+                # 如果是 3D 数组，取第一个通道
+                if data.ndim == 3:
+                    data = data[:, :, 0]
                 data = self._apply_voc_colormap(data)
             
             # 转换为 QPixmap
@@ -180,11 +183,14 @@ class ImageLoaderThread(QThread):
         """停止线程"""
         self._running = False
         self._worker.cancel()
-        # 等待线程结束 (最多5秒)
-        if not self.wait(5000):
+        # 清空待处理任务
+        with QMutexLocker(self._mutex):
+            self._tasks.clear()
+        # 等待线程结束 (最多2秒)
+        if not self.wait(2000):
             print("⚠️ ImageLoaderThread: 强制终止")
             self.terminate()
-            self.wait()
+            self.wait(1000)
 
 
 class ImageLayerInfo:
@@ -369,9 +375,6 @@ class SmartCanvas(QGraphicsView):
         self._loader_thread.finished.connect(self._on_layer_loaded)
         self._loader_thread.start()
         
-        # 确保销毁时停止线程
-        self.destroyed.connect(self._cleanup_thread)
-        
         # 交互状态
         self._is_panning = False
         
@@ -512,9 +515,12 @@ class SmartCanvas(QGraphicsView):
                 else:
                     data = src.read(1, window=window)
                 
-                print(f"   已读取: shape={data.shape}")
+                print(f"   已读取: shape={data.shape}, colormap={layer_info.apply_colormap}")
                 
-                if layer_info.apply_colormap and data.ndim == 2:
+                # 应用伪彩色 (用于 prediction/GT)
+                if layer_info.apply_colormap:
+                    if data.ndim == 3:
+                        data = data[:, :, 0]
                     data = self._apply_voc_colormap(data)
                 
                 pixmap = self._numpy_to_pixmap(data)
@@ -779,9 +785,14 @@ class SmartCanvas(QGraphicsView):
             return
         
         print(f"✅ 已加载: level={level}, shape={data.shape}, scale={scale}, "
-              f"原始尺寸=({layer_info.width}, {layer_info.height})")
+              f"原始尺寸=({layer_info.width}, {layer_info.height}), colormap={layer_info.apply_colormap}")
         
-        if layer_info.apply_colormap and data.ndim == 2:
+        # 应用伪彩色 (用于 prediction/GT 等灰度标签图)
+        if layer_info.apply_colormap:
+            # 如果是 3D 数组，取第一个通道
+            if data.ndim == 3:
+                data = data[:, :, 0] if data.shape[2] <= 3 else data[:, :, 0]
+            # 应用 VOC 调色板
             data = self._apply_voc_colormap(data)
         
         pixmap = self._numpy_to_pixmap(data)
@@ -931,8 +942,17 @@ class SmartCanvas(QGraphicsView):
         self._cleanup_thread()
         super().closeEvent(event)
     
+    def __del__(self):
+        """析构函数 - 确保线程被正确停止"""
+        self._cleanup_thread()
+    
     def _cleanup_thread(self):
         """清理后台线程"""
-        if hasattr(self, '_loader_thread') and self._loader_thread is not None:
-            if self._loader_thread.isRunning():
-                self._loader_thread.stop()
+        try:
+            if hasattr(self, '_loader_thread') and self._loader_thread is not None:
+                if self._loader_thread.isRunning():
+                    self._loader_thread.stop()
+                self._loader_thread = None
+        except RuntimeError:
+            # Qt 对象可能已被删除
+            pass

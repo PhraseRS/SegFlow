@@ -1,6 +1,7 @@
 """
 GISCanvasWidget - GIS 容器组件
 负责处理从地理坐标(Geo)到像素坐标(Pixel)的映射，并协调 SmartCanvas 进行渲染。
+集成 LayerManager 支持基于模板的图层树初始化。
 """
 
 from pathlib import Path
@@ -11,10 +12,12 @@ import numpy as np
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QFileDialog, QMessageBox, QToolButton, QMenu, QGraphicsPixmapItem
+    QWidget, QVBoxLayout, QHBoxLayout, QFileDialog, QMessageBox, 
+    QToolButton, QMenu, QGraphicsPixmapItem, QTreeWidget
 )
 
 from ui.widgets.smart_canvas import SmartCanvas
+from ui.widgets.layer_manager import LayerManager, SlotType, create_layer_manager
 
 try:
     import rasterio
@@ -24,9 +27,10 @@ except ImportError:
     HAS_RASTERIO = False
     Affine = None
 
+
 @dataclass
 class LayerInfo:
-    """图层信息"""
+    """图层信息 (兼容旧代码)"""
     name: str
     path: str
     item: QGraphicsPixmapItem
@@ -35,16 +39,17 @@ class LayerInfo:
     visible: bool
     profile: Dict[str, Any]
 
+
 class GISCanvasWidget(QWidget):
     """
-    GIS Canvas Wrapper
-    Inherits QWidget (Container) instead of QGraphicsView
+    GIS Canvas Wrapper with LayerManager Integration
     """
     
-    # 信号 (用于 Sidebar)
+    # 信号
     layer_added = Signal(str)
     layer_removed = Signal(str)
     base_image_set = Signal(str)
+    task_initialized = Signal(str)  # 任务组初始化完成
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -57,12 +62,47 @@ class GISCanvasWidget(QWidget):
         self.canvas = SmartCanvas(self)
         self.layout.addWidget(self.canvas)
         
-        # 状态
+        # 状态 (兼容旧代码)
         self._layers: List[LayerInfo] = []
         self._base_profile: Optional[Dict[str, Any]] = None
-        self._next_z_value: int = 1
+        self._next_z_value: int = 100  # 保留 0-99 给模板槽位
         
-    # ==================== Public API (Compatible with Sidebar) ====================
+        # LayerManager (需要外部设置 tree widget)
+        self._layer_manager: Optional[LayerManager] = None
+        
+    # ==================== LayerManager 集成 ====================
+    
+    def setup_layer_manager(self, tree_widget: QTreeWidget) -> LayerManager:
+        """
+        设置 LayerManager
+        
+        Args:
+            tree_widget: 用于显示图层树的 QTreeWidget
+        
+        Returns:
+            LayerManager: 配置好的管理器实例
+        """
+        self._layer_manager = create_layer_manager(tree_widget, self.canvas)
+        
+        # 连接信号
+        self._layer_manager.task_initialized.connect(self._on_task_initialized)
+        self._layer_manager.slot_filled.connect(self._on_slot_filled)
+        
+        return self._layer_manager
+    
+    def get_layer_manager(self) -> Optional[LayerManager]:
+        """获取 LayerManager 实例"""
+        return self._layer_manager
+    
+    def _on_task_initialized(self, base_path: str):
+        """任务组初始化完成"""
+        self.task_initialized.emit(base_path)
+    
+    def _on_slot_filled(self, slot_name: str, data_path: str):
+        """槽位被填充"""
+        self.layer_added.emit(slot_name)
+        
+    # ==================== Public API (With LayerManager) ====================
     
     def setup_add_menu(self, button: QToolButton) -> None:
         """为 Sidebar 的添加按钮设置菜单"""
@@ -82,6 +122,7 @@ class GISCanvasWidget(QWidget):
         button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
 
     def on_set_base_image(self) -> None:
+        """设置底图 - 集成 LayerManager"""
         file_path, _ = QFileDialog.getOpenFileName(
             self, "选择基础图像", "", "GeoTIFF (*.tif *.tiff);;All Files (*)"
         )
@@ -90,7 +131,7 @@ class GISCanvasWidget(QWidget):
             
         path = str(Path(file_path))
         
-        # 1. 提取元数据 (Transform)
+        # 1. 提取元数据
         profile = self._read_profile(path)
         if not profile:
             QMessageBox.critical(self, "错误", f"无法读取元数据: {path}")
@@ -102,14 +143,18 @@ class GISCanvasWidget(QWidget):
         
         # 3. 加载到 SmartCanvas
         item = self.canvas.load_image_layer(path, pos=(0, 0), z_value=0)
-        if hasattr(item, 'isNull') and item.isNull(): # Check if failed (item might be None or dummy)
-             pass
         if item is None:
-             QMessageBox.critical(self, "错误", "加载图像失败")
-             return
+            QMessageBox.critical(self, "错误", "加载图像失败")
+            return
 
-        # 4. 记录
-        self._add_layer_record("Base Image", path, item, 0, 1.0, profile)
+        # 4. 如果有 LayerManager，使用模板初始化
+        if self._layer_manager:
+            success = self._layer_manager.init_task_group(path, item)
+            if success:
+                print(f"✅ Task Group 已通过 LayerManager 初始化")
+        else:
+            # 兼容旧模式
+            self._add_layer_record("Base Image", path, item, 0, 1.0, profile)
         
         # 5. 适应视图
         self.canvas.fit_to_view()
@@ -119,6 +164,7 @@ class GISCanvasWidget(QWidget):
         print(f"✅ Base Image Set: {path}")
 
     def on_add_overlay(self) -> None:
+        """添加叠加层"""
         if self._base_profile is None:
             QMessageBox.warning(self, "提示", "请先设置基础图像")
             return
@@ -149,7 +195,6 @@ class GISCanvasWidget(QWidget):
             self._base_profile.get('transform'),
             profile.get('transform')
         )
-        print(f"Overlay Offset: {offset_x}, {offset_y}")
         
         # 加载
         z = self._next_z_value
@@ -161,6 +206,54 @@ class GISCanvasWidget(QWidget):
         self._next_z_value += 1
         
         self.layer_added.emit(Path(path).name)
+
+    # ==================== LayerManager 便捷方法 ====================
+    
+    def inject_prediction(self, result_path: str) -> bool:
+        """
+        注入预测结果 (显示为灰度图)
+        
+        Args:
+            result_path: 预测结果文件路径
+        
+        Returns:
+            bool: 是否成功
+        """
+        if self._layer_manager:
+            return self._layer_manager.inject_layer_data(
+                SlotType.TYPE_PRED, 
+                result_path, 
+                apply_colormap=False  # 灰度显示
+            )
+        return False
+    
+    def inject_ground_truth(self, gt_path: str) -> bool:
+        """
+        注入 Ground Truth (显示为灰度图)
+        
+        Args:
+            gt_path: GT 文件路径
+        
+        Returns:
+            bool: 是否成功
+        """
+        if self._layer_manager:
+            return self._layer_manager.inject_layer_data(
+                SlotType.TYPE_GT, 
+                gt_path, 
+                apply_colormap=False  # 灰度显示
+            )
+        return False
+    
+    def get_base_image_path(self) -> Optional[str]:
+        """获取当前底图路径"""
+        if self._layer_manager:
+            task = self._layer_manager.get_current_task()
+            if task:
+                return task.base_image_path
+        return None
+
+    # ==================== 兼容旧代码 ====================
 
     def set_layer_visible(self, layer_name: str, visible: bool):
         layer = self._get_layer(layer_name)
@@ -186,13 +279,12 @@ class GISCanvasWidget(QWidget):
         self.canvas.clear_all()
         self._layers.clear()
         self._base_profile = None
-        self._next_z_value = 1
+        self._next_z_value = 100
 
     # ==================== Internal Utils ====================
 
     def _read_profile(self, path: str) -> Optional[Dict[str, Any]]:
         if not HAS_RASTERIO:
-            # Fallback for non-geo
             return {'crs': None, 'transform': None}
         try:
             with rasterio.open(path) as src:
@@ -210,10 +302,7 @@ class GISCanvasWidget(QWidget):
         if not base_tf or not overlay_tf:
             return (0, 0)
         try:
-            # pixel = ~base * geo
-            # geo_origin = overlay_tf * (0, 0) -> (c, f)
             geo_x, geo_y = overlay_tf.c, overlay_tf.f
-            
             inv_base = ~base_tf
             px, py = inv_base * (geo_x, geo_y)
             return int(round(px)), int(round(py))
@@ -221,7 +310,8 @@ class GISCanvasWidget(QWidget):
             return (0, 0)
 
     def _check_crs_match(self, crs1, crs2) -> bool:
-        if not crs1 or not crs2: return True
+        if not crs1 or not crs2:
+            return True
         return str(crs1) == str(crs2)
 
     def _add_layer_record(self, name, path, item, z, opacity, profile):
@@ -230,5 +320,6 @@ class GISCanvasWidget(QWidget):
 
     def _get_layer(self, name) -> Optional[LayerInfo]:
         for x in self._layers:
-            if x.name == name: return x
+            if x.name == name:
+                return x
         return None

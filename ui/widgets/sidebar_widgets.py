@@ -129,7 +129,7 @@ class GISLayerControlSidebar(QWidget):
     """
     GIS 图层控制侧边栏 (Inference Mode)
     类似 GIS 软件的 TOC (Table of Contents) 风格
-    全高度图层树，支持拖拽排序、可见性切换、透明度调节
+    集成 LayerManager 实现基于模板的图层组初始化
     """
     
     # 信号
@@ -140,6 +140,7 @@ class GISLayerControlSidebar(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._canvas = None  # GISCanvasWidget 引用
+        self._layer_manager = None  # LayerManager 引用
         self._init_ui()
         self._connect_signals()
     
@@ -170,15 +171,25 @@ class GISLayerControlSidebar(QWidget):
         
         layout.addWidget(header)
         
-        # 图层树 - 不设置样式，使用系统主题
+        # 图层树 - 单列分组样式 (类似 QGIS)
         self.layer_tree = QTreeWidget()
         self.layer_tree.setHeaderHidden(True)
+        self.layer_tree.setColumnCount(1)
+        self.layer_tree.setIndentation(20)
+        self.layer_tree.setAnimated(True)
         self.layer_tree.setDragDropMode(QTreeWidget.DragDropMode.InternalMove)
         self.layer_tree.setSelectionMode(QTreeWidget.SelectionMode.SingleSelection)
         layout.addWidget(self.layer_tree)
         
-        # 初始化默认图层
-        self._init_default_layers()
+        # 初始提示
+        self._show_empty_hint()
+    
+    def _show_empty_hint(self):
+        """显示空状态提示"""
+        hint_item = QTreeWidgetItem(self.layer_tree)
+        hint_item.setText(0, "💡 点击 + 加载底图开始")
+        hint_item.setForeground(0, QColor(128, 128, 128))
+        hint_item.setFlags(Qt.ItemFlag.NoItemFlags)  # 禁用交互
     
     def _setup_default_menu(self):
         """设置默认的添加图层菜单"""
@@ -245,71 +256,60 @@ class GISLayerControlSidebar(QWidget):
     
     def set_canvas(self, canvas: 'GISCanvasWidget') -> None:
         """
-        设置关联的 GISCanvasWidget
+        设置关联的 GISCanvasWidget 并初始化 LayerManager
         
         Args:
             canvas: GISCanvasWidget 实例
         """
         self._canvas = canvas
-        # 设置添加按钮的菜单
+        
+        # 使用新的 LayerManager 系统
+        self._layer_manager = canvas.setup_layer_manager(self.layer_tree)
+        
+        # 连接 LayerManager 信号
+        self._layer_manager.task_initialized.connect(self._on_task_initialized)
+        self._layer_manager.slot_filled.connect(self._on_slot_filled)
+        self._layer_manager.slot_cleared.connect(self._on_slot_cleared)
+        
+        # 设置添加按钮的菜单 (使用 canvas 的菜单)
         canvas.setup_add_menu(self.btn_add_layer)
-        # 连接信号
+        
+        # 连接 canvas 信号
         canvas.layer_added.connect(self._on_canvas_layer_added)
         canvas.layer_removed.connect(self._on_canvas_layer_removed)
-        canvas.base_image_set.connect(self._on_base_image_set)
+        
+        print("✅ GISLayerControlSidebar: LayerManager 已初始化")
+    
+    def get_layer_manager(self):
+        """获取 LayerManager 实例"""
+        return self._layer_manager
+    
+    def _on_task_initialized(self, base_path: str):
+        """任务组初始化完成"""
+        print(f"📋 任务组已创建: {base_path}")
+        # 展开所有项
+        self.layer_tree.expandAll()
+    
+    def _on_slot_filled(self, slot_name: str, data_path: str):
+        """槽位被填充"""
+        from pathlib import Path
+        print(f"📌 槽位已填充: {slot_name} <- {Path(data_path).name}")
+    
+    def _on_slot_cleared(self, slot_name: str):
+        """槽位被清空"""
+        print(f"🗑️ 槽位已清空: {slot_name}")
     
     def _on_canvas_layer_added(self, layer_name: str):
-        """画布添加图层时更新 TOC"""
-        # 检查是否已存在
-        for i in range(self.layer_tree.topLevelItemCount()):
-            if self.layer_tree.topLevelItem(i).text(0) == layer_name:
-                return
-        
-        # 添加新图层项
-        item = QTreeWidgetItem([layer_name])
-        item.setCheckState(0, Qt.CheckState.Checked)
-        item.setData(0, Qt.ItemDataRole.UserRole, {"type": "overlay", "opacity": 0.5})
-        self.layer_tree.insertTopLevelItem(0, item)
+        """画布添加图层时 (兼容旧模式)"""
+        # LayerManager 模式下由 LayerManager 管理
+        pass
     
     def _on_canvas_layer_removed(self, layer_name: str):
-        """画布移除图层时更新 TOC"""
-        for i in range(self.layer_tree.topLevelItemCount()):
-            item = self.layer_tree.topLevelItem(i)
-            if item.text(0) == layer_name:
-                self.layer_tree.takeTopLevelItem(i)
-                break
-    
-    def _on_base_image_set(self, path: str):
-        """设置基础图像时清空并重建 TOC"""
-        self.layer_tree.clear()
-        # 添加基础图像项
-        base_item = QTreeWidgetItem(["🗺️ Base Image"])
-        base_item.setCheckState(0, Qt.CheckState.Checked)
-        base_item.setData(0, Qt.ItemDataRole.UserRole, {"type": "base", "opacity": 1.0})
-        self.layer_tree.addTopLevelItem(base_item)
-    
-    def _init_default_layers(self):
-        """初始化默认图层结构"""
-        # 预测结果图层
-        pred_item = QTreeWidgetItem(["🎯 预测结果 (Prediction)"])
-        pred_item.setCheckState(0, Qt.CheckState.Checked)
-        pred_item.setData(0, Qt.ItemDataRole.UserRole, {"type": "prediction", "opacity": 0.7})
-        self.layer_tree.addTopLevelItem(pred_item)
-        
-        # GT 标签图层
-        gt_item = QTreeWidgetItem(["🏷️ 真值标签 (Ground Truth)"])
-        gt_item.setCheckState(0, Qt.CheckState.Unchecked)
-        gt_item.setData(0, Qt.ItemDataRole.UserRole, {"type": "gt", "opacity": 0.7})
-        self.layer_tree.addTopLevelItem(gt_item)
-        
-        # 底图图层
-        base_item = QTreeWidgetItem(["🗺️ 底图 (Base Image)"])
-        base_item.setCheckState(0, Qt.CheckState.Checked)
-        base_item.setData(0, Qt.ItemDataRole.UserRole, {"type": "base", "opacity": 1.0})
-        self.layer_tree.addTopLevelItem(base_item)
+        """画布移除图层时 (兼容旧模式)"""
+        pass
     
     def add_layer(self, name: str, layer_type: str, visible: bool = True, opacity: float = 1.0):
-        """添加图层"""
+        """添加图层 (兼容旧接口)"""
         item = QTreeWidgetItem([name])
         item.setCheckState(0, Qt.CheckState.Checked if visible else Qt.CheckState.Unchecked)
         item.setData(0, Qt.ItemDataRole.UserRole, {"type": layer_type, "opacity": opacity})
@@ -318,7 +318,8 @@ class GISLayerControlSidebar(QWidget):
     def clear_layers(self):
         """清空所有图层"""
         self.layer_tree.clear()
-        self._init_default_layers()
+        self._show_empty_hint()
+
 
 
 class TaskConfigSidebar(QWidget):
