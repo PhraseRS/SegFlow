@@ -1388,6 +1388,46 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 print(f"❌ 保存 {txt_path} 失败: {e}")
                 QMessageBox.warning(self, "保存失败", f"无法保存 {dataset_type}.txt: {e}")
+    
+    def closeEvent(self, event):
+        """
+        窗口关闭事件 - 清理后台线程
+        
+        解决问题: QThread: Destroyed while thread is still running
+        """
+        # 停止 SmartCanvas 的后台加载线程
+        if hasattr(self, 'image_viewer') and self.image_viewer is not None:
+            try:
+                self.image_viewer._cleanup_thread()
+            except Exception as e:
+                print(f"⚠️ 清理 image_viewer 线程时出错: {e}")
+        
+        # 停止 GISCanvasWidget 的后台线程（如果有）
+        if hasattr(self.ui, 'gisCanvas') and self.ui.gisCanvas is not None:
+            try:
+                if hasattr(self.ui.gisCanvas, '_cleanup_thread'):
+                    self.ui.gisCanvas._cleanup_thread()
+            except Exception as e:
+                print(f"⚠️ 清理 gisCanvas 线程时出错: {e}")
+        
+        # 停止 AnalysisPanel 的后台线程（如果有）
+        if hasattr(self.ui, 'analysis_panel') and self.ui.analysis_panel is not None:
+            try:
+                if hasattr(self.ui.analysis_panel, 'stop_analysis'):
+                    self.ui.analysis_panel.stop_analysis()
+            except Exception as e:
+                print(f"⚠️ 清理 analysis_panel 线程时出错: {e}")
+        
+        # 停止 InferencePanel 的后台线程（如果有）
+        if hasattr(self.ui, 'inference_panel') and self.ui.inference_panel is not None:
+            try:
+                if hasattr(self.ui.inference_panel, 'stop_inference'):
+                    self.ui.inference_panel.stop_inference()
+            except Exception as e:
+                print(f"⚠️ 清理 inference_panel 线程时出错: {e}")
+        
+        # 调用父类的 closeEvent
+        super().closeEvent(event)
 
 
 if __name__ == "__main__":
