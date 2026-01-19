@@ -151,25 +151,32 @@ class InferencePanel(QWidget):
         line1.setFrameShadow(QFrame.Sunken)
         form_layout.addRow(line1)
         
-        # 推理策略模式选择（滑窗/全图缩放）
+        # 推理策略模式选择（滑窗/全图缩放/大图分块）
         self.label_strategyMode = QLabel("策略模式:")
         strategy_layout = QHBoxLayout()
-        self.radioButton_slidingWindow = QRadioButton("滑窗推理 (Sliding Window)")
+        self.radioButton_slidingWindow = QRadioButton("滑窗推理")
         self.radioButton_slidingWindow.setChecked(True)
-        self.radioButton_resize = QRadioButton("全图缩放 (Resize)")
+        self.radioButton_resize = QRadioButton("全图缩放")
+        self.radioButton_largeImageBlock = QRadioButton("大图分块 (GDAL)")
         strategy_layout.addWidget(self.radioButton_slidingWindow)
         strategy_layout.addWidget(self.radioButton_resize)
+        strategy_layout.addWidget(self.radioButton_largeImageBlock)
         strategy_layout.addStretch()
         self.buttonGroup_strategyMode = QButtonGroup(self)
         self.buttonGroup_strategyMode.addButton(self.radioButton_slidingWindow)
         self.buttonGroup_strategyMode.addButton(self.radioButton_resize)
+        self.buttonGroup_strategyMode.addButton(self.radioButton_largeImageBlock)
         form_layout.addRow(self.label_strategyMode, strategy_layout)
         
-        # 全图缩放说明
-        self.label_resizeNote = QLabel("提示：全图缩放仅用于小尺寸图像的快速预览")
-        self.label_resizeNote.setWordWrap(True)
-        self.label_resizeNote.setStyleSheet("color: #666; font-size: 10px; font-style: italic;")
-        form_layout.addRow("", self.label_resizeNote)
+        # 策略说明
+        self.label_strategyNote = QLabel(
+            "• 滑窗推理: 适用于中等大小图像\n"
+            "• 全图缩放: 仅用于小尺寸图像快速预览\n"
+            "• 大图分块: 适用于超大遥感影像（需要GDAL）"
+        )
+        self.label_strategyNote.setWordWrap(True)
+        self.label_strategyNote.setStyleSheet("color: #666; font-size: 10px; font-style: italic;")
+        form_layout.addRow("", self.label_strategyNote)
         
         # 滑窗参数 - 窗口大小
         self.label_cropSize = QLabel("窗口大小 (Crop Size):")
@@ -180,7 +187,7 @@ class InferencePanel(QWidget):
         self.spinBox_cropSize.setValue(1024)
         form_layout.addRow(self.label_cropSize, self.spinBox_cropSize)
         
-        # 滑窗参数 - 步长
+        # 滑窗参数 - 步长 / 大图分块参数 - 重叠率
         self.label_stride = QLabel("步长 (Stride):")
         stride_layout = QHBoxLayout()
         self.spinBox_stride = QSpinBox()
@@ -194,6 +201,23 @@ class InferencePanel(QWidget):
         stride_layout.addWidget(self.label_strideHint)
         stride_layout.addStretch()
         form_layout.addRow(self.label_stride, stride_layout)
+        
+        # 大图分块 - 重叠率
+        self.label_overlapRate = QLabel("重叠率 (Overlap Rate):")
+        overlap_layout = QHBoxLayout()
+        self.doubleSpinBox_overlapRate = QDoubleSpinBox()
+        self.doubleSpinBox_overlapRate.setMinimum(0.0)
+        self.doubleSpinBox_overlapRate.setMaximum(0.5)
+        self.doubleSpinBox_overlapRate.setSingleStep(0.05)
+        self.doubleSpinBox_overlapRate.setValue(0.2)
+        self.doubleSpinBox_overlapRate.setVisible(False)
+        self.label_overlapHint = QLabel("大图分块模式的重叠率")
+        self.label_overlapHint.setStyleSheet("color: #888; font-size: 10px;")
+        self.label_overlapHint.setVisible(False)
+        overlap_layout.addWidget(self.doubleSpinBox_overlapRate)
+        overlap_layout.addWidget(self.label_overlapHint)
+        overlap_layout.addStretch()
+        form_layout.addRow(self.label_overlapRate, overlap_layout)
         
         # 滑窗参数 - 批大小
         self.label_batchSize = QLabel("批大小 (Batch Size):")
@@ -240,16 +264,6 @@ class InferencePanel(QWidget):
         """创建执行与导出区"""
         self.groupBox_actionExport = QGroupBox("执行与导出 (Action & Export)")
         form_layout = QFormLayout(self.groupBox_actionExport)
-        
-        # 自定义预测脚本
-        self.label_customScript = QLabel("自定义预测脚本:")
-        custom_script_layout = QHBoxLayout()
-        self.lineEdit_customScript = QLineEdit()
-        self.lineEdit_customScript.setPlaceholderText("选择自定义预测脚本 (.py) - 可选")
-        self.pushButton_browseCustomScript = QPushButton("浏览...")
-        custom_script_layout.addWidget(self.lineEdit_customScript)
-        custom_script_layout.addWidget(self.pushButton_browseCustomScript)
-        form_layout.addRow(self.label_customScript, custom_script_layout)
         
         # 运行推理按钮
         self.pushButton_runInference = QPushButton("运行推理 (Run Inference)")
@@ -325,12 +339,11 @@ class InferencePanel(QWidget):
         
         # 策略模式切换
         self.radioButton_slidingWindow.toggled.connect(self._on_strategy_mode_changed)
+        self.radioButton_resize.toggled.connect(self._on_strategy_mode_changed)
+        self.radioButton_largeImageBlock.toggled.connect(self._on_strategy_mode_changed)
         
         # 批量目录浏览
         self.pushButton_browseBatchDir.clicked.connect(self._browse_batch_dir)
-        
-        # 自定义脚本浏览
-        self.pushButton_browseCustomScript.clicked.connect(self._browse_custom_script)
         
         # 导出目录浏览
         self.pushButton_browseExportDir.clicked.connect(self._browse_export_dir)
@@ -548,11 +561,31 @@ class InferencePanel(QWidget):
         self.lineEdit_batchDir.setEnabled(checked)
         self.pushButton_browseBatchDir.setEnabled(checked)
     
-    def _on_strategy_mode_changed(self, checked):
+    def _on_strategy_mode_changed(self):
         """策略模式切换"""
-        self.spinBox_cropSize.setEnabled(checked)
-        self.spinBox_stride.setEnabled(checked)
-        self.spinBox_batchSize.setEnabled(checked)
+        is_sliding_window = self.radioButton_slidingWindow.isChecked()
+        is_large_image = self.radioButton_largeImageBlock.isChecked()
+        
+        # 滑窗模式：显示步长，隐藏重叠率
+        self.spinBox_stride.setVisible(is_sliding_window)
+        self.label_strideHint.setVisible(is_sliding_window)
+        
+        # 大图分块模式：显示重叠率，隐藏步长
+        self.doubleSpinBox_overlapRate.setVisible(is_large_image)
+        self.label_overlapHint.setVisible(is_large_image)
+        
+        # 更新标签文本
+        if is_large_image:
+            self.label_stride.setVisible(False)
+            self.label_overlapRate.setVisible(True)
+        else:
+            self.label_stride.setVisible(is_sliding_window)
+            self.label_overlapRate.setVisible(False)
+        
+        # 窗口大小和批大小对全图缩放模式不可用
+        is_resize = self.radioButton_resize.isChecked()
+        self.spinBox_cropSize.setEnabled(not is_resize)
+        self.spinBox_batchSize.setEnabled(is_sliding_window)
     
     def _browse_batch_dir(self):
         """浏览批量推理目录"""
@@ -564,43 +597,6 @@ class InferencePanel(QWidget):
         )
         if dir_path:
             self.lineEdit_batchDir.setText(dir_path)
-    
-    def _browse_custom_script(self):
-        """浏览自定义预测脚本"""
-        file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            "选择自定义预测脚本",
-            "",
-            "Python Files (*.py);;All Files (*.*)"
-        )
-        
-        if not file_path:
-            return
-        
-        self.lineEdit_customScript.setText(file_path)
-        
-        # 验证脚本文件
-        if not os.path.exists(file_path):
-            self._emit_log(f"⚠️  脚本文件不存在: {file_path}")
-            return
-        
-        self._emit_log(f"✅ [推理配置] 已选择自定义脚本: {os.path.basename(file_path)}")
-        
-        # 可选：验证脚本是否包含必要的函数
-        try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-            
-            # 检查是否包含常见的推理函数
-            has_inference_func = any(keyword in content for keyword in ['def inference', 'def predict', 'def run'])
-            
-            if has_inference_func:
-                self._emit_log(f"   ✓ 脚本包含推理函数")
-            else:
-                self._emit_log(f"   ⚠️  脚本可能不包含推理函数，请确认")
-        
-        except Exception as e:
-            self._emit_log(f"⚠️  脚本验证失败: {e}")
     
     def _browse_export_dir(self):
         """浏览导出目录"""
@@ -840,16 +836,16 @@ class InferencePanel(QWidget):
             
             # 对于超大图像给出警告和建议
             if img_width * img_height > 100000000:  # 超过1亿像素
-                self._emit_log(f"⚠️  检测到超大尺寸图像，建议使用滑窗推理")
+                self._emit_log(f"⚠️  检测到超大尺寸图像，建议使用大图分块推理")
                 
-                # 如果当前选择的是全图缩放，提示用户切换
+                # 如果当前选择的是全图缩放或滑窗推理，强烈建议切换
                 if self.radioButton_resize.isChecked():
                     reply = QMessageBox.question(
                         self,
                         "超大图像警告",
                         f"检测到超大尺寸图像 ({img_width} x {img_height})。\n\n"
                         f"当前选择的是'全图缩放'模式，可能导致内存不足。\n"
-                        f"建议切换到'滑窗推理'模式。\n\n"
+                        f"建议切换到'大图分块 (GDAL)'模式。\n\n"
                         f"是否继续使用全图缩放模式？",
                         QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                         QMessageBox.StandardButton.No
@@ -857,6 +853,26 @@ class InferencePanel(QWidget):
                     
                     if reply == QMessageBox.StandardButton.No:
                         self._emit_log("⚠️  用户取消推理")
+                        return
+                
+                elif self.radioButton_slidingWindow.isChecked():
+                    reply = QMessageBox.warning(
+                        self,
+                        "超大图像警告",
+                        f"检测到超大尺寸图像 ({img_width} x {img_height} = {img_width*img_height/1000000:.1f}M像素)。\n\n"
+                        f"⚠️ 重要提示：\n"
+                        f"'滑窗推理'模式需要在内存中创建完整的结果掩码，\n"
+                        f"对于如此大的图像会导致内存溢出！\n\n"
+                        f"系统将跳过实际推理以保护内存。\n\n"
+                        f"✅ 强烈建议：\n"
+                        f"请切换到'大图分块 (GDAL)'模式进行真正的推理！\n\n"
+                        f"是否继续（将不会进行实际推理）？",
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                        QMessageBox.StandardButton.No
+                    )
+                    
+                    if reply == QMessageBox.StandardButton.No:
+                        self._emit_log("⚠️  用户取消推理，建议切换到大图分块模式")
                         return
             
         except Exception as e:
@@ -873,10 +889,17 @@ class InferencePanel(QWidget):
         self.progressBar_inference.setValue(0)
         
         # 获取推理配置
-        strategy = 'resize' if self.radioButton_resize.isChecked() else 'sliding_window'
+        if self.radioButton_largeImageBlock.isChecked():
+            strategy = 'large_image_block'
+        elif self.radioButton_resize.isChecked():
+            strategy = 'resize'
+        else:
+            strategy = 'sliding_window'
+        
         inference_params = {
             'crop_size': self.spinBox_cropSize.value(),
             'stride': self.spinBox_stride.value(),
+            'overlap_rate': self.doubleSpinBox_overlapRate.value(),
             'batch_size': self.spinBox_batchSize.value(),
             'enable_tta': self.checkBox_enableTTA.isChecked(),
             'conf_threshold': self.doubleSpinBox_confThreshold.value()
@@ -887,6 +910,9 @@ class InferencePanel(QWidget):
             self._emit_log(f"   窗口大小: {inference_params['crop_size']}")
             self._emit_log(f"   步长: {inference_params['stride']}")
             self._emit_log(f"   批大小: {inference_params['batch_size']}")
+        elif strategy == 'large_image_block':
+            self._emit_log(f"   窗口大小: {inference_params['crop_size']}")
+            self._emit_log(f"   重叠率: {inference_params['overlap_rate']}")
         self._emit_log(f"   TTA增强: {'启用' if inference_params['enable_tta'] else '禁用'}")
         
         # 使用 QTimer 异步执行推理，避免阻塞UI
@@ -900,7 +926,23 @@ class InferencePanel(QWidget):
             self._emit_log(f"   图像路径: {image_path}")
             self._emit_log(f"   推理策略: {strategy}")
             
-            # 4. 根据策略模式调用不同推理方法
+            # 使用内置推理引擎
+            self._run_default_inference(image_path, strategy, inference_params)
+                
+        except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
+            self._emit_log(f"❌ 推理异常: {e}")
+            self._emit_log(f"详细错误:\n{error_details}")
+            self._handle_inference_error(f"{str(e)}\n\n详细信息:\n{error_details}")
+        
+        finally:
+            # 重新启用推理按钮
+            self.pushButton_runInference.setEnabled(True)
+    
+    def _run_default_inference(self, image_path: str, strategy: str, inference_params: dict):
+        """使用默认推理引擎"""
+        try:
             from core.inference_engine import InferenceEngine
             
             # 创建推理引擎
@@ -913,7 +955,32 @@ class InferencePanel(QWidget):
             
             # 执行推理
             self._emit_log(f"⚙️  执行{strategy}推理...")
-            if strategy == 'sliding_window':
+            
+            if strategy == 'large_image_block':
+                # 大图分块推理
+                # 获取输出路径
+                export_dir = self.lineEdit_exportDir.text().strip()
+                if not export_dir:
+                    # 如果没有设置导出目录，使用图像所在目录
+                    export_dir = os.path.dirname(image_path)
+                    # 或者设置为固定的默认目录：
+                    # export_dir = r"D:\inference_results"  # 修改为你想要的默认路径
+                
+                # 生成输出文件名
+                base_name = os.path.splitext(os.path.basename(image_path))[0]
+                output_path = os.path.join(export_dir, f"{base_name}_result")
+                # 如果想自定义输出文件名格式，可以修改为：
+                # output_path = os.path.join(export_dir, f"{base_name}_inference")
+                # output_path = os.path.join(export_dir, f"result_{base_name}")
+                
+                result = engine.large_image_block_inference(
+                    image_path,
+                    output_path,
+                    crop_size=inference_params['crop_size'],
+                    overlap_rate=inference_params['overlap_rate'],
+                    enable_tta=inference_params['enable_tta']
+                )
+            elif strategy == 'sliding_window':
                 result = engine.sliding_window_inference(
                     image_path,
                     crop_size=inference_params['crop_size'],
@@ -933,7 +1000,7 @@ class InferencePanel(QWidget):
             self.progressBar_inference.setValue(80)
             QApplication.processEvents()
             
-            # 5. 处理预测结果
+            # 处理预测结果
             if result.get('success', False):
                 self._emit_log("✅ 推理成功，处理结果...")
                 self._handle_inference_success(image_path, result, inference_params)
@@ -948,13 +1015,9 @@ class InferencePanel(QWidget):
         except Exception as e:
             import traceback
             error_details = traceback.format_exc()
-            self._emit_log(f"❌ 推理异常: {e}")
+            self._emit_log(f"❌ 默认推理异常: {e}")
             self._emit_log(f"详细错误:\n{error_details}")
-            self._handle_inference_error(f"{str(e)}\n\n详细信息:\n{error_details}")
-        
-        finally:
-            # 重新启用推理按钮
-            self.pushButton_runInference.setEnabled(True)
+            raise
     
     def _handle_inference_success(self, image_path: str, result: dict, inference_params: dict):
         """处理推理成功的结果"""
@@ -966,8 +1029,16 @@ class InferencePanel(QWidget):
             params = result.get('params', {})
             
             # 构建结果显示文本
+            use_real_model = result.get('use_real_model', False)
+            
             result_text = f"✅ 推理完成！\n\n"
-            result_text += f"⚠️  注意：当前使用模拟推理（未集成MMSegmentation）\n\n"
+            
+            # 显示推理模式
+            if use_real_model:
+                result_text += f"🚀 使用真实模型推理（MMSegmentation）\n\n"
+            else:
+                result_text += f"⚠️  注意：当前使用模拟推理（未集成MMSegmentation）\n\n"
+            
             result_text += f"📷 图像: {os.path.basename(image_path)}\n"
             result_text += f"📐 尺寸: {image_shape[1]} x {image_shape[0]}\n"
             result_text += f"🎯 策略: {strategy}\n\n"
@@ -983,7 +1054,46 @@ class InferencePanel(QWidget):
             result_text += f"  • TTA增强: {'启用' if params.get('enable_tta', False) else '禁用'}\n"
             result_text += f"  • 置信度阈值: {inference_params.get('conf_threshold', 0.5)}\n"
             
-            # 统计类别分布
+            # 大图分块推理的特殊处理
+            if strategy == 'large_image_block':
+                output_path = result.get('output_path', '')
+                temp_dir = result.get('temp_dir', '')
+                
+                result_text += f"\n大图分块推理结果:\n"
+                result_text += f"  • 输出文件: {os.path.basename(output_path)}\n"
+                result_text += f"  • 分块临时目录: {os.path.basename(temp_dir)}\n"
+                result_text += f"  • 分块数量: {params.get('x_num', 0)} x {params.get('y_num', 0)} = {params.get('total_blocks', 0)}\n"
+                
+                # 更新结果显示
+                self.label_inferenceResult.setText(result_text)
+                
+                # 保存推理结果
+                self.last_inference_result = {
+                    'image_path': image_path,
+                    'output_path': output_path,
+                    'result': result,
+                    'params': inference_params
+                }
+                
+                # 发送推理完成信号
+                self.inference_finished.emit(result)
+                
+                self._emit_log("✅ 大图分块推理完成")
+                self._emit_log(f"   输出文件: {output_path}")
+                
+                # 提示用户
+                QMessageBox.information(
+                    self,
+                    "推理完成",
+                    f"大图分块推理已成功完成！\n\n"
+                    f"图像: {os.path.basename(image_path)}\n"
+                    f"输出: {output_path}\n"
+                    f"分块数: {params.get('total_blocks', 0)}\n\n"
+                    f"结果已保存为GeoTIFF格式。"
+                )
+                return
+            
+            # 统计类别分布（非大图分块模式）
             unique_classes = []  # 初始化变量
             total_pixels = image_shape[0] * image_shape[1]
             
@@ -1095,12 +1205,16 @@ class InferencePanel(QWidget):
             'config_file': self.lineEdit_configFile.text(),
             'checkpoint_file': self.lineEdit_checkpointFile.text(),
             'device': self.comboBox_device.currentText(),
-            'custom_script': self.lineEdit_customScript.text(),
             'inference_mode': 'batch' if self.radioButton_batchInference.isChecked() else 'single',
             'batch_dir': self.lineEdit_batchDir.text(),
-            'strategy_mode': 'resize' if self.radioButton_resize.isChecked() else 'sliding_window',
+            'strategy_mode': (
+                'large_image_block' if self.radioButton_largeImageBlock.isChecked() 
+                else 'resize' if self.radioButton_resize.isChecked() 
+                else 'sliding_window'
+            ),
             'crop_size': self.spinBox_cropSize.value(),
             'stride': self.spinBox_stride.value(),
+            'overlap_rate': self.doubleSpinBox_overlapRate.value(),
             'batch_size': self.spinBox_batchSize.value(),
             'enable_tta': self.checkBox_enableTTA.isChecked(),
             'conf_threshold': self.doubleSpinBox_confThreshold.value(),
