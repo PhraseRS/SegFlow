@@ -473,6 +473,13 @@ class MainWindow(QMainWindow):
         self.ui.inference_panel.inference_finished.connect(self._on_inference_finished)
         self.ui.inference_panel.inference_error.connect(self._on_inference_error)
         
+        # ========== 双向同步：GIS 图层控制 <-> 推理面板 ==========
+        # 方向 1: 左侧 GIS 底图变化 -> 右侧推理面板输入路径
+        self.ui.gisCanvas.base_image_set.connect(self._sync_base_image_to_inference)
+        
+        # 方向 2: 右侧推理面板选择图像 -> 左侧 GIS 底图
+        self.ui.inference_panel.input_path_selected.connect(self._sync_inference_to_base_image)
+        
         # ========== 核心：主 Tab 与侧边栏联动 ==========
         # 右侧 Tab 切换时，自动切换左侧侧边栏
         self.ui.tabWidget_contextControl.currentChanged.connect(self._on_main_tab_changed)
@@ -1229,6 +1236,53 @@ class MainWindow(QMainWindow):
         
         scrollbar = self.ui.textEdit_logs.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
+    
+    # ========================================
+    # 双向同步槽方法
+    # ========================================
+    
+    def _sync_base_image_to_inference(self, path: str):
+        """
+        同步方向 1: 左侧 GIS 底图变化 -> 右侧推理面板输入路径
+        
+        触发条件: 当用户在左侧 GISCanvasWidget 中成功加载底图时
+        
+        Args:
+            path: 底图文件路径
+        """
+        if not path:
+            return
+        
+        # 直接同步路径到推理面板的输入影像框
+        self.ui.inference_panel.set_image_path(path)
+        self._log_to_bottom(f"🔄 [同步] GIS底图 -> 推理输入: {os.path.basename(path)}")
+    
+    def _sync_inference_to_base_image(self, path: str):
+        """
+        同步方向 2: 右侧推理面板选择图像 -> 左侧 GIS 底图
+        
+        触发条件: 当用户在右侧 InferencePanel 中选择/浏览输入图像时
+        
+        Args:
+            path: 图像文件路径
+        """
+        if not path or not os.path.exists(path):
+            return
+        
+        # 检查是否支持的图像格式
+        supported_exts = {'.tif', '.tiff', '.png', '.jpg', '.jpeg', '.bmp'}
+        ext = os.path.splitext(path)[1].lower()
+        if ext not in supported_exts:
+            self._log_to_bottom(f"⚠️ 不支持同步的文件格式: {ext}")
+            return
+        
+        # 加载到 GIS 画布，使用 suppress_signal=True 防止循环
+        success = self.ui.gisCanvas.load_base_image(path, suppress_signal=True)
+        
+        if success:
+            self._log_to_bottom(f"🔄 [同步] 推理输入 -> GIS底图: {os.path.basename(path)}")
+        else:
+            self._log_to_bottom(f"⚠️ [同步失败] 无法加载图像到GIS底图: {os.path.basename(path)}")
     
     def on_resplit_dataset(self):
         """重新划分数据集"""

@@ -25,10 +25,19 @@ class InferencePanel(QWidget):
     inference_error = Signal(str)  # 推理错误信号
     log_message = Signal(str)  # 日志消息信号
     
+    # 同步信号：当用户在推理面板选择输入路径时发出
+    # 用于同步到左侧 GIS 图层控制
+    input_path_selected = Signal(str)  # 参数: 选择的图像文件路径
+    
     def __init__(self, parent=None):
         super().__init__(parent)
         self.inference_model = None
         self.last_inference_result = None  # 保存最后一次推理结果
+        
+        # 同步控制标志 - 防止信号循环
+        # 当从外部调用 set_image_path 时设为 True，阻止再次发出 input_path_selected 信号
+        self._suppress_sync = False
+        
         self._setup_ui()
         self._connect_signals()
         self._init_inference_config()
@@ -134,16 +143,16 @@ class InferencePanel(QWidget):
         self.buttonGroup_inferenceMode.addButton(self.radioButton_batchInference)
         form_layout.addRow(self.label_inferenceMode, mode_layout)
         
-        # 批量目录选择
-        self.label_batchDir = QLabel("批量目录:")
-        batch_layout = QHBoxLayout()
-        self.lineEdit_batchDir = QLineEdit()
-        self.lineEdit_batchDir.setEnabled(False)
-        self.pushButton_browseBatchDir = QPushButton("浏览...")
-        self.pushButton_browseBatchDir.setEnabled(False)
-        batch_layout.addWidget(self.lineEdit_batchDir)
-        batch_layout.addWidget(self.pushButton_browseBatchDir)
-        form_layout.addRow(self.label_batchDir, batch_layout)
+        # 输入影像选择（支持从 GIS 图层同步）
+        self.label_inputPath = QLabel("输入影像:")
+        input_layout = QHBoxLayout()
+        self.lineEdit_inputPath = QLineEdit()
+        self.lineEdit_inputPath.setPlaceholderText("选择图像文件或从 GIS 图层同步")
+        self.lineEdit_inputPath.setReadOnly(True)  # 只读，防止手动输入
+        self.pushButton_browseInput = QPushButton("浏览...")
+        input_layout.addWidget(self.lineEdit_inputPath)
+        input_layout.addWidget(self.pushButton_browseInput)
+        form_layout.addRow(self.label_inputPath, input_layout)
         
         # 分隔线
         line1 = QFrame()
@@ -342,8 +351,8 @@ class InferencePanel(QWidget):
         self.radioButton_resize.toggled.connect(self._on_strategy_mode_changed)
         self.radioButton_largeImageBlock.toggled.connect(self._on_strategy_mode_changed)
         
-        # 批量目录浏览
-        self.pushButton_browseBatchDir.clicked.connect(self._browse_batch_dir)
+        # 输入影像浏览
+        self.pushButton_browseInput.clicked.connect(self._browse_input_image)
         
         # 导出目录浏览
         self.pushButton_browseExportDir.clicked.connect(self._browse_export_dir)
@@ -558,8 +567,9 @@ class InferencePanel(QWidget):
     
     def _on_inference_mode_changed(self, checked):
         """推理模式切换"""
-        self.lineEdit_batchDir.setEnabled(checked)
-        self.pushButton_browseBatchDir.setEnabled(checked)
+        # 批量模式时，输入影像框应该支持选择目录，但我们统一使用程序化控制
+        # 因此此处不再禁用/启用控件
+        pass
     
     def _on_strategy_mode_changed(self):
         """策略模式切换"""
@@ -587,16 +597,31 @@ class InferencePanel(QWidget):
         self.spinBox_cropSize.setEnabled(not is_resize)
         self.spinBox_batchSize.setEnabled(is_sliding_window)
     
-    def _browse_batch_dir(self):
-        """浏览批量推理目录"""
-        dir_path = QFileDialog.getExistingDirectory(
-            self,
-            "选择批量推理图像目录",
-            "",
-            QFileDialog.Option.ShowDirsOnly
-        )
-        if dir_path:
-            self.lineEdit_batchDir.setText(dir_path)
+    def _browse_input_image(self):
+        """浏览选择输入影像"""
+        if self.is_single_image_mode():
+            # 单图模式：选择文件
+            file_path, _ = QFileDialog.getOpenFileName(
+                self,
+                "选择要推理的图像",
+                "",
+                "Image Files (*.png *.jpg *.jpeg *.tif *.tiff *.bmp);;All Files (*.*)"
+            )
+            if file_path:
+                self.lineEdit_inputPath.setText(file_path)
+                # 发出同步信号
+                if not self._suppress_sync:
+                    self.input_path_selected.emit(file_path)
+        else:
+            # 批量模式：选择目录
+            dir_path = QFileDialog.getExistingDirectory(
+                self,
+                "选择批量推理图像目录",
+                "",
+                QFileDialog.Option.ShowDirsOnly
+            )
+            if dir_path:
+                self.lineEdit_inputPath.setText(dir_path)
     
     def _browse_export_dir(self):
         """浏览导出目录"""
@@ -883,6 +908,10 @@ class InferencePanel(QWidget):
         # 发送推理开始信号
         self.inference_started.emit()
         self._emit_log("🚀 开始单图推理...")
+        
+        # 发送同步信号到左侧 GIS 图层控制（如果未被抑制）
+        if not self._suppress_sync:
+            self.input_path_selected.emit(image_path)
         
         # 禁用推理按钮，防止重复点击
         self.pushButton_runInference.setEnabled(False)
@@ -1176,9 +1205,9 @@ class InferencePanel(QWidget):
             QMessageBox.warning(self, "模型未加载", "请先加载推理模型。")
             return
         
-        batch_dir = self.lineEdit_batchDir.text().strip()
+        batch_dir = self.lineEdit_inputPath.text().strip()
         if not batch_dir or not os.path.isdir(batch_dir):
-            QMessageBox.warning(self, "批量目录无效", "请选择有效的批量推理图像目录。")
+            QMessageBox.warning(self, "输入目录无效", "请选择有效的批量推理图像目录。")
             return
         
         self.inference_started.emit()
@@ -1206,7 +1235,7 @@ class InferencePanel(QWidget):
             'checkpoint_file': self.lineEdit_checkpointFile.text(),
             'device': self.comboBox_device.currentText(),
             'inference_mode': 'batch' if self.radioButton_batchInference.isChecked() else 'single',
-            'batch_dir': self.lineEdit_batchDir.text(),
+            'input_path': self.lineEdit_inputPath.text(),
             'strategy_mode': (
                 'large_image_block' if self.radioButton_largeImageBlock.isChecked() 
                 else 'resize' if self.radioButton_resize.isChecked() 
@@ -1229,3 +1258,64 @@ class InferencePanel(QWidget):
     def is_model_loaded(self) -> bool:
         """检查模型是否已加载"""
         return self.inference_model is not None
+    
+    # ==================== 双向同步方法 ====================
+    
+    def is_single_image_mode(self) -> bool:
+        """
+        检查当前是否为单图推理模式
+        
+        Returns:
+            bool: True 表示单图推理模式，False 表示批量推理模式
+        """
+        return self.radioButton_singleImage.isChecked()
+    
+    def set_image_path(self, path: str) -> None:
+        """
+        设置推理输入图像路径（由外部调用，用于接收同步）
+        
+        用于从左侧 GIS 图层控制同步过来的路径。
+        会抑制信号发送，防止循环同步。
+        
+        Args:
+            path: 图像文件路径
+        """
+        if not path or not os.path.exists(path):
+            self._emit_log(f"⚠️ 同步路径无效或不存在: {path}")
+            return
+        
+        # 设置标志位，防止信号循环
+        self._suppress_sync = True
+        
+        try:
+            # 直接设置到输入影像框
+            self.lineEdit_inputPath.setText(path)
+            self._emit_log(f"📥 已从 GIS 图层同步输入路径: {os.path.basename(path)}")
+        finally:
+            self._suppress_sync = False
+    
+    def set_batch_dir(self, dir_path: str) -> None:
+        """
+        设置批量推理目录（由外部调用，用于接收同步）
+        
+        Args:
+            dir_path: 目录路径
+        """
+        if not dir_path or not os.path.isdir(dir_path):
+            return
+        
+        self._suppress_sync = True
+        try:
+            self.lineEdit_inputPath.setText(dir_path)
+        finally:
+            self._suppress_sync = False
+    
+    def get_current_input_path(self) -> str:
+        """
+        获取当前的输入路径
+        
+        Returns:
+            str: 当前配置的输入路径（输入影像框中的路径）
+        """
+        return self.lineEdit_inputPath.text().strip()
+

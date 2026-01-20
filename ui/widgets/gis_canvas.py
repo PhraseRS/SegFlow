@@ -122,20 +122,45 @@ class GISCanvasWidget(QWidget):
         button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
 
     def on_set_base_image(self) -> None:
-        """设置底图 - 集成 LayerManager"""
+        """设置底图 (通过文件对话框) - 集成 LayerManager"""
         file_path, _ = QFileDialog.getOpenFileName(
             self, "选择基础图像", "", "GeoTIFF (*.tif *.tiff);;All Files (*)"
         )
         if not file_path:
             return
+        
+        # 调用共享的加载逻辑
+        self.load_base_image(file_path)
+    
+    def load_base_image(self, file_path: str, suppress_signal: bool = False) -> bool:
+        """
+        加载底图 (程序化调用)
+        
+        用于从外部同步调用，例如从右侧推理面板同步过来的路径。
+        
+        Args:
+            file_path: 图像文件路径
+            suppress_signal: 如果为 True，则不发出 base_image_set 信号
+                            用于防止循环同步
+        
+        Returns:
+            bool: 是否加载成功
+        """
+        if not file_path:
+            return False
             
         path = str(Path(file_path))
+        
+        # 检查文件是否存在
+        if not Path(path).exists():
+            print(f"⚠️ 文件不存在: {path}")
+            return False
         
         # 1. 提取元数据
         profile = self._read_profile(path)
         if not profile:
             QMessageBox.critical(self, "错误", f"无法读取元数据: {path}")
-            return
+            return False
             
         # 2. 清空
         self.clear_all_layers()
@@ -145,7 +170,7 @@ class GISCanvasWidget(QWidget):
         item = self.canvas.load_image_layer(path, pos=(0, 0), z_value=0)
         if item is None:
             QMessageBox.critical(self, "错误", "加载图像失败")
-            return
+            return False
 
         # 4. 如果有 LayerManager，使用模板初始化
         if self._layer_manager:
@@ -159,9 +184,13 @@ class GISCanvasWidget(QWidget):
         # 5. 适应视图
         self.canvas.fit_to_view()
         
-        self.base_image_set.emit(path)
+        # 6. 发出信号 (除非被抑制)
+        if not suppress_signal:
+            self.base_image_set.emit(path)
+        
         self.layer_added.emit("Base Image")
         print(f"✅ Base Image Set: {path}")
+        return True
 
     def on_add_overlay(self) -> None:
         """添加叠加层"""
