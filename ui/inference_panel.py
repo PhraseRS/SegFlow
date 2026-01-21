@@ -154,6 +154,19 @@ class InferencePanel(QWidget):
         input_layout.addWidget(self.pushButton_browseInput)
         form_layout.addRow(self.label_inputPath, input_layout)
         
+        # 输出路径选择（自动保存预览PNG）
+        self.label_outputPath = QLabel("输出路径 (预览PNG):")
+        output_layout = QHBoxLayout()
+        self.lineEdit_outputPath = QLineEdit()
+        self.lineEdit_outputPath.setPlaceholderText("推理完成后自动保存预览PNG的路径（默认为输入图像所在目录）")
+        self.lineEdit_outputPath.setReadOnly(True)  # 只读，防止手动输入
+        self.lineEdit_outputPath.setToolTip("推理完成后会自动保存一个PNG格式的预览图到此路径")
+        self.pushButton_browseOutputPath = QPushButton("浏览...")
+        self.pushButton_browseOutputPath.setToolTip("选择自动保存预览PNG的文件夹")
+        output_layout.addWidget(self.lineEdit_outputPath)
+        output_layout.addWidget(self.pushButton_browseOutputPath)
+        form_layout.addRow(self.label_outputPath, output_layout)
+        
         # 分隔线
         line1 = QFrame()
         line1.setFrameShape(QFrame.HLine)
@@ -294,13 +307,25 @@ class InferencePanel(QWidget):
         line.setFrameShadow(QFrame.Sunken)
         form_layout.addRow(line)
         
+        # 导出说明
+        self.label_exportNote = QLabel(
+            "💡 提示：推理完成后会自动保存预览PNG。\n"
+            "   如需其他格式或正式存档，请使用下方的导出功能。"
+        )
+        self.label_exportNote.setWordWrap(True)
+        self.label_exportNote.setStyleSheet("color: #0066cc; font-size: 10px; padding: 5px; background-color: #e6f2ff; border-radius: 3px;")
+        form_layout.addRow("", self.label_exportNote)
+        
         # 导出格式
         self.label_exportFormat = QLabel("导出格式:")
         export_format_layout = QHBoxLayout()
         self.checkBox_exportPNG = QCheckBox("PNG")
         self.checkBox_exportPNG.setChecked(True)
+        self.checkBox_exportPNG.setToolTip("导出PNG格式的可视化结果")
         self.checkBox_exportNumpy = QCheckBox("NumPy (.npy)")
+        self.checkBox_exportNumpy.setToolTip("导出NumPy数组格式，便于后续处理")
         self.checkBox_exportJSON = QCheckBox("JSON")
+        self.checkBox_exportJSON.setToolTip("导出包含推理参数和统计信息的元数据")
         export_format_layout.addWidget(self.checkBox_exportPNG)
         export_format_layout.addWidget(self.checkBox_exportNumpy)
         export_format_layout.addWidget(self.checkBox_exportJSON)
@@ -308,16 +333,20 @@ class InferencePanel(QWidget):
         form_layout.addRow(self.label_exportFormat, export_format_layout)
         
         # 导出目录
-        self.label_exportDir = QLabel("导出目录:")
+        self.label_exportDir = QLabel("导出目录 (正式存档):")
         export_dir_layout = QHBoxLayout()
         self.lineEdit_exportDir = QLineEdit()
+        self.lineEdit_exportDir.setPlaceholderText("选择正式导出目录（可选，默认使用输出路径）")
+        self.lineEdit_exportDir.setToolTip("手动导出时使用的目录，用于正式存档")
         self.pushButton_browseExportDir = QPushButton("浏览...")
+        self.pushButton_browseExportDir.setToolTip("选择导出目录")
         export_dir_layout.addWidget(self.lineEdit_exportDir)
         export_dir_layout.addWidget(self.pushButton_browseExportDir)
         form_layout.addRow(self.label_exportDir, export_dir_layout)
         
         # 导出结果按钮
-        self.pushButton_exportResults = QPushButton("导出结果")
+        self.pushButton_exportResults = QPushButton("📤 导出结果（多格式）")
+        self.pushButton_exportResults.setToolTip("将推理结果导出为选定的格式（PNG/NumPy/JSON）")
         form_layout.addRow(self.pushButton_exportResults)
         
         parent_layout.addWidget(self.groupBox_actionExport)
@@ -353,6 +382,9 @@ class InferencePanel(QWidget):
         
         # 输入影像浏览
         self.pushButton_browseInput.clicked.connect(self._browse_input_image)
+        
+        # 输出路径浏览
+        self.pushButton_browseOutputPath.clicked.connect(self._browse_output_path)
         
         # 导出目录浏览
         self.pushButton_browseExportDir.clicked.connect(self._browse_export_dir)
@@ -623,6 +655,36 @@ class InferencePanel(QWidget):
             if dir_path:
                 self.lineEdit_inputPath.setText(dir_path)
     
+    def _browse_output_path(self):
+        """浏览选择输出路径（自动保存预览PNG）"""
+        dir_path = QFileDialog.getExistingDirectory(
+            self,
+            "选择自动保存预览PNG的文件夹",
+            "",
+            QFileDialog.Option.ShowDirsOnly
+        )
+        if dir_path:
+            self.lineEdit_outputPath.setText(dir_path)
+            self._emit_log(f"✅ [推理配置] 预览PNG输出路径已设置: {dir_path}")
+    
+    def _generate_output_filename(self, input_path: str) -> str:
+        """
+        生成输出文件名（自动命名规则）
+        
+        规则：input.jpg -> input_Result.png
+        对于大图分块推理，输出为 .tif 格式
+        
+        Args:
+            input_path: 输入图像路径
+            
+        Returns:
+            输出文件名（不含路径）
+        """
+        base_name = os.path.splitext(os.path.basename(input_path))[0]
+        # 对于大图分块推理，输出为 .tif 格式（不含扩展名，由引擎添加）
+        output_filename = f"{base_name}_Result"
+        return output_filename
+    
     def _browse_export_dir(self):
         """浏览导出目录"""
         dir_path = QFileDialog.getExistingDirectory(
@@ -826,16 +888,16 @@ class InferencePanel(QWidget):
             QMessageBox.warning(self, "模型未加载", "请先加载推理模型。")
             return
         
-        # 2. 弹出文件选择对话框选择图片
-        image_path, _ = QFileDialog.getOpenFileName(
-            self,
-            "选择要推理的图像",
-            "",
-            "Image Files (*.png *.jpg *.jpeg *.tif *.tiff *.bmp);;All Files (*.*)"
-        )
+        # 2. 使用已选择的输入影像路径
+        image_path = self.lineEdit_inputPath.text().strip()
         
         if not image_path:
             self._emit_log("⚠️  未选择图像文件")
+            QMessageBox.warning(
+                self, 
+                "未选择图像", 
+                "请先在'输入影像'中选择要推理的图像，\n或从 GIS 图层中同步图像。"
+            )
             return
         
         # 3. 读取选择的图片（验证）
@@ -987,20 +1049,18 @@ class InferencePanel(QWidget):
             
             if strategy == 'large_image_block':
                 # 大图分块推理
-                # 获取输出路径
-                export_dir = self.lineEdit_exportDir.text().strip()
-                if not export_dir:
-                    # 如果没有设置导出目录，使用图像所在目录
-                    export_dir = os.path.dirname(image_path)
-                    # 或者设置为固定的默认目录：
-                    # export_dir = r"D:\inference_results"  # 修改为你想要的默认路径
+                # 获取输出路径（优先使用用户选择的输出路径）
+                output_dir = self.lineEdit_outputPath.text().strip()
+                if not output_dir:
+                    # 如果没有设置输出路径，使用图像所在目录
+                    output_dir = os.path.dirname(image_path)
+                    self._emit_log(f"⚠️  未设置输出路径，使用默认路径: {output_dir}")
                 
-                # 生成输出文件名
-                base_name = os.path.splitext(os.path.basename(image_path))[0]
-                output_path = os.path.join(export_dir, f"{base_name}_result")
-                # 如果想自定义输出文件名格式，可以修改为：
-                # output_path = os.path.join(export_dir, f"{base_name}_inference")
-                # output_path = os.path.join(export_dir, f"result_{base_name}")
+                # 生成输出文件名（自动命名规则：input.jpg -> input_Result.tif）
+                output_filename = self._generate_output_filename(image_path)
+                output_path = os.path.join(output_dir, output_filename)
+                
+                self._emit_log(f"📁 输出路径: {output_path}")
                 
                 result = engine.large_image_block_inference(
                     image_path,
@@ -1158,6 +1218,34 @@ class InferencePanel(QWidget):
                 'params': inference_params
             }
             
+            # 自动保存预览PNG（如果有掩码数据）
+            saved_path = None
+            if mask is not None:
+                try:
+                    # 获取输出路径
+                    output_dir = self.lineEdit_outputPath.text().strip()
+                    if not output_dir:
+                        output_dir = os.path.dirname(image_path)
+                        self._emit_log(f"⚠️  未设置输出路径，预览PNG将保存到默认路径: {output_dir}")
+                    
+                    # 生成输出文件名（自动命名规则：input.jpg -> input_Result.png）
+                    base_name = os.path.splitext(os.path.basename(image_path))[0]
+                    output_filename = f"{base_name}_Result.png"
+                    saved_path = os.path.join(output_dir, output_filename)
+                    
+                    # 保存为PNG格式（预览用）
+                    from PIL import Image
+                    result_image = Image.fromarray(mask.astype(np.uint8))
+                    result_image.save(saved_path)
+                    
+                    self._emit_log(f"✅ 预览PNG已自动保存: {saved_path}")
+                    
+                    # 更新last_inference_result，添加保存路径
+                    self.last_inference_result['saved_path'] = saved_path
+                    
+                except Exception as save_error:
+                    self._emit_log(f"⚠️  预览PNG自动保存失败: {save_error}")
+            
             # 发送推理完成信号
             self.inference_finished.emit(result)
             
@@ -1168,13 +1256,17 @@ class InferencePanel(QWidget):
                 self._emit_log(f"   超大图像模式：未生成完整掩码（正常）")
             
             # 提示用户可以导出结果
+            message = f"推理已成功完成！\n\n图像: {os.path.basename(image_path)}\n策略: {strategy}\n"
+            if saved_path:
+                message += f"\n✅ 预览PNG已自动保存至:\n{saved_path}\n"
+                message += "\n💡 提示：如需其他格式（NumPy/JSON）或正式存档，\n请使用下方的'导出结果'功能。"
+            else:
+                message += "\n您可以在下方查看详细结果，或点击'导出结果'保存推理结果。"
+            
             QMessageBox.information(
                 self,
                 "推理完成",
-                f"推理已成功完成！\n\n"
-                f"图像: {os.path.basename(image_path)}\n"
-                f"策略: {strategy}\n\n"
-                f"您可以在下方查看详细结果，或点击'导出结果'保存推理结果。"
+                message
             )
             
         except Exception as e:
@@ -1218,15 +1310,137 @@ class InferencePanel(QWidget):
     
     def _export_results(self):
         """导出推理结果"""
-        export_dir = self.lineEdit_exportDir.text().strip()
-        if not export_dir:
-            QMessageBox.warning(self, "导出目录未设置", "请先选择导出目录。")
+        # 1. 检查是否有推理结果
+        if not self.last_inference_result:
+            self._emit_log("⚠️  没有可导出的推理结果")
+            QMessageBox.warning(
+                self, 
+                "无推理结果", 
+                "请先运行推理，然后再导出结果。"
+            )
             return
         
-        self._emit_log(f"📤 导出结果到: {export_dir}")
+        # 2. 检查导出目录
+        export_dir = self.lineEdit_exportDir.text().strip()
+        if not export_dir:
+            # 如果没有设置导出目录，使用输出路径
+            export_dir = self.lineEdit_outputPath.text().strip()
+            if not export_dir:
+                # 如果输出路径也没有，使用输入图像所在目录
+                input_path = self.last_inference_result.get('image_path', '')
+                if input_path:
+                    export_dir = os.path.dirname(input_path)
+                else:
+                    QMessageBox.warning(
+                        self, 
+                        "导出目录未设置", 
+                        "请先选择导出目录。"
+                    )
+                    return
+            
+            self.lineEdit_exportDir.setText(export_dir)
         
-        # TODO: 实现实际的导出逻辑
-        QMessageBox.information(self, "导出功能", "导出功能待实现...")
+        # 确保导出目录存在
+        if not os.path.exists(export_dir):
+            try:
+                os.makedirs(export_dir)
+                self._emit_log(f"📁 创建导出目录: {export_dir}")
+            except Exception as e:
+                QMessageBox.critical(
+                    self, 
+                    "创建目录失败", 
+                    f"无法创建导出目录。\n\n错误信息:\n{e}"
+                )
+                return
+        
+        # 3. 获取导出格式
+        export_png = self.checkBox_exportPNG.isChecked()
+        export_numpy = self.checkBox_exportNumpy.isChecked()
+        export_json = self.checkBox_exportJSON.isChecked()
+        
+        if not (export_png or export_numpy or export_json):
+            QMessageBox.warning(
+                self, 
+                "未选择导出格式", 
+                "请至少选择一种导出格式（PNG、NumPy 或 JSON）。"
+            )
+            return
+        
+        # 4. 执行导出
+        self._emit_log(f"📤 开始导出结果到: {export_dir}")
+        
+        try:
+            image_path = self.last_inference_result.get('image_path', '')
+            base_name = os.path.splitext(os.path.basename(image_path))[0] if image_path else 'result'
+            mask = self.last_inference_result.get('mask')
+            
+            exported_files = []
+            
+            # 导出 PNG 格式
+            if export_png and mask is not None:
+                png_path = os.path.join(export_dir, f"{base_name}_Result.png")
+                from PIL import Image
+                result_image = Image.fromarray(mask.astype(np.uint8))
+                result_image.save(png_path)
+                exported_files.append(png_path)
+                self._emit_log(f"✅ PNG 已导出: {os.path.basename(png_path)}")
+            
+            # 导出 NumPy 格式
+            if export_numpy and mask is not None:
+                npy_path = os.path.join(export_dir, f"{base_name}_Result.npy")
+                np.save(npy_path, mask)
+                exported_files.append(npy_path)
+                self._emit_log(f"✅ NumPy 已导出: {os.path.basename(npy_path)}")
+            
+            # 导出 JSON 格式（包含元数据）
+            if export_json:
+                import json
+                json_path = os.path.join(export_dir, f"{base_name}_Result.json")
+                
+                # 构建元数据
+                metadata = {
+                    'image_path': image_path,
+                    'image_shape': self.last_inference_result.get('image_shape', []),
+                    'strategy': self.last_inference_result.get('strategy', 'unknown'),
+                    'params': self.last_inference_result.get('params', {}),
+                    'unique_classes': self.last_inference_result.get('unique_classes', []),
+                    'class_counts': self.last_inference_result.get('class_counts', {}),
+                    'model_name': self.inference_model.get('model_name', 'Unknown') if self.inference_model else 'Unknown',
+                    'export_time': __import__('datetime').datetime.now().isoformat()
+                }
+                
+                with open(json_path, 'w', encoding='utf-8') as f:
+                    json.dump(metadata, f, indent=2, ensure_ascii=False)
+                
+                exported_files.append(json_path)
+                self._emit_log(f"✅ JSON 已导出: {os.path.basename(json_path)}")
+            
+            # 5. 显示导出成功消息
+            if exported_files:
+                files_list = '\n'.join([f"  • {os.path.basename(f)}" for f in exported_files])
+                QMessageBox.information(
+                    self,
+                    "导出成功",
+                    f"推理结果已成功导出！\n\n导出目录:\n{export_dir}\n\n导出文件:\n{files_list}"
+                )
+                self._emit_log(f"✅ 导出完成，共 {len(exported_files)} 个文件")
+            else:
+                QMessageBox.warning(
+                    self,
+                    "导出失败",
+                    "没有可导出的数据。\n\n注意：大图分块模式不生成完整掩码，无法导出 PNG/NumPy 格式。"
+                )
+        
+        except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
+            self._emit_log(f"❌ 导出失败: {e}")
+            self._emit_log(f"详细错误:\n{error_details}")
+            QMessageBox.critical(
+                self,
+                "导出失败",
+                f"导出过程中发生错误。\n\n错误信息:\n{e}"
+            )
     
     def get_inference_config(self) -> dict:
         """获取当前推理配置"""
