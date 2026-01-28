@@ -175,9 +175,13 @@ class ImageLoaderThread(QThread):
             
             if task:
                 z_value, path, level, apply_colormap = task
+                # 执行任务前再次检查停止标志
+                if not self._running:
+                    break
                 self._worker.load(z_value, path, level, apply_colormap)
             else:
-                self.msleep(50)
+                # 减少等待时间以便更快响应停止请求
+                self.msleep(20)
     
     def stop(self):
         """停止线程"""

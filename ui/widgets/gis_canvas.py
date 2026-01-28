@@ -352,3 +352,11 @@ class GISCanvasWidget(QWidget):
             if x.name == name:
                 return x
         return None
+    
+    def _cleanup_thread(self):
+        """清理后台线程 - 转发到内部的 SmartCanvas"""
+        if hasattr(self, 'canvas') and self.canvas is not None:
+            try:
+                self.canvas._cleanup_thread()
+            except Exception as e:
+                print(f"⚠️ GISCanvasWidget._cleanup_thread 出错: {e}")

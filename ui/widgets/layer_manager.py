@@ -11,7 +11,7 @@ from enum import Enum, auto
 from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal, QObject
-from PySide6.QtGui import QIcon, QColor, QBrush
+from PySide6.QtGui import QIcon, QColor, QBrush, QPixmap, QPainter
 from PySide6.QtWidgets import (
     QTreeWidget, QTreeWidgetItem, QFileDialog, QMenu, QMessageBox,
     QGraphicsPixmapItem, QWidget
@@ -157,6 +157,8 @@ class LayerManager(QObject):
     slot_cleared = Signal(str)              # 槽位被清空 (slot_name)
     layer_visibility_changed = Signal(str, bool)  # 图层可见性改变
     layer_opacity_changed = Signal(str, float)    # 图层透明度改变
+    base_image_cleared = Signal()           # 底图被清空信号
+    base_image_replaced = Signal(str)       # 底图被替换信号 (new_path)
     
     def __init__(self, tree_widget: QTreeWidget, parent: Optional[QWidget] = None):
         super().__init__(parent)
@@ -203,7 +205,7 @@ class LayerManager(QObject):
     
     # ==================== 核心方法 ====================
     
-    def init_task_group(self, base_image_path: str, base_item: QGraphicsPixmapItem) -> bool:
+    def init_task_group(self, base_image_path: str, base_item: QGraphicsPixmapItem, band_count: int = 3) -> bool:
         """
         初始化任务组
         
@@ -212,6 +214,7 @@ class LayerManager(QObject):
         Args:
             base_image_path: 底图路径
             base_item: 底图的 QGraphicsPixmapItem
+            band_count: 波段数量（用于显示波段信息子节点）
         
         Returns:
             bool: 是否成功
@@ -253,13 +256,83 @@ class LayerManager(QObject):
         base_slot.graphics_item = base_item
         self._update_slot_tree_item(base_slot)
         
-        # 6. 保存当前任务
+        # 6. 添加波段信息子节点
+        self._add_band_info_nodes(base_slot.tree_item, band_count)
+        
+        # 7. 保存当前任务
         self._current_task = task
         
         self.task_initialized.emit(base_image_path)
         print(f"✅ Task Group 初始化完成: {task.display_name}")
         
         return True
+    
+    def _create_color_icon(self, color: QColor, size: int = 12) -> QIcon:
+        """
+        创建纯色方块图标
+        
+        Args:
+            color: 颜色
+            size: 图标大小
+        
+        Returns:
+            QIcon: 生成的图标
+        """
+        pixmap = QPixmap(size, size)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        painter.setBrush(QBrush(color))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawRect(0, 0, size, size)
+        painter.end()
+        return QIcon(pixmap)
+    
+    def _add_band_info_nodes(self, parent_item: QTreeWidgetItem, band_count: int):
+        """
+        为底图添加波段信息子节点
+        
+        Args:
+            parent_item: 底图的树项
+            band_count: 波段数量
+        """
+        if not parent_item:
+            return
+        
+        # 清除现有子节点
+        while parent_item.childCount() > 0:
+            parent_item.removeChild(parent_item.child(0))
+        
+        if band_count >= 3:
+            # RGB 三通道
+            band_info = [
+                (QColor(220, 53, 69), "Band 1 (Red channel)"),    # 红色
+                (QColor(40, 167, 69), "Band 2 (Green channel)"),   # 绿色
+                (QColor(0, 123, 255), "Band 3 (Blue channel)"),    # 蓝色
+            ]
+        elif band_count == 1:
+            # 单通道灰度
+            band_info = [
+                (QColor(128, 128, 128), "Gray: Band 1"),
+            ]
+        else:
+            # 其他情况（如2通道）
+            band_info = [
+                (QColor(128, 128, 128), f"Band {i+1}") for i in range(band_count)
+            ]
+        
+        for color, text in band_info:
+            child_item = QTreeWidgetItem(parent_item)
+            child_item.setText(0, text)
+            child_item.setIcon(0, self._create_color_icon(color))
+            child_item.setData(0, Qt.ItemDataRole.UserRole, {"type": "band_info"})
+            # 子项不可选中、不可勾选
+            child_item.setFlags(child_item.flags() & ~Qt.ItemFlag.ItemIsUserCheckable)
+            child_item.setFlags(child_item.flags() & ~Qt.ItemFlag.ItemIsSelectable)
+            # 设置为灰色斜体
+            child_item.setForeground(0, QBrush(QColor(100, 100, 100)))
+        
+        # 展开底图节点显示波段信息
+        parent_item.setExpanded(True)
     
     def inject_layer_data(
         self, 
@@ -457,7 +530,17 @@ class LayerManager(QObject):
             return
         
         data = item.data(0, Qt.ItemDataRole.UserRole)
-        if not data or data.get("type") != "slot":
+        if not data:
+            return
+        
+        item_type = data.get("type")
+        
+        # 波段信息节点不显示菜单
+        if item_type == "band_info":
+            return
+        
+        # 只处理槽位节点
+        if item_type != "slot":
             return
         
         slot_type = data.get("slot_type")
@@ -468,19 +551,39 @@ class LayerManager(QObject):
         if not slot:
             return
         
+        # 使用统一的菜单构建方法
+        self._show_slot_context_menu(slot, pos)
+    
+    def _show_slot_context_menu(self, slot: LayerSlot, pos):
+        """
+        显示槽位的右键菜单 - 统一 UI 组件
+        
+        Args:
+            slot: 图层槽位
+            pos: 菜单位置
+        """
         menu = QMenu(self._tree)
         
         if slot.is_filled:
-            # 已填充的槽位
-            if slot_type != SlotType.TYPE_BASE:
-                action_clear = menu.addAction("🗑️ 清空")
-                action_clear.triggered.connect(lambda: self.clear_slot(slot_type))
-                
-                action_replace = menu.addAction("🔄 替换...")
+            # 已填充的槽位 - 统一的菜单项
+            
+            # 替换选项
+            action_replace = menu.addAction("🔄 替换...")
+            if slot.slot_type == SlotType.TYPE_BASE:
+                action_replace.triggered.connect(self._replace_base_image)
+            else:
                 action_replace.triggered.connect(lambda: self._open_file_for_slot(slot))
+            
+            # 清空选项
+            action_clear = menu.addAction("🗑️ 清空")
+            if slot.slot_type == SlotType.TYPE_BASE:
+                action_clear.triggered.connect(self._clear_base_image)
+            else:
+                action_clear.triggered.connect(lambda: self.clear_slot(slot.slot_type))
             
             menu.addSeparator()
             
+            # 显示/隐藏选项（所有已填充槽位都有）
             action_show = menu.addAction("👁️ 显示/隐藏")
             action_show.triggered.connect(lambda: self._toggle_visibility(slot))
         else:
@@ -489,6 +592,60 @@ class LayerManager(QObject):
             action_load.triggered.connect(lambda: self._open_file_for_slot(slot))
         
         menu.exec(self._tree.mapToGlobal(pos))
+    
+    def _replace_base_image(self):
+        """替换底图 - 打开文件对话框选择新底图"""
+        if not self._current_task:
+            return
+        
+        base_slot = self._current_task.slots.get(SlotType.TYPE_BASE)
+        if not base_slot:
+            return
+        
+        # 获取当前底图目录作为起始目录
+        start_dir = ""
+        if base_slot.data_path:
+            start_dir = os.path.dirname(base_slot.data_path)
+        
+        file_path, _ = QFileDialog.getOpenFileName(
+            self._parent_widget,
+            "选择新底图",
+            start_dir,
+            "GeoTIFF (*.tif *.tiff);;PNG (*.png);;JPEG (*.jpg *.jpeg);;All Files (*)"
+        )
+        
+        if file_path:
+            # 发出替换信号，让外部处理实际的图像加载
+            self.base_image_replaced.emit(file_path)
+    
+    def _clear_base_image(self):
+        """清空底图"""
+        if not self._current_task:
+            return
+        
+        # 确认对话框
+        reply = QMessageBox.question(
+            self._parent_widget,
+            "确认清空",
+            "清空底图将同时移除所有叠加图层。\n\n是否继续？",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            # 清空所有槽位
+            for slot_type in list(self._current_task.slots.keys()):
+                slot = self._current_task.slots[slot_type]
+                if slot.graphics_item and self._remove_layer_callback:
+                    self._remove_layer_callback(slot.graphics_item)
+            
+            # 清空任务组
+            self._tree.clear()
+            self._current_task = None
+            
+            # 发出信号
+            self.base_image_cleared.emit()
+            print("✅ 底图已清空")
     
     def _open_file_for_slot(self, slot: LayerSlot):
         """为槽位打开文件选择对话框"""

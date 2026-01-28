@@ -45,7 +45,8 @@ class InferencePanel(QWidget):
     def _setup_ui(self):
         """设置UI布局"""
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(3, 3, 3, 3)  # 压缩边距
+        layout.setSpacing(4)  # 压缩组件间距
         
         # 模型加载区
         self._create_model_config_group(layout)
@@ -66,6 +67,8 @@ class InferencePanel(QWidget):
         """创建模型加载区"""
         self.groupBox_modelConfig = QGroupBox("模型加载区 (Model Configuration)")
         form_layout = QFormLayout(self.groupBox_modelConfig)
+        form_layout.setSpacing(3)  # 压缩行间距
+        form_layout.setContentsMargins(6, 6, 6, 6)  # 压缩边距
         
         # 配置文件
         self.label_configFile = QLabel("配置文件:")
@@ -128,6 +131,8 @@ class InferencePanel(QWidget):
         """创建推理策略区"""
         self.groupBox_inferenceStrategy = QGroupBox("推理策略区 (Inference Strategy)")
         form_layout = QFormLayout(self.groupBox_inferenceStrategy)
+        form_layout.setSpacing(3)  # 压缩行间距
+        form_layout.setContentsMargins(6, 6, 6, 6)  # 压缩边距
         
         # 推理模式选择（单图/批量）
         self.label_inferenceMode = QLabel("推理模式:")
@@ -286,6 +291,8 @@ class InferencePanel(QWidget):
         """创建执行与导出区"""
         self.groupBox_actionExport = QGroupBox("执行与导出 (Action & Export)")
         form_layout = QFormLayout(self.groupBox_actionExport)
+        form_layout.setSpacing(3)  # 压缩行间距
+        form_layout.setContentsMargins(6, 6, 6, 6)  # 压缩边距
         
         # 运行推理按钮
         self.pushButton_runInference = QPushButton("运行推理 (Run Inference)")
@@ -355,6 +362,8 @@ class InferencePanel(QWidget):
         """创建推理结果显示区"""
         self.groupBox_inferenceResult = QGroupBox("推理结果 (Inference Result)")
         layout = QVBoxLayout(self.groupBox_inferenceResult)
+        layout.setSpacing(3)  # 压缩行间距
+        layout.setContentsMargins(6, 6, 6, 6)  # 压缩边距
         
         self.label_inferenceResult = QLabel("暂无推理结果\n\n请加载模型并运行推理，结果将显示在此处。")
         self.label_inferenceResult.setWordWrap(True)

@@ -73,9 +73,12 @@ class Ui_MainWindow(object):
         self.splitter_vertical = QSplitter(self.centralwidget)
         self.splitter_vertical.setObjectName(u"splitter_vertical")
         self.splitter_vertical.setOrientation(Qt.Orientation.Vertical)
+        self.splitter_vertical.setChildrenCollapsible(False)  # 防止子组件完全折叠
+        self.splitter_vertical.setHandleWidth(6)  # 增加手柄宽度，便于拖动
         self.splitter_horizontal = QSplitter(self.splitter_vertical)
         self.splitter_horizontal.setObjectName(u"splitter_horizontal")
         self.splitter_horizontal.setOrientation(Qt.Orientation.Horizontal)
+        self.splitter_horizontal.setMinimumHeight(200)  # 设置最小高度，允许底部面板扩展
         
         # ========== 左侧面板：上下文感知侧边栏 (Context-Aware Sidebar) ==========
         # 使用 QStackedWidget 实现动态切换
@@ -128,7 +131,7 @@ class Ui_MainWindow(object):
         self.verticalLayout_detailView.setContentsMargins(0, 0, 0, 0)
         self.graphicsView_canvas = SmartCanvas(self.page_detailView)
         self.graphicsView_canvas.setObjectName(u"graphicsView_canvas")
-        self.graphicsView_canvas.setMinimumSize(QSize(600, 400))
+        self.graphicsView_canvas.setMinimumSize(QSize(300, 200))  # 降低最小高度，允许底部面板扩展
         self.verticalLayout_detailView.addWidget(self.graphicsView_canvas)
         self.stackedWidget_views.addWidget(self.page_detailView)
         
@@ -147,7 +150,7 @@ class Ui_MainWindow(object):
         self.listWidget_thumbnails.setResizeMode(QListView.ResizeMode.Adjust)
         self.listWidget_thumbnails.setWordWrap(True)  # 文件名换行
         self.listWidget_thumbnails.setMovement(QListView.Movement.Static)
-        self.listWidget_thumbnails.setMinimumSize(QSize(600, 400))
+        self.listWidget_thumbnails.setMinimumSize(QSize(300, 200))  # 降低最小高度，允许底部面板扩展
         self.verticalLayout_gridView.addWidget(self.listWidget_thumbnails)
         self.stackedWidget_views.addWidget(self.page_gridView)
         
@@ -159,7 +162,7 @@ class Ui_MainWindow(object):
         self.verticalLayout_gisView.setContentsMargins(0, 0, 0, 0)
         self.gisCanvas = GISCanvasWidget(self.page_gisView)
         self.gisCanvas.setObjectName(u"gisCanvas")
-        self.gisCanvas.setMinimumSize(QSize(600, 400))
+        self.gisCanvas.setMinimumSize(QSize(300, 200))  # 降低最小高度，允许底部面板扩展
         self.verticalLayout_gisView.addWidget(self.gisCanvas)
         self.stackedWidget_views.addWidget(self.page_gisView)
         
@@ -243,9 +246,22 @@ class Ui_MainWindow(object):
         self.tab_taskConfig.setObjectName(u"tab_taskConfig")
         self.verticalLayout_taskConfig = QVBoxLayout(self.tab_taskConfig)
         self.verticalLayout_taskConfig.setObjectName(u"verticalLayout_taskConfig")
+        self.verticalLayout_taskConfig.setContentsMargins(0, 0, 0, 0)
+        
+        # 添加滚动区域，使内容在空间不足时可滚动
+        self.scrollArea_taskConfig = QScrollArea(self.tab_taskConfig)
+        self.scrollArea_taskConfig.setObjectName(u"scrollArea_taskConfig")
+        self.scrollArea_taskConfig.setWidgetResizable(True)
+        self.scrollArea_taskConfig.setFrameShape(QScrollArea.Shape.NoFrame)
+        
+        # 滚动区域内容容器
+        self.scrollAreaWidget_taskConfig = QWidget()
+        self.scrollAreaWidget_taskConfig.setObjectName(u"scrollAreaWidget_taskConfig")
+        self.verticalLayout_taskConfigContent = QVBoxLayout(self.scrollAreaWidget_taskConfig)
+        self.verticalLayout_taskConfigContent.setObjectName(u"verticalLayout_taskConfigContent")
         
         # 任务类型选择
-        self.groupBox_taskType = QGroupBox(self.tab_taskConfig)
+        self.groupBox_taskType = QGroupBox(self.scrollAreaWidget_taskConfig)
         self.groupBox_taskType.setObjectName(u"groupBox_taskType")
         self.verticalLayout_taskType = QVBoxLayout(self.groupBox_taskType)
         self.verticalLayout_taskType.setObjectName(u"verticalLayout_taskType")
@@ -268,10 +284,10 @@ class Ui_MainWindow(object):
         self.verticalLayout_inference.addWidget(self.label_inferenceInfo)
         self.tabWidget_tasks.addTab(self.tab_inference, "")
         self.verticalLayout_taskType.addWidget(self.tabWidget_tasks)
-        self.verticalLayout_taskConfig.addWidget(self.groupBox_taskType)
+        self.verticalLayout_taskConfigContent.addWidget(self.groupBox_taskType)
         
         # 参数配置
-        self.groupBox_paramConfig = QGroupBox(self.tab_taskConfig)
+        self.groupBox_paramConfig = QGroupBox(self.scrollAreaWidget_taskConfig)
         self.groupBox_paramConfig.setObjectName(u"groupBox_paramConfig")
         self.verticalLayout_paramConfig = QVBoxLayout(self.groupBox_paramConfig)
         self.verticalLayout_paramConfig.setObjectName(u"verticalLayout_paramConfig")
@@ -291,10 +307,10 @@ class Ui_MainWindow(object):
         self.verticalLayout_scrollParams.addItem(self.verticalSpacer_params)
         self.scrollArea_params.setWidget(self.scrollAreaWidgetContents)
         self.verticalLayout_paramConfig.addWidget(self.scrollArea_params)
-        self.verticalLayout_taskConfig.addWidget(self.groupBox_paramConfig)
+        self.verticalLayout_taskConfigContent.addWidget(self.groupBox_paramConfig)
         
         # 操作按钮
-        self.groupBox_actions = QGroupBox(self.tab_taskConfig)
+        self.groupBox_actions = QGroupBox(self.scrollAreaWidget_taskConfig)
         self.groupBox_actions.setObjectName(u"groupBox_actions")
         self.verticalLayout_actions = QVBoxLayout(self.groupBox_actions)
         self.verticalLayout_actions.setObjectName(u"verticalLayout_actions")
@@ -307,10 +323,14 @@ class Ui_MainWindow(object):
         self.pushButton_export = QPushButton(self.groupBox_actions)
         self.pushButton_export.setObjectName(u"pushButton_export")
         self.verticalLayout_actions.addWidget(self.pushButton_export)
-        self.verticalLayout_taskConfig.addWidget(self.groupBox_actions)
+        self.verticalLayout_taskConfigContent.addWidget(self.groupBox_actions)
         
         self.verticalSpacer_taskConfig = QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
-        self.verticalLayout_taskConfig.addItem(self.verticalSpacer_taskConfig)
+        self.verticalLayout_taskConfigContent.addItem(self.verticalSpacer_taskConfig)
+        
+        # 将内容容器设置到滚动区域
+        self.scrollArea_taskConfig.setWidget(self.scrollAreaWidget_taskConfig)
+        self.verticalLayout_taskConfig.addWidget(self.scrollArea_taskConfig)
         
         self.tabWidget_contextControl.addTab(self.tab_taskConfig, "")
         
@@ -321,19 +341,34 @@ class Ui_MainWindow(object):
         self.verticalLayout_inferenceVis.setObjectName(u"verticalLayout_inferenceVis")
         self.verticalLayout_inferenceVis.setContentsMargins(0, 0, 0, 0)
         
+        # 添加滚动区域，使内容在空间不足时可滚动
+        self.scrollArea_inferenceVis = QScrollArea(self.tab_inferenceVis)
+        self.scrollArea_inferenceVis.setObjectName(u"scrollArea_inferenceVis")
+        self.scrollArea_inferenceVis.setWidgetResizable(True)
+        self.scrollArea_inferenceVis.setFrameShape(QScrollArea.Shape.NoFrame)
+        
         # 使用新的 InferencePanel 组件
-        self.inference_panel = InferencePanel(self.tab_inferenceVis)
+        self.inference_panel = InferencePanel()
         self.inference_panel.setObjectName(u"inference_panel")
-        self.verticalLayout_inferenceVis.addWidget(self.inference_panel)
+        
+        # 将 InferencePanel 设置为滚动区域的内容
+        self.scrollArea_inferenceVis.setWidget(self.inference_panel)
+        self.verticalLayout_inferenceVis.addWidget(self.scrollArea_inferenceVis)
         
         self.tabWidget_contextControl.addTab(self.tab_inferenceVis, "")
         
         self.verticalLayout_right.addWidget(self.tabWidget_contextControl)
 
         self.splitter_horizontal.addWidget(self.rightPanel)
+        
+        # 设置水平分割器初始大小比例（左侧栏 : 中心区域 : 右侧面板）
+        # 中心面板约占45%
+        self.splitter_horizontal.setSizes([280, 630, 490])
+        
         self.splitter_vertical.addWidget(self.splitter_horizontal)
         self.bottomPanel = QWidget(self.splitter_vertical)
         self.bottomPanel.setObjectName(u"bottomPanel")
+        self.bottomPanel.setMinimumHeight(80)  # 设置最小高度，确保可拖动调整
         self.verticalLayout_bottom = QVBoxLayout(self.bottomPanel)
         self.verticalLayout_bottom.setObjectName(u"verticalLayout_bottom")
         self.verticalLayout_bottom.setContentsMargins(0, 0, 0, 0)
@@ -385,6 +420,9 @@ class Ui_MainWindow(object):
         self.verticalLayout_bottom.addWidget(self.tabWidget_bottom)
 
         self.splitter_vertical.addWidget(self.bottomPanel)
+        
+        # 设置垂直分割器的初始大小比例（主内容区域 : 底部面板 = 700 : 150）
+        self.splitter_vertical.setSizes([700, 150])
 
         self.verticalLayout_main.addWidget(self.splitter_vertical)
 
