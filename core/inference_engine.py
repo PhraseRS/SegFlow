@@ -19,6 +19,9 @@ from tqdm import tqdm
 # 默认限制约为178MB像素，这里提高到10GB像素
 Image.MAX_IMAGE_PIXELS = 10000000000
 
+# --- 从 skill_geodata_utils 导入可复用的数据转换逻辑 ---
+from skills.skill_geodata_utils import gdal_data_to_opencv_data as _gdal_data_to_opencv_func
+
 try:
     from osgeo import gdal
     from osgeo.gdalconst import GA_ReadOnly
@@ -213,17 +216,8 @@ class InferenceEngine:
         return result_mask
     
     def _gdal_data_to_opencv_data(self, gdal_img_data):
-        """将GDAL数据格式转换为OpenCV格式"""
-        if 'int8' in gdal_img_data.dtype.name:
-            opencv_img_data = np.zeros((gdal_img_data.shape[1], gdal_img_data.shape[2], gdal_img_data.shape[0]), np.uint8)
-        elif 'int16' in gdal_img_data.dtype.name:
-            opencv_img_data = np.zeros((gdal_img_data.shape[1], gdal_img_data.shape[2], gdal_img_data.shape[0]), np.uint16)
-        else:
-            opencv_img_data = np.zeros((gdal_img_data.shape[1], gdal_img_data.shape[2], gdal_img_data.shape[0]), np.float32)
-        
-        for i in range(gdal_img_data.shape[0]):
-            opencv_img_data[:, :, i] = gdal_img_data[gdal_img_data.shape[0] - i - 1, :, :]
-        return opencv_img_data
+        """将GDAL数据格式转换为OpenCV格式（委托给 skill_geodata_utils）"""
+        return _gdal_data_to_opencv_func(gdal_img_data)
     
     def _predict_single_block(self, img_block):
         """

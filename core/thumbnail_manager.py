@@ -8,17 +8,7 @@ from PySide6.QtWidgets import QListWidget
 from PySide6.QtCore import Qt, QRunnable, QThreadPool, Signal, QObject, QTimer, QMutex, QMutexLocker
 from PySide6.QtGui import QPixmap, QImage, QIcon, QPainter, QColor
 import os
-
-
-# VOC调色板
-VOC_PALETTE = [
-    (0, 0, 0), (128, 0, 0), (0, 128, 0), (128, 128, 0),
-    (0, 0, 128), (128, 0, 128), (0, 128, 128), (128, 128, 128),
-    (64, 0, 0), (192, 0, 0), (64, 128, 0), (192, 128, 0),
-    (64, 0, 128), (192, 0, 128), (64, 128, 128), (192, 128, 128),
-    (0, 64, 0), (128, 64, 0), (0, 192, 0), (128, 192, 0),
-    (0, 64, 128), (255, 255, 255),
-]
+from skills.skill_image_processing import VOC_PALETTE, apply_colormap as _apply_colormap_func, apply_linear_stretch as _apply_linear_stretch_func
 
 
 class ThumbnailSignals(QObject):
@@ -44,77 +34,12 @@ class ThumbnailTask(QRunnable):
         self._is_cancelled = True
     
     def _apply_colormap(self, label_image):
-        """将标签图像转换为伪彩色"""
-        width = label_image.width()
-        height = label_image.height()
-        colored = QImage(width, height, QImage.Format.Format_ARGB32)
-        
-        for y in range(height):
-            for x in range(width):
-                pixel = label_image.pixel(x, y)
-                gray = pixel & 0xFF
-                if gray < len(VOC_PALETTE):
-                    r, g, b = VOC_PALETTE[gray]
-                else:
-                    r, g, b = 255, 255, 255
-                alpha = 0 if gray == 0 else 255
-                colored.setPixel(x, y, (alpha << 24) | (r << 16) | (g << 8) | b)
-        
-        return colored
+        """将标签图像转换为伪彩色（委托给 skill_image_processing）"""
+        return _apply_colormap_func(label_image, VOC_PALETTE)
     
     def _apply_linear_stretch(self, image, percent=2):
-        """对图像应用线性拉伸"""
-        width = image.width()
-        height = image.height()
-        
-        if image.format() != QImage.Format.Format_RGB32:
-            image = image.convertToFormat(QImage.Format.Format_RGB32)
-        
-        # 收集像素亮度
-        pixels = []
-        for y in range(height):
-            for x in range(width):
-                pixel = image.pixel(x, y)
-                r = (pixel >> 16) & 0xFF
-                g = (pixel >> 8) & 0xFF
-                b = pixel & 0xFF
-                luminance = int(0.299 * r + 0.587 * g + 0.114 * b)
-                pixels.append(luminance)
-        
-        if not pixels:
-            return image
-        
-        pixels.sort()
-        n = len(pixels)
-        low_idx = int(n * percent / 100)
-        high_idx = int(n * (100 - percent) / 100) - 1
-        
-        if low_idx >= high_idx:
-            return image
-        
-        low_val = pixels[low_idx]
-        high_val = pixels[high_idx]
-        
-        if high_val <= low_val:
-            return image
-        
-        result = QImage(width, height, QImage.Format.Format_RGB32)
-        scale = 255.0 / (high_val - low_val)
-        
-        for y in range(height):
-            for x in range(width):
-                pixel = image.pixel(x, y)
-                r = (pixel >> 16) & 0xFF
-                g = (pixel >> 8) & 0xFF
-                b = pixel & 0xFF
-                
-                r_new = int(max(0, min(255, (r - low_val) * scale)))
-                g_new = int(max(0, min(255, (g - low_val) * scale)))
-                b_new = int(max(0, min(255, (b - low_val) * scale)))
-                
-                result.setPixel(x, y, (255 << 24) | (r_new << 16) | (g_new << 8) | b_new)
-        
-        return result
+        """对图像应用线性拉伸（委托给 skill_image_processing）"""
+        return _apply_linear_stretch_func(image, percent)
     
     def run(self):
         """执行缩略图加载"""
