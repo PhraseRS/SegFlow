@@ -8,9 +8,7 @@
 """
 
 import os
-import sys
 import csv
-import subprocess
 from typing import Optional, Dict, List, Any
 from dataclasses import dataclass
 from enum import Enum
@@ -38,53 +36,8 @@ FONT_SIZE_PX = 10
 COUNT_WIDTH_PX = 60
 
 
-# ==================== 系统集成工具函数 ====================
-
-def reveal_in_explorer(file_path: str) -> bool:
-    """在系统文件管理器中显示文件"""
-    if not file_path:
-        return False
-    
-    file_path = os.path.normpath(file_path)
-    
-    if not os.path.exists(file_path):
-        parent_dir = os.path.dirname(file_path)
-        if os.path.exists(parent_dir):
-            file_path = parent_dir
-        else:
-            return False
-    
-    try:
-        if sys.platform == 'win32':
-            if os.path.isfile(file_path):
-                subprocess.run(['explorer', '/select,', file_path], check=False)
-            else:
-                subprocess.run(['explorer', file_path], check=False)
-        elif sys.platform == 'darwin':
-            subprocess.run(['open', '-R', file_path], check=False)
-        else:
-            if os.path.isfile(file_path):
-                subprocess.run(['xdg-open', os.path.dirname(file_path)], check=False)
-            else:
-                subprocess.run(['xdg-open', file_path], check=False)
-        return True
-    except Exception as e:
-        print(f"⚠️ 打开文件管理器失败: {e}")
-        return False
-
-
-def copy_path_to_clipboard(file_path: str) -> bool:
-    """复制文件路径到剪贴板"""
-    if not file_path:
-        return False
-    
-    try:
-        clipboard = QApplication.clipboard()
-        clipboard.setText(os.path.normpath(file_path))
-        return True
-    except Exception as e:
-        print(f"⚠️ 复制到剪贴板失败: {e}")
-        return False
+# ==================== 系统集成工具函数 (引用 Skill) ====================
+from skills.skill_file_utils import reveal_in_explorer, copy_path_to_clipboard
 
 
 def export_issues_to_csv(

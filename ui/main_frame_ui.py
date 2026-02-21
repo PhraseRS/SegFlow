@@ -291,6 +291,7 @@ class Ui_MainWindow(object):
         self.groupBox_paramConfig.setObjectName(u"groupBox_paramConfig")
         self.verticalLayout_paramConfig = QVBoxLayout(self.groupBox_paramConfig)
         self.verticalLayout_paramConfig.setObjectName(u"verticalLayout_paramConfig")
+        
         self.scrollArea_params = QScrollArea(self.groupBox_paramConfig)
         self.scrollArea_params.setObjectName(u"scrollArea_params")
         self.scrollArea_params.setWidgetResizable(True)
@@ -314,6 +315,37 @@ class Ui_MainWindow(object):
         self.groupBox_actions.setObjectName(u"groupBox_actions")
         self.verticalLayout_actions = QVBoxLayout(self.groupBox_actions)
         self.verticalLayout_actions.setObjectName(u"verticalLayout_actions")
+        
+        # Phase 3.3: 推荐训练配置按钮（放在操作按钮组最顶部，确保可见）
+        self.pushButton_applyRecommend = QPushButton(self.groupBox_actions)
+        self.pushButton_applyRecommend.setObjectName(u"pushButton_applyRecommend")
+        self.pushButton_applyRecommend.setEnabled(False)
+        self.pushButton_applyRecommend.setMinimumHeight(36)
+        self.pushButton_applyRecommend.setStyleSheet(
+            "QPushButton {"
+            "  background-color: #1976D2; color: white; font-weight: bold;"
+            "  border-radius: 4px; padding: 6px 12px; font-size: 13px;"
+            "}"
+            "QPushButton:hover { background-color: #1565C0; }"
+            "QPushButton:disabled {"
+            "  background-color: #B0BEC5; color: #78909C;"
+            "}"
+        )
+        self.verticalLayout_actions.addWidget(self.pushButton_applyRecommend)
+        
+        # Phase 3.3: 推荐摘要显示
+        self.label_recommendSummary = QLabel(self.groupBox_actions)
+        self.label_recommendSummary.setObjectName(u"label_recommendSummary")
+        self.label_recommendSummary.setWordWrap(True)
+        self.label_recommendSummary.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.label_recommendSummary.setStyleSheet(
+            "background-color: #E3F2FD; border: 1px solid #90CAF9;"
+            " border-radius: 4px; padding: 8px; font-size: 11px;"
+            " color: #1565C0;"
+        )
+        self.label_recommendSummary.setVisible(False)
+        self.verticalLayout_actions.addWidget(self.label_recommendSummary)
+        
         self.pushButton_run = QPushButton(self.groupBox_actions)
         self.pushButton_run.setObjectName(u"pushButton_run")
         self.verticalLayout_actions.addWidget(self.pushButton_run)
@@ -539,6 +571,7 @@ class Ui_MainWindow(object):
         self.label_inferenceInfo.setText(QCoreApplication.translate("MainWindow", u"\u63a8\u7406\u6a21\u5f0f\u914d\u7f6e", None))
         self.tabWidget_tasks.setTabText(self.tabWidget_tasks.indexOf(self.tab_inference), QCoreApplication.translate("MainWindow", u"\u63a8\u7406 (Inference)", None))
         self.groupBox_paramConfig.setTitle(QCoreApplication.translate("MainWindow", u"\u53c2\u6570\u914d\u7f6e (Parameter Config)", None))
+        self.pushButton_applyRecommend.setText(QCoreApplication.translate("MainWindow", u"\U0001f4a1 \u5e94\u7528\u63a8\u8350\u8bad\u7ec3\u914d\u7f6e", None))
         self.label_paramPlaceholder.setText(QCoreApplication.translate("MainWindow", u"\u53c2\u6570\u914d\u7f6e\u533a\u57df\n"
 "(\u52a8\u6001\u52a0\u8f7d\u53c2\u6570\u63a7\u4ef6)", None))
         self.groupBox_actions.setTitle(QCoreApplication.translate("MainWindow", u"\u64cd\u4f5c\u6309\u94ae (Action Buttons)", None))

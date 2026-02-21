@@ -8,6 +8,7 @@ from PySide6.QtWidgets import QListWidget
 from PySide6.QtCore import Qt, QRunnable, QThreadPool, Signal, QObject, QTimer, QMutex, QMutexLocker
 from PySide6.QtGui import QPixmap, QImage, QIcon, QPainter, QColor
 import os
+import hashlib
 from skills.skill_image_processing import VOC_PALETTE, apply_colormap as _apply_colormap_func, apply_linear_stretch as _apply_linear_stretch_func
 
 
@@ -136,6 +137,9 @@ class ThumbnailLazyLoader:
         
         # 占位图
         self._placeholder = self._create_placeholder()
+        
+        # Phase 1.4: 磁盘缓存目录
+        self._cache_dir = None
     
     def _create_placeholder(self):
         """创建占位图"""
@@ -235,6 +239,10 @@ class ThumbnailLazyLoader:
         if key not in self.samples:
             return
         
+        # Phase 1.4: 尝试从磁盘缓存加载
+        if self._try_load_from_disk_cache(key):
+            return
+        
         sample = self.samples[key]
         task = ThumbnailTask(
             key,
@@ -316,6 +324,9 @@ class ThumbnailLazyLoader:
         # 缓存并显示
         self.composite_cache[cache_key] = result
         item.setIcon(QIcon(result))
+        
+        # Phase 1.4: 保存到磁盘缓存
+        self._save_composite_to_disk(key, result)
     
     def set_layer_settings(self, show_image, show_label, opacity):
         """设置图层参数"""
@@ -345,3 +356,70 @@ class ThumbnailLazyLoader:
         """触发初始加载（切换到网格视图时调用）"""
         # 延迟一点执行，确保布局完成
         QTimer.singleShot(50, self._load_visible_thumbnails)
+    
+    # ==================== Phase 1.4: 磁盘缓存 ====================
+    
+    def set_cache_dir(self, data_root):
+        """
+        设置磁盘缓存目录。
+        会在 data_root 下创建 .cache/thumbnails/ 目录。
+        
+        Args:
+            data_root: 数据集根目录。
+        """
+        if not data_root:
+            self._cache_dir = None
+            return
+        
+        cache_dir = os.path.join(data_root, '.cache', 'thumbnails')
+        try:
+            os.makedirs(cache_dir, exist_ok=True)
+            self._cache_dir = cache_dir
+            print(f'📁 缩略图缓存目录: {cache_dir}')
+        except OSError as e:
+            print(f'⚠️ 无法创建缓存目录: {e}')
+            self._cache_dir = None
+    
+    def _get_cache_path(self, key):
+        """根据 key 生成磁盘缓存文件路径"""
+        if not self._cache_dir:
+            return None
+        # 用 key 的 hash 作为文件名，避免特殊字符问题
+        safe_name = hashlib.md5(key.encode('utf-8')).hexdigest()
+        return os.path.join(self._cache_dir, f'thumb_{safe_name}.jpg')
+    
+    def _try_load_from_disk_cache(self, key):
+        """
+        尝试从磁盘缓存加载缩略图。
+        如果缓存命中，直接设置到 QListWidgetItem 并返回 True。
+        """
+        cache_path = self._get_cache_path(key)
+        if not cache_path or not os.path.exists(cache_path):
+            return False
+        
+        pixmap = QPixmap(cache_path)
+        if pixmap.isNull():
+            return False
+        
+        # 将磁盘缓存视为 "image" 层，无 label 层（因为磁盘缓存已是合成后的结果）
+        self.loaded_data[key] = {
+            'image': pixmap,
+            'label': QPixmap()  # 空的
+        }
+        
+        # 直接设置图标（缓存已是合成后的，无需再走 composite 流程）
+        if key in self.samples:
+            self.samples[key]['item'].setIcon(QIcon(pixmap))
+        
+        return True
+    
+    def _save_composite_to_disk(self, key, composite_pixmap):
+        """将合成后的缩略图保存到磁盘缓存"""
+        cache_path = self._get_cache_path(key)
+        if not cache_path or composite_pixmap.isNull():
+            return
+        
+        try:
+            composite_pixmap.save(cache_path, 'JPEG', 85)
+        except Exception as e:
+            print(f'⚠️ 保存缩略图缓存失败 [{key}]: {e}')

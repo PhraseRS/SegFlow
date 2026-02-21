@@ -6,9 +6,10 @@
 
 from PySide6.QtWidgets import (QApplication, QMainWindow, QTreeWidgetItem, QFileDialog,
                                 QMessageBox, QGraphicsScene, QGraphicsPixmapItem, QSplitter,
-                                QGraphicsRectItem, QGraphicsLineItem, QListWidgetItem)
+                                QGraphicsRectItem, QGraphicsLineItem, QListWidgetItem,
+                                QMenu)
 from PySide6.QtCore import Qt, QRectF, QSize, QThread, Signal, QObject, QTimer
-from PySide6.QtGui import QIcon, QPixmap, QImage, QPainter, QColor, QPen, QBrush
+from PySide6.QtGui import QIcon, QPixmap, QImage, QPainter, QColor, QPen, QBrush, QAction
 from ui.main_frame_ui import Ui_MainWindow
 from core.dataset_metadata import DatasetMetadataManager
 from core.thumbnail_manager import ThumbnailLazyLoader
@@ -440,6 +441,10 @@ class MainWindow(QMainWindow):
         self.ui.treeWidget_dataSources.currentItemChanged.connect(self.on_tree_item_changed)
         self.ui.treeWidget_dataSources.itemClicked.connect(self.on_tree_item_clicked)
         
+        # 树控件右键菜单 (Phase 2: 样本列表快捷交互)
+        self.ui.treeWidget_dataSources.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.ui.treeWidget_dataSources.customContextMenuRequested.connect(self._show_tree_context_menu)
+        
         # 图层控制
         self.ui.checkBox_baseImage.stateChanged.connect(self.on_base_image_toggled)
         self.ui.checkBox_overlayPrediction.stateChanged.connect(self.on_overlay_toggled)
@@ -462,6 +467,9 @@ class MainWindow(QMainWindow):
         # 网格视图双击
         self.ui.listWidget_thumbnails.itemDoubleClicked.connect(self.on_thumbnail_double_clicked)
         
+        # 网格视图单击同步 (Phase 1.1: Right -> Left)
+        self.ui.listWidget_thumbnails.currentItemChanged.connect(self._on_thumbnail_single_clicked)
+        
         # 健康检查卡片过滤信号
         self.ui.widget_healthCheck.filterRequested.connect(self._on_health_filter_requested)
         self.ui.widget_healthCheck.clearFilterRequested.connect(self.clear_tree_filter)
@@ -473,13 +481,15 @@ class MainWindow(QMainWindow):
         self.ui.inference_panel.inference_finished.connect(self._on_inference_finished)
         self.ui.inference_panel.inference_error.connect(self._on_inference_error)
         
-        # ========== 双向同步：GIS 图层控制 <-> 推理面板 ==========
+        # 双向同步：GIS 图层控制 <-> 推理面板
         # 方向 1: 左侧 GIS 底图变化 -> 右侧推理面板输入路径
         self.ui.gisCanvas.base_image_set.connect(self._sync_base_image_to_inference)
         
         # 方向 2: 右侧推理面板选择图像 -> 左侧 GIS 底图
         self.ui.inference_panel.input_path_selected.connect(self._sync_inference_to_base_image)
         
+        # Phase 3.3: 推荐训练配置按钮
+        self.ui.pushButton_applyRecommend.clicked.connect(self._on_apply_recommend_config)
         # ========== 核心：主 Tab 与侧边栏联动 ==========
         # 右侧 Tab 切换时，自动切换左侧侧边栏
         self.ui.tabWidget_contextControl.currentChanged.connect(self._on_main_tab_changed)
@@ -529,6 +539,9 @@ class MainWindow(QMainWindow):
         # 加载数据
         self.data_manager.load_from_txt_files(data_root)
         self.statusBar().showMessage(f"已从 {data_root} 加载VOC数据集")
+        
+        # Phase 1.4: 设置缩略图磁盘缓存目录
+        self.thumbnail_manager.set_cache_dir(data_root)
         
         # 更新数据集概览（基本统计）
         self._update_dataset_overview()
@@ -638,6 +651,9 @@ class MainWindow(QMainWindow):
             
             # 3. 更新健康检查卡片
             self._update_health_check()
+            
+            # Phase 3.3: 启用推荐配置按钮
+            self.ui.pushButton_applyRecommend.setEnabled(True)
     
     def _update_class_distribution(self, class_distribution, image_counts=None):
         """更新类别分布面板
@@ -713,6 +729,48 @@ class MainWindow(QMainWindow):
         total_samples = health_data.get('total_samples', 0)
         
         self.ui.widget_healthCheck.set_issues(issues, total_samples)
+    
+    def _on_apply_recommend_config(self):
+        """
+        Phase 3.3: 应用推荐训练配置
+        
+        从 MetadataDatabase 构建 ConfigAdvisor，
+        生成推荐摘要并显示在 Task Config 面板中。
+        """
+        database = self.ui.analysis_panel.metadata_manager.database
+        if database is None:
+            print("⚠️ 无可用的元数据数据库")
+            return
+        
+        try:
+            from core.config_advisor import ConfigAdvisor
+            
+            advisor = ConfigAdvisor.from_database(database)
+            summary = advisor.get_summary()
+            
+            # 显示推荐摘要
+            self.ui.label_recommendSummary.setText(summary)
+            self.ui.label_recommendSummary.setVisible(True)
+            
+            # 切换到 Task Config tab
+            task_config_idx = self.ui.tabWidget_contextControl.indexOf(self.ui.tab_taskConfig)
+            if task_config_idx >= 0:
+                self.ui.tabWidget_contextControl.setCurrentIndex(task_config_idx)
+            
+            # 获取推荐的 crop_size 并应用到推理策略
+            aug_config = advisor.recommend_augmentation()
+            for aug in aug_config.get('augmentations', []):
+                if aug.get('type') == 'RandomCrop':
+                    crop_size = aug.get('crop_size', (512, 512))
+                    self.ui.inference_panel.spinBox_cropSize.setValue(crop_size[0])
+                    break
+            
+            print(f"💡 [ConfigAdvisor] 推荐配置已应用\n{summary}")
+            
+        except Exception as e:
+            print(f"❌ [ConfigAdvisor] 推荐配置生成失败: {e}")
+            import traceback
+            traceback.print_exc()
     
     def _on_health_filter_requested(self, issue_type: str):
         """
@@ -914,10 +972,11 @@ class MainWindow(QMainWindow):
             # 点击叶子节点：加载样本可视化
             sample_info = self.data_manager.get_sample_info(current)
             if sample_info:
-                # 如果在网格视图，切换到详情视图
                 if self.current_view_mode == VIEW_MODE_GRID:
-                    self.on_switch_to_detail_view()
-                self.load_sample_visualization(sample_info)
+                    # Phase 1.1: Grid 模式下，不切换视图，而是在网格中高亮对应缩略图
+                    self._select_thumbnail_in_grid(sample_info['sample_id'], sample_info['dataset'])
+                else:
+                    self.load_sample_visualization(sample_info)
     
     def _filter_grid_by_dataset(self, dataset_type):
         """根据数据集类型过滤网格视图（懒加载模式）"""
@@ -947,6 +1006,144 @@ class MainWindow(QMainWindow):
         """树控件项点击事件"""
         # 这里可以添加额外的点击处理逻辑
         pass
+    
+    # ==================== Phase 1.1: 双向选择同步 ====================
+    
+    def _on_thumbnail_single_clicked(self, current, previous):
+        """
+        网格视图单击事件 (Phase 1.1: Right -> Left)
+        当用户在右侧画廊单击某张缩略图时，自动在左侧树形控件中展开并高亮该文件项。
+        使用 blockSignals 防止无限循环触发。
+        """
+        if current is None:
+            return
+        
+        sample_info = current.data(Qt.ItemDataRole.UserRole)
+        if not sample_info or not isinstance(sample_info, dict):
+            return
+        
+        sample_id = sample_info.get('sample_id', '')
+        dataset_type = sample_info.get('dataset', '')
+        
+        if not sample_id:
+            return
+        
+        # 使用 blockSignals 防止树形控件的 currentItemChanged 反向触发
+        self.ui.treeWidget_dataSources.blockSignals(True)
+        self._select_sample_in_tree(sample_id, dataset_type)
+        self.ui.treeWidget_dataSources.blockSignals(False)
+        
+        self.statusBar().showMessage(f'已同步选中: {sample_id} ({dataset_type.upper()})')
+    
+    def _select_thumbnail_in_grid(self, sample_id, dataset_type):
+        """
+        在网格视图中高亮指定样本 (Phase 1.1: Left -> Right)
+        当用户在左侧树形控件单击某个样本时，自动滚动到对应缩略图并高亮选中。
+        使用 blockSignals 防止无限循环触发。
+        """
+        target_key = f"{dataset_type}_{sample_id}"
+        
+        # 遍历 listWidget 查找匹配的项
+        for i in range(self.ui.listWidget_thumbnails.count()):
+            item = self.ui.listWidget_thumbnails.item(i)
+            item_data = item.data(Qt.ItemDataRole.UserRole)
+            if isinstance(item_data, dict):
+                if item_data.get('sample_id') == sample_id and item_data.get('dataset') == dataset_type:
+                    # 使用 blockSignals 防止反向触发
+                    self.ui.listWidget_thumbnails.blockSignals(True)
+                    self.ui.listWidget_thumbnails.setCurrentItem(item)
+                    self.ui.listWidget_thumbnails.scrollToItem(
+                        item,
+                        self.ui.listWidget_thumbnails.ScrollHint.PositionAtCenter
+                    )
+                    self.ui.listWidget_thumbnails.blockSignals(False)
+                    break
+    
+    def _show_tree_context_menu(self, pos):
+        """
+        树控件右键菜单 (Phase 2: 样本列表快捷交互)
+        
+        提供：
+        - 📋 复制文件名
+        - 🔗 复制完整路径
+        - 📂 在文件夹中显示 (Reveal in Explorer)
+        
+        引用 Skill: skills.skill_file_utils
+        """
+        from skills.skill_file_utils import (
+            reveal_in_explorer, copy_path_to_clipboard, copy_filename_to_clipboard
+        )
+        
+        item = self.ui.treeWidget_dataSources.itemAt(pos)
+        if item is None or not self.data_manager.is_leaf_node(item):
+            return
+        
+        sample_info = self.data_manager.get_sample_info(item)
+        if not sample_info:
+            return
+        
+        sample_id = sample_info['sample_id']
+        dataset_type = sample_info['dataset']
+        image_path, label_path = self.data_manager.get_sample_paths(sample_id, dataset_type)
+        
+        # 优先使用影像路径，没有则用标签路径
+        target_path = image_path or label_path
+        
+        menu = QMenu(self)
+        
+        # 操作 1：复制文件名
+        action_copy_name = QAction('📋 复制文件名', self)
+        action_copy_name.triggered.connect(
+            lambda: self._do_copy_filename(sample_id, target_path)
+        )
+        menu.addAction(action_copy_name)
+        
+        # 操作 2：复制完整路径
+        action_copy_path = QAction('🔗 复制完整路径', self)
+        action_copy_path.setEnabled(target_path is not None)
+        action_copy_path.triggered.connect(
+            lambda: self._do_copy_path(target_path)
+        )
+        menu.addAction(action_copy_path)
+        
+        menu.addSeparator()
+        
+        # 操作 3：在文件夹中显示
+        action_reveal = QAction('📂 在文件夹中显示', self)
+        action_reveal.setEnabled(target_path is not None)
+        action_reveal.triggered.connect(
+            lambda: self._do_reveal_in_explorer(target_path)
+        )
+        menu.addAction(action_reveal)
+        
+        menu.exec(self.ui.treeWidget_dataSources.viewport().mapToGlobal(pos))
+    
+    def _do_copy_filename(self, sample_id, file_path):
+        """复制文件名到剪贴板"""
+        from skills.skill_file_utils import copy_filename_to_clipboard
+        if file_path:
+            copy_filename_to_clipboard(file_path)
+        else:
+            # 如果没有实际文件路径，直接用 sample_id
+            from PySide6.QtWidgets import QApplication
+            QApplication.clipboard().setText(sample_id)
+        self.statusBar().showMessage(f'已复制文件名: {sample_id}')
+    
+    def _do_copy_path(self, file_path):
+        """复制完整路径到剪贴板"""
+        from skills.skill_file_utils import copy_path_to_clipboard
+        if file_path and copy_path_to_clipboard(file_path):
+            self.statusBar().showMessage(f'已复制路径: {file_path}')
+        else:
+            self.statusBar().showMessage('⚠️ 无法复制路径')
+    
+    def _do_reveal_in_explorer(self, file_path):
+        """在文件管理器中显示"""
+        from skills.skill_file_utils import reveal_in_explorer
+        if file_path and reveal_in_explorer(file_path):
+            self.statusBar().showMessage(f'已在文件管理器中定位: {os.path.basename(file_path)}')
+        else:
+            self.statusBar().showMessage('⚠️ 无法定位文件')
     
     def load_sample_visualization(self, sample_info):
         """
@@ -1114,7 +1311,12 @@ class MainWindow(QMainWindow):
         # 启用卷帘对比功能
         self.ui.checkBox_swipeCompare.setEnabled(True)
         
-        self.statusBar().showMessage("已切换到详情视图")
+        # Phase 1.3: 启用 Canvas 专用工具按钮
+        self.ui.action_zoomIn.setEnabled(True)
+        self.ui.action_zoomOut.setEnabled(True)
+        self.ui.action_fitToWindow.setEnabled(True)
+        
+        self.statusBar().showMessage('已切换到详情视图')
     
     def on_switch_to_grid_view(self):
         """切换到网格视图"""
@@ -1126,6 +1328,11 @@ class MainWindow(QMainWindow):
         # 禁用卷帘对比功能（网格视图下不可用）
         self.ui.checkBox_swipeCompare.setEnabled(False)
         self.ui.slider_swipe.setEnabled(False)
+        
+        # Phase 1.3: 禁用 Canvas 专用工具按钮（缩放等）
+        self.ui.action_zoomIn.setEnabled(False)
+        self.ui.action_zoomOut.setEnabled(False)
+        self.ui.action_fitToWindow.setEnabled(False)
         
         # 初始化图层设置
         show_image = self.ui.checkBox_baseImage.isChecked()
