@@ -51,6 +51,10 @@ class DatasetInsights:
     # 尺寸统计
     min_size: Tuple[int, int] = (0, 0)   # (width, height)
     max_size: Tuple[int, int] = (0, 0)
+    avg_size: Tuple[int, int] = (0, 0)   # 平均尺寸 (width, height)
+    
+    # 通道数（遥感多光谱支持）
+    num_channels: int = 3
     
     # 健康检查
     fatal_issues_count: int = 0
@@ -164,6 +168,17 @@ class ConfigAdvisor:
             size_stats.get('max_width', 0),
             size_stats.get('max_height', 0)
         )
+        # 计算平均尺寸
+        widths = size_stats.get('widths', [])
+        heights = size_stats.get('heights', [])
+        if widths and heights:
+            insights.avg_size = (
+                int(sum(widths) / len(widths)),
+                int(sum(heights) / len(heights))
+            )
+        
+        # 通道数（从 stats 中获取，若有）
+        insights.num_channels = stats.get('num_channels', 3)
         
         # 健康检查
         fatal_issues = health.get('fatal', {})
@@ -350,6 +365,41 @@ class ConfigAdvisor:
         crop_dim = min(crop_dim, 1024)
         
         return (crop_dim, crop_dim)
+    
+    def recommend_rs_params(self) -> Dict:
+        """
+        遥感专用推荐参数（Training Roadmap Task 2.1）
+        
+        聚合所有推荐结果为单一字典，供 UI 层和 MMSegTrainer.generate_config() 消费。
+        
+        Returns:
+            dict: {
+                'in_channels': int,
+                'crop_size': (int, int),
+                'class_weight': list,
+                'loss_config': dict,
+                'augmentation': dict,
+            }
+        """
+        ins = self.insights
+        
+        # 类别权重列表（按 class_id 排序）
+        sorted_ids = sorted(
+            ins.suggested_class_weights.keys(),
+            key=lambda x: int(x)
+        )
+        class_weight = [
+            ins.suggested_class_weights.get(cid, 1.0)
+            for cid in sorted_ids
+        ]
+        
+        return {
+            'in_channels': ins.num_channels,
+            'crop_size': self._recommend_crop_size(),
+            'class_weight': class_weight,
+            'loss_config': self.recommend_loss_config(),
+            'augmentation': self.recommend_augmentation(),
+        }
     
     def get_summary(self) -> str:
         """

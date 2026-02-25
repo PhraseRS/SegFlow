@@ -24,11 +24,11 @@
 ## 🗺️ Phase 2: 核心逻辑层 (Core Logic Layer)
 **目标**：将数据洞察转化为推荐参数，管理训练子进程。
 
-- [ ] **Task 2.1: ConfigAdvisor 增量扩展**
+- [x] **Task 2.1: ConfigAdvisor 增量扩展**
   - 文件: `core/config_advisor.py` (增量修改)
   - 新增 `recommend_rs_params()` 方法
 
-- [ ] **Task 2.2: 异步任务调度器**
+- [x] **Task 2.2: 异步任务调度器**
   - 文件: `core/training_dispatcher.py`
   - `TrainingThread(QThread)` + PySide6 Signal
 
@@ -37,11 +37,11 @@
 ## 🗺️ Phase 3: UI展示层 - 配置区
 **目标**：Supervisely 风格的多 Tab 参数配置界面。
 
-- [ ] **Task 3.1: 框架与模型选择区**
+- [x] **Task 3.1: 框架与模型选择区**
   - 文件: `ui/widgets/model_selection_widget.py`
-- [ ] **Task 3.2: 数据智能推荐区**
+- [x] **Task 3.2: 数据智能推荐区**
   - 文件: `ui/widgets/advisor_config_widget.py`
-- [ ] **Task 3.3: 训练超参数区**
+- [x] **Task 3.3: 训练超参数区**
   - 文件: `ui/widgets/hyperparam_tabs_widget.py`
 
 ---

@@ -33,6 +33,9 @@ from ui.widgets.class_distribution_widget import ClassDistributionWidget
 from ui.widgets.coverage_analysis_widget import CoverageAnalysisCard
 from ui.widgets.health_check_widget import HealthCheckCard
 from ui.inference_panel import InferencePanel
+from ui.widgets.model_selection_widget import ModelSelectionWidget
+from ui.widgets.advisor_config_widget import AdvisorConfigWidget
+from ui.widgets.hyperparam_tabs_widget import HyperparamTabsWidget
 
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
@@ -271,9 +274,30 @@ class Ui_MainWindow(object):
         self.tab_train.setObjectName(u"tab_train")
         self.verticalLayout_train = QVBoxLayout(self.tab_train)
         self.verticalLayout_train.setObjectName(u"verticalLayout_train")
+        self.verticalLayout_train.setSpacing(6)
+        self.verticalLayout_train.setContentsMargins(4, 4, 4, 4)
+        
+        # Phase 3 Widget: 模型选择
+        self.widget_modelSelection = ModelSelectionWidget(self.tab_train)
+        self.widget_modelSelection.setObjectName(u"widget_modelSelection")
+        self.verticalLayout_train.addWidget(self.widget_modelSelection)
+        
+        # Phase 3 Widget: 数据智能推荐
+        self.widget_advisorConfig = AdvisorConfigWidget(self.tab_train)
+        self.widget_advisorConfig.setObjectName(u"widget_advisorConfig")
+        self.verticalLayout_train.addWidget(self.widget_advisorConfig)
+        
+        # Phase 3 Widget: 训练超参数
+        self.widget_hyperparamTabs = HyperparamTabsWidget(self.tab_train)
+        self.widget_hyperparamTabs.setObjectName(u"widget_hyperparamTabs")
+        self.verticalLayout_train.addWidget(self.widget_hyperparamTabs)
+        
+        # 保留兼容：label_trainInfo 作为训练状态提示标签
         self.label_trainInfo = QLabel(self.tab_train)
         self.label_trainInfo.setObjectName(u"label_trainInfo")
+        self.label_trainInfo.setStyleSheet("color: #888; font-style: italic; padding: 2px;")
         self.verticalLayout_train.addWidget(self.label_trainInfo)
+        
         self.tabWidget_tasks.addTab(self.tab_train, "")
         self.tab_inference = QWidget()
         self.tab_inference.setObjectName(u"tab_inference")
@@ -292,22 +316,11 @@ class Ui_MainWindow(object):
         self.verticalLayout_paramConfig = QVBoxLayout(self.groupBox_paramConfig)
         self.verticalLayout_paramConfig.setObjectName(u"verticalLayout_paramConfig")
         
-        self.scrollArea_params = QScrollArea(self.groupBox_paramConfig)
-        self.scrollArea_params.setObjectName(u"scrollArea_params")
-        self.scrollArea_params.setWidgetResizable(True)
-        self.scrollAreaWidgetContents = QWidget()
-        self.scrollAreaWidgetContents.setObjectName(u"scrollAreaWidgetContents")
-        self.scrollAreaWidgetContents.setGeometry(QRect(0, 0, 256, 96))
-        self.verticalLayout_scrollParams = QVBoxLayout(self.scrollAreaWidgetContents)
-        self.verticalLayout_scrollParams.setObjectName(u"verticalLayout_scrollParams")
-        self.label_paramPlaceholder = QLabel(self.scrollAreaWidgetContents)
+        self.label_paramPlaceholder = QLabel(self.groupBox_paramConfig)
         self.label_paramPlaceholder.setObjectName(u"label_paramPlaceholder")
         self.label_paramPlaceholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.verticalLayout_scrollParams.addWidget(self.label_paramPlaceholder)
-        self.verticalSpacer_params = QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
-        self.verticalLayout_scrollParams.addItem(self.verticalSpacer_params)
-        self.scrollArea_params.setWidget(self.scrollAreaWidgetContents)
-        self.verticalLayout_paramConfig.addWidget(self.scrollArea_params)
+        self.label_paramPlaceholder.setStyleSheet("color: #999; font-style: italic;")
+        self.verticalLayout_paramConfig.addWidget(self.label_paramPlaceholder)
         self.verticalLayout_taskConfigContent.addWidget(self.groupBox_paramConfig)
         
         # 操作按钮
@@ -566,7 +579,7 @@ class Ui_MainWindow(object):
         # Tab 2: 任务配置
         self.tabWidget_contextControl.setTabText(self.tabWidget_contextControl.indexOf(self.tab_taskConfig), QCoreApplication.translate("MainWindow", u"\u4efb\u52a1\u914d\u7f6e (Task Config)", None))
         self.groupBox_taskType.setTitle(QCoreApplication.translate("MainWindow", u"\u4efb\u52a1\u7c7b\u578b (Task Type)", None))
-        self.label_trainInfo.setText(QCoreApplication.translate("MainWindow", u"\u8bad\u7ec3\u6a21\u5f0f\u914d\u7f6e", None))
+        self.label_trainInfo.setText(QCoreApplication.translate("MainWindow", u"\u2139\ufe0f \u914d\u7f6e\u53c2\u6570\u540e\uff0c\u70b9\u51fb\u4e0b\u65b9\u300c\u8fd0\u884c\u300d\u6309\u94ae\u5f00\u59cb\u8bad\u7ec3", None))
         self.tabWidget_tasks.setTabText(self.tabWidget_tasks.indexOf(self.tab_train), QCoreApplication.translate("MainWindow", u"\u8bad\u7ec3 (Train)", None))
         self.label_inferenceInfo.setText(QCoreApplication.translate("MainWindow", u"\u63a8\u7406\u6a21\u5f0f\u914d\u7f6e", None))
         self.tabWidget_tasks.setTabText(self.tabWidget_tasks.indexOf(self.tab_inference), QCoreApplication.translate("MainWindow", u"\u63a8\u7406 (Inference)", None))
