@@ -413,6 +413,10 @@ class MainWindow(QMainWindow):
         self._layer_refresh_timer.setInterval(50)  # 50ms 防抖
         self._layer_refresh_timer.timeout.connect(self._do_refresh_layer_settings)
         
+        # Phase 4: 训练线程状态
+        self._training_thread = None
+        self._current_advisor = None  # ConfigAdvisor 实例缓存
+        
         # 连接信号
         self._connect_signals()
         
@@ -490,6 +494,12 @@ class MainWindow(QMainWindow):
         
         # Phase 3.3: 推荐训练配置按钮
         self.ui.pushButton_applyRecommend.clicked.connect(self._on_apply_recommend_config)
+        
+        # Phase 4: 训练控制按钮
+        self.ui.pushButton_run.clicked.connect(self._on_start_training)
+        self.ui.pushButton_stop.clicked.connect(self._on_stop_training)
+        self.ui.pushButton_stop.setEnabled(False)
+        
         # ========== 核心：主 Tab 与侧边栏联动 ==========
         # 右侧 Tab 切换时，自动切换左侧侧边栏
         self.ui.tabWidget_contextControl.currentChanged.connect(self._on_main_tab_changed)
@@ -736,21 +746,27 @@ class MainWindow(QMainWindow):
         
         从 MetadataDatabase 构建 ConfigAdvisor，
         生成推荐摘要并显示在 Task Config 面板中。
+        Phase 4: 同时填充 AdvisorConfigWidget。
         """
         database = self.ui.analysis_panel.metadata_manager.database
         if database is None:
-            print("⚠️ 无可用的元数据数据库")
+            self._log_to_bottom("⚠️ 无可用的元数据数据库，请先加载数据集")
             return
         
         try:
             from core.config_advisor import ConfigAdvisor
             
             advisor = ConfigAdvisor.from_database(database)
+            self._current_advisor = advisor
             summary = advisor.get_summary()
             
             # 显示推荐摘要
             self.ui.label_recommendSummary.setText(summary)
             self.ui.label_recommendSummary.setVisible(True)
+            
+            # Phase 4: 填充 AdvisorConfigWidget
+            rs_params = advisor.recommend_rs_params()
+            self.ui.widget_advisorConfig.set_advisor_params(rs_params)
             
             # 切换到 Task Config tab
             task_config_idx = self.ui.tabWidget_contextControl.indexOf(self.ui.tab_taskConfig)
@@ -765,13 +781,346 @@ class MainWindow(QMainWindow):
                     self.ui.inference_panel.spinBox_cropSize.setValue(crop_size[0])
                     break
             
-            print(f"💡 [ConfigAdvisor] 推荐配置已应用\n{summary}")
+            self._log_to_bottom(f"💡 推荐配置已应用")
             
         except Exception as e:
-            print(f"❌ [ConfigAdvisor] 推荐配置生成失败: {e}")
+            self._log_to_bottom(f"❌ 推荐配置生成失败: {e}")
             import traceback
             traceback.print_exc()
+
+    # ========== Phase 4: 训练控制 ==========
+
+    def _on_start_training(self):
+        """
+        Phase 4: 点击「运行」按钮 → 收集参数 → 生成配置 → 启动训练线程
+        """
+        from PySide6.QtWidgets import QMessageBox
+        
+        # 检查是否已有训练在运行
+        if self._training_thread is not None and self._training_thread.isRunning():
+            QMessageBox.warning(self, "训练进行中", "已有训练任务在运行，请先停止当前训练。")
+            return
+        
+        # 检查数据集是否已加载
+        if not hasattr(self, '_current_data_root') or not self._current_data_root:
+            QMessageBox.warning(self, "未加载数据集", "请先通过「添加样本」加载 VOC 数据集。")
+            return
+        
+        try:
+            # ====== Step 1: 收集 UI 参数 ======
+            model_params = self.ui.widget_modelSelection.get_params()
+            advisor_params = self.ui.widget_advisorConfig.get_params()
+            hyper_params = self.ui.widget_hyperparamTabs.get_params()
+            
+            self._log_to_bottom(f"📋 模型: {model_params['backbone']} | "
+                                f"优化器: {hyper_params['optimizer']} | "
+                                f"LR: {hyper_params['lr']} | "
+                                f"MaxIters: {hyper_params['max_iters']}")
+            
+            # ====== Step 2: 组装 ui_params ======
+            # 查找 base config（从 mmseg 包中查找，或使用用户指定路径）
+            base_config = self._find_base_config(model_params)
+            if not base_config:
+                # 自动查找失败 → 弹出文件选择对话框让用户手动选取
+                from PySide6.QtWidgets import QFileDialog
+                self._log_to_bottom("⚠️ 自动查找失败，请手动选择 base config 文件")
+                
+                # 使用上次选择的路径作为默认目录
+                start_dir = getattr(self, '_last_config_dir', '')
+                
+                base_config, _ = QFileDialog.getOpenFileName(
+                    self, 
+                    f"选择 {model_params['backbone']} 的 MMSeg 基础配置文件",
+                    start_dir,
+                    "Python 配置文件 (*.py);;所有文件 (*)"
+                )
+                if not base_config:
+                    self._log_to_bottom("❌ 用户取消了配置文件选择")
+                    return
+                
+                # 缓存目录以便下次使用
+                import os
+                self._last_config_dir = os.path.dirname(base_config)
+                self._log_to_bottom(f"📄 用户选择配置: {base_config}")
+            
+            ui_params = {
+                'base_config': base_config,
+                'data_root': self._current_data_root,
+                'max_iters': hyper_params['max_iters'],
+                'batch_size': hyper_params['batch_size'],
+                'lr': hyper_params['lr'],
+                'optimizer': hyper_params['optimizer'],
+                'weight_decay': hyper_params['weight_decay'],
+                'lr_schedule': hyper_params['lr_schedule'],
+                'save_interval': hyper_params['save_interval'],
+                'max_keep_ckpts': hyper_params['max_keep_ckpts'],
+                'num_workers': hyper_params['num_workers'],
+                'val_interval': hyper_params['val_interval'],
+            }
+            
+            # ====== Step 3: 生成训练配置文件 ======
+            import os
+            import tempfile
+            
+            work_dir = os.path.join(self._current_data_root, 'work_dirs',
+                                     f"{model_params['backbone_key']}_{hyper_params['max_iters']}iters")
+            os.makedirs(work_dir, exist_ok=True)
+            
+            config_save_path = os.path.join(work_dir, 'train_config.py')
+            
+            from core.framework_adapters.mmseg_trainer import MMSegTrainer
+            
+            trainer = MMSegTrainer()
+            config_path = trainer.generate_config(ui_params, advisor_params, config_save_path)
+            
+            self._log_to_bottom(f"📄 配置文件已生成: {config_path}")
+            self._log_to_bottom(f"📂 工作目录: {work_dir}")
+            
+            # ====== Step 4: 创建并启动训练线程 ======
+            from core.training_dispatcher import TrainingThread
+            
+            self._training_thread = TrainingThread(
+                trainer=trainer,
+                config_path=config_path,
+                work_dir=work_dir,
+            )
+            
+            # 连接信号
+            self._training_thread.log_raw.connect(self._on_training_log_raw)
+            self._training_thread.log_parsed.connect(self._on_training_log_parsed)
+            self._training_thread.progress_updated.connect(self._on_training_progress)
+            self._training_thread.training_finished.connect(self._on_training_finished)
+            self._training_thread.training_error.connect(self._on_training_error)
+            
+            # 更新按钮状态
+            self.ui.pushButton_run.setEnabled(False)
+            self.ui.pushButton_stop.setEnabled(True)
+            self.ui.label_trainInfo.setText("🚀 训练进行中...")
+            self.ui.label_trainInfo.setStyleSheet("color: #1565C0; font-weight: bold; padding: 2px;")
+            self.statusBar().showMessage("训练已启动")
+            
+            # 启动
+            self._training_thread.start()
+            self._log_to_bottom(f"🚀 训练已启动！")
+            
+        except Exception as e:
+            self._log_to_bottom(f"❌ 训练启动失败: {e}")
+            import traceback
+            traceback.print_exc()
+            QMessageBox.critical(self, "训练启动失败", f"错误: {e}")
+            self._reset_training_ui()
     
+    def _on_stop_training(self):
+        """Phase 4: 点击「停止」按钮 → 停止训练线程"""
+        if self._training_thread is not None and self._training_thread.isRunning():
+            self._log_to_bottom("⏹ 正在停止训练...")
+            self._training_thread.stop()
+            self.ui.label_trainInfo.setText("⏹ 正在停止训练...")
+            self.statusBar().showMessage("正在停止训练...")
+            self.ui.pushButton_stop.setEnabled(False)
+        else:
+            self._log_to_bottom("⚠️ 没有正在运行的训练任务")
+    
+    def _on_training_log_raw(self, line: str):
+        """训练原始日志输出"""
+        line = line.strip()
+        if line:
+            self.ui.textEdit_logs.append(line)
+            scrollbar = self.ui.textEdit_logs.verticalScrollBar()
+            scrollbar.setValue(scrollbar.maximum())
+    
+    def _on_training_log_parsed(self, parsed: dict):
+        """训练结构化日志处理"""
+        log_type = parsed.get('type', '')
+        
+        if log_type == 'train_loss':
+            iter_num = parsed.get('iter', 0)
+            max_iter = parsed.get('max_iter', 0)
+            loss = parsed.get('loss', 0)
+            lr = parsed.get('lr', 0)
+            eta = parsed.get('eta', '')
+            msg = f"📈 Iter [{iter_num}/{max_iter}]  loss: {loss:.4f}  lr: {lr:.6f}"
+            if eta:
+                msg += f"  ETA: {eta}"
+            self.statusBar().showMessage(msg)
+            
+        elif log_type == 'val_metric':
+            miou = parsed.get('mIoU', 0)
+            macc = parsed.get('mAcc', 0)
+            self._log_to_bottom(f"✅ 验证结果 — mIoU: {miou:.4f}  mAcc: {macc:.4f}")
+    
+    def _on_training_progress(self, current: int, total: int):
+        """训练进度更新"""
+        pct = (current / total * 100) if total > 0 else 0
+        self.ui.label_trainInfo.setText(
+            f"🚀 训练进行中: {current}/{total}  ({pct:.1f}%)"
+        )
+    
+    def _on_training_finished(self, exit_code: int):
+        """训练完成回调"""
+        if exit_code == 0:
+            self._log_to_bottom("✅ 训练顺利完成！")
+            self.statusBar().showMessage("训练完成")
+            self.ui.label_trainInfo.setText("✅ 训练完成")
+            self.ui.label_trainInfo.setStyleSheet("color: #2E7D32; font-weight: bold; padding: 2px;")
+        else:
+            self._log_to_bottom(f"⚠️ 训练退出 (exit code: {exit_code})")
+            self.statusBar().showMessage(f"训练退出 (code: {exit_code})")
+            self.ui.label_trainInfo.setText(f"⚠️ 训练退出 (code: {exit_code})")
+            self.ui.label_trainInfo.setStyleSheet("color: #E65100; font-weight: bold; padding: 2px;")
+        self._reset_training_ui()
+    
+    def _on_training_error(self, error_msg: str):
+        """训练错误回调"""
+        self._log_to_bottom(f"❌ 训练错误: {error_msg}")
+        self.statusBar().showMessage(f"训练错误: {error_msg[:60]}")
+    
+    def _reset_training_ui(self):
+        """重置训练相关 UI 状态"""
+        self.ui.pushButton_run.setEnabled(True)
+        self.ui.pushButton_stop.setEnabled(False)
+    
+    def _find_base_config(self, model_params: dict) -> str:
+        """
+        Phase 4: 根据模型参数查找 base config 文件路径。
+        
+        多策略查找：mmseg.__file__ 上溯、glob 模糊匹配、项目本地 configs/ 等。
+        """
+        import os
+        import glob
+        
+        backbone_key = model_params.get('backbone_key', 'resnet50')
+        
+        # 映射 backbone → (子目录, 文件名关键词) 用于精确匹配和 glob 回退
+        CONFIG_MAP = {
+            'resnet50': ('deeplabv3plus', 'deeplabv3plus_r50*d8*voc*512x512.py'),
+            'resnet101': ('deeplabv3plus', 'deeplabv3plus_r101*d8*voc*512x512.py'),
+            'hrnet_w48': ('hrnet', 'fcn_hr48*voc*512x512.py'),
+            'swin_tiny': ('swin', 'upernet_swin-tiny*512x512.py'),
+            'swin_base': ('swin', 'upernet_swin-base*512x512.py'),
+            'mit_b0': ('segformer', 'segformer_mit-b0*512x512.py'),
+            'mit_b2': ('segformer', 'segformer_mit-b2*512x512.py'),
+            'mit_b5': ('segformer', 'segformer_mit-b5*512x512.py'),
+        }
+        
+        entry = CONFIG_MAP.get(backbone_key)
+        if not entry:
+            self._log_to_bottom(f"⚠️ 未定义 {backbone_key} 的配置映射")
+            return ''
+        
+        sub_dir, file_pattern = entry
+        
+        # ====== 收集候选 configs 根目录 ======
+        config_roots = []
+        
+        # 策略 1: 从 mmseg.__file__ 上溯查找
+        try:
+            import mmseg
+            mmseg_dir = os.path.dirname(os.path.abspath(mmseg.__file__))
+            config_roots.extend([
+                os.path.join(mmseg_dir, '.mim', 'configs'),
+                os.path.join(mmseg_dir, 'configs'),
+                os.path.join(os.path.dirname(mmseg_dir), 'configs'),
+            ])
+            self._log_to_bottom(f"🔍 mmseg 路径: {mmseg_dir}")
+        except (ImportError, Exception):
+            pass
+        
+        # 策略 2: 从 sys.executable 推算 site-packages 并查找 egg-link
+        if not config_roots:
+            import sys
+            
+            # 收集所有可能的 site-packages 路径
+            site_packages_dirs = set()
+            
+            # 2a: 从 sys.executable 推算（最可靠）
+            exe_dir = os.path.dirname(sys.executable)
+            site_packages_dirs.add(os.path.join(exe_dir, 'Lib', 'site-packages'))      # Windows conda
+            site_packages_dirs.add(os.path.join(exe_dir, 'lib', 'site-packages'))      # 备选
+            site_packages_dirs.add(os.path.join(os.path.dirname(exe_dir), 'lib', 
+                                                 f'python{sys.version_info.major}.{sys.version_info.minor}',
+                                                 'site-packages'))                      # Linux/macOS
+            
+            # 2b: 从 site 模块获取
+            try:
+                import site
+                for sp in site.getsitepackages():
+                    site_packages_dirs.add(sp)
+            except Exception:
+                pass
+            
+            # 2c: 从 sys.path 获取
+            for p in sys.path:
+                if 'site-packages' in p and os.path.isdir(p):
+                    site_packages_dirs.add(p)
+            
+            self._log_to_bottom(f"🔍 搜索 site-packages: {[sp for sp in site_packages_dirs if os.path.isdir(sp)]}")
+            
+            for sp_dir in site_packages_dirs:
+                if not os.path.isdir(sp_dir):
+                    continue
+                    
+                # 查找 egg-link 文件
+                egg_link = os.path.join(sp_dir, 'mmsegmentation.egg-link')
+                if os.path.isfile(egg_link):
+                    for enc in ['utf-8', 'gbk', 'latin-1']:
+                        try:
+                            with open(egg_link, 'r', encoding=enc) as f:
+                                mmseg_root = f.readline().strip()
+                            if os.path.isdir(mmseg_root):
+                                configs_dir = os.path.join(mmseg_root, 'configs')
+                                config_roots.append(configs_dir)
+                                self._log_to_bottom(f"🔍 egg-link ({enc}): {mmseg_root}")
+                                break
+                        except (UnicodeDecodeError, OSError):
+                            continue
+                
+                # 直接查找 mmseg 包目录
+                mmseg_pkg = os.path.join(sp_dir, 'mmseg')
+                if os.path.isdir(mmseg_pkg):
+                    config_roots.extend([
+                        os.path.join(mmseg_pkg, '.mim', 'configs'),
+                        os.path.join(os.path.dirname(mmseg_pkg), 'configs'),
+                    ])
+                    self._log_to_bottom(f"🔍 site-packages mmseg: {mmseg_pkg}")
+        
+        # 策略 2: 项目本地 configs/
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        config_roots.append(os.path.join(project_root, 'configs'))
+        
+        # ====== 在候选目录中搜索 ======
+        for config_root in config_roots:
+            if not os.path.isdir(config_root):
+                continue
+            
+            target_dir = os.path.join(config_root, sub_dir)
+            if not os.path.isdir(target_dir):
+                continue
+            
+            # glob 模糊匹配
+            matches = glob.glob(os.path.join(target_dir, file_pattern))
+            if matches:
+                result = matches[0]
+                self._log_to_bottom(f"✅ 找到配置: {result}")
+                return result
+        
+        # ====== 策略 3: 递归 glob 搜索（更宽松） ======
+        for config_root in config_roots:
+            if not os.path.isdir(config_root):
+                continue
+            matches = glob.glob(os.path.join(config_root, '**', file_pattern), recursive=True)
+            if matches:
+                result = matches[0]
+                self._log_to_bottom(f"✅ 找到配置 (递归): {result}")
+                return result
+        
+        # 日志输出搜索过的路径，帮助调试
+        self._log_to_bottom(f"❌ 未找到 {backbone_key} 的配置文件")
+        self._log_to_bottom(f"   搜索模式: {sub_dir}/{file_pattern}")
+        for cr in config_roots:
+            self._log_to_bottom(f"   搜索路径: {cr} (exists={os.path.isdir(cr)})")
+        return ''
+
     def _on_health_filter_requested(self, issue_type: str):
         """
         健康检查卡片过滤请求回调
@@ -1686,6 +2035,14 @@ class MainWindow(QMainWindow):
                     self.ui.inference_panel.stop_inference()
             except Exception as e:
                 print(f"⚠️ 清理 inference_panel 线程时出错: {e}")
+        
+        # Phase 4: 停止训练线程
+        if self._training_thread is not None and self._training_thread.isRunning():
+            try:
+                self._training_thread.stop()
+                self._training_thread.wait(3000)
+            except Exception as e:
+                print(f"⚠️ 清理 training 线程时出错: {e}")
         
         # 调用父类的 closeEvent
         super().closeEvent(event)

@@ -125,6 +125,33 @@ class MMSegTrainer(BaseTrainer):
             cfg.train_dataloader.batch_size = int(batch_size)
             cfg.train_dataloader.num_workers = int(num_workers)
 
+        # ====== 数据集路径 ======
+        data_root = ui_params.get('data_root')
+        if data_root:
+            data_root = data_root.replace('\\', '/')
+            if hasattr(cfg, 'data_root'):
+                cfg.data_root = data_root
+            
+            def update_dataset_path(dataset_cfg):
+                if isinstance(dataset_cfg, dict):
+                    if 'data_root' in dataset_cfg:
+                        dataset_cfg['data_root'] = data_root
+                    
+                    # 兼容可能存在的 aug.txt 级联数据
+                    if 'ann_file' in dataset_cfg and 'aug.txt' in dataset_cfg['ann_file']:
+                        dataset_cfg['ann_file'] = 'ImageSets/Segmentation/train.txt'
+
+                    if 'datasets' in dataset_cfg:
+                        for sub_cfg in dataset_cfg['datasets']:
+                            update_dataset_path(sub_cfg)
+                            
+            if hasattr(cfg, 'train_dataloader') and 'dataset' in cfg.train_dataloader:
+                update_dataset_path(cfg.train_dataloader.dataset)
+            if hasattr(cfg, 'val_dataloader') and 'dataset' in cfg.val_dataloader:
+                update_dataset_path(cfg.val_dataloader.dataset)
+            if hasattr(cfg, 'test_dataloader') and 'dataset' in cfg.test_dataloader:
+                update_dataset_path(cfg.test_dataloader.dataset)
+
         # ====== 检查点 ======
         save_interval = ui_params.get('save_interval', 4000)
         max_keep_ckpts = ui_params.get('max_keep_ckpts', 3)
@@ -187,10 +214,22 @@ class MMSegTrainer(BaseTrainer):
         self._config_path = config_path
         self._work_dir = work_dir
 
-        # 构建命令: python -m mmseg.tools.train <config> --work-dir <dir>
-        # 同时兼容 tools/train.py 方式
+        # 动态寻找 mmsegmentation 的 train.py 文件
+        import mmseg
+        mmseg_dir = os.path.dirname(mmseg.__file__)
+        
+        # 常见安装方式: 通过 mim 安装会在 .mim/tools 下
+        train_script = os.path.join(mmseg_dir, '.mim', 'tools', 'train.py')
+        
+        if not os.path.isfile(train_script):
+            # 常见安装方式: 源码安装 (pip install -e .)
+            train_script = os.path.join(os.path.dirname(mmseg_dir), 'tools', 'train.py')
+            
+        if not os.path.isfile(train_script):
+            raise FileNotFoundError(f"找不到 MMSeg 训练脚本(train.py)。请确保已正确安装 mmsegmentation。尝试的位置: {train_script}")
+
         cmd = [
-            sys.executable, '-m', 'mmseg.tools.train',
+            sys.executable, train_script,
             config_path,
             '--work-dir', work_dir,
         ]
@@ -203,10 +242,7 @@ class MMSegTrainer(BaseTrainer):
             bufsize=1,  # 行缓冲
             encoding='utf-8',
             errors='replace',
-            creationflags=(
-                subprocess.CREATE_NEW_PROCESS_GROUP
-                if sys.platform == 'win32' else 0
-            ),
+            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == 'win32' else 0,
         )
 
     def stop_training(self) -> None:

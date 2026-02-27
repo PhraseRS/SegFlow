@@ -49,9 +49,9 @@
 ## 🗺️ Phase 4: UI展示层 - 监控与集成
 **目标**：实时图表绘制与顶层面板组装。
 
-- [ ] **Task 4.1: 实时监控看板**
+- [x] **Task 4.1: 实时监控看板**
   - 文件: `ui/widgets/training_monitor_widget.py`
-- [ ] **Task 4.2: 顶层面板集成与事件绑定**
+- [x] **Task 4.2: 顶层面板集成与事件绑定**
   - 文件: `ui/training_panel.py`
 
 ---
