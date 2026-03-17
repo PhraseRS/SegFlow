@@ -492,13 +492,20 @@ class MainWindow(QMainWindow):
         # 方向 2: 右侧推理面板选择图像 -> 左侧 GIS 底图
         self.ui.inference_panel.input_path_selected.connect(self._sync_inference_to_base_image)
         
-        # Phase 3.3: 推荐训练配置按钮
-        self.ui.pushButton_applyRecommend.clicked.connect(self._on_apply_recommend_config)
+        # Phase 3.3: 推荐训练配置分发逻辑
+        self.ui.widget_advisorConfig.generate_requested.connect(self._on_generate_recommend_config)
         
         # Phase 4: 训练控制按钮
         self.ui.pushButton_run.clicked.connect(self._on_start_training)
         self.ui.pushButton_stop.clicked.connect(self._on_stop_training)
         self.ui.pushButton_stop.setEnabled(False)
+        
+        # 联动：当 ModelSelection 的 Backbone 改变时，通知 WeightSelection 更新预训练模型下拉列表
+        self.ui.widget_modelSelection.combo_backbone.currentTextChanged.connect(
+            self.ui.widget_weightSelection.update_backbone
+        )
+        # 初始化调用一次以填充默认的预训练列表
+        self.ui.widget_weightSelection.update_backbone(self.ui.widget_modelSelection.combo_backbone.currentText())
         
         # ========== 核心：主 Tab 与侧边栏联动 ==========
         # 右侧 Tab 切换时，自动切换左侧侧边栏
@@ -740,17 +747,20 @@ class MainWindow(QMainWindow):
         
         self.ui.widget_healthCheck.set_issues(issues, total_samples)
     
-    def _on_apply_recommend_config(self):
+    def _on_generate_recommend_config(self):
         """
-        Phase 3.3: 应用推荐训练配置
+        Phase 3.3: 生成并分发推荐训练配置
         
         从 MetadataDatabase 构建 ConfigAdvisor，
-        生成推荐摘要并显示在 Task Config 面板中。
-        Phase 4: 同时填充 AdvisorConfigWidget。
+        生成推荐摘要并显示在 Task Config 面板中，
+        并将推荐的配置分发给通用详细配置与高级配置页签。
         """
+        self.ui.widget_advisorConfig.show_loading()
+        
         database = self.ui.analysis_panel.metadata_manager.database
         if database is None:
             self._log_to_bottom("⚠️ 无可用的元数据数据库，请先加载数据集")
+            self.ui.widget_advisorConfig.clear()
             return
         
         try:
@@ -760,13 +770,63 @@ class MainWindow(QMainWindow):
             self._current_advisor = advisor
             summary = advisor.get_summary()
             
-            # 显示推荐摘要
-            self.ui.label_recommendSummary.setText(summary)
-            self.ui.label_recommendSummary.setVisible(True)
-            
             # Phase 4: 填充 AdvisorConfigWidget
             rs_params = advisor.recommend_rs_params()
             self.ui.widget_advisorConfig.set_advisor_params(rs_params)
+            
+            # 高级参数推荐清查（如有）
+            self.ui.widget_advancedConfig.clear_all_recommendations()
+            advanced_recs = {}
+            self.ui.widget_advancedConfig.set_recommendations(advanced_recs)
+            
+            # 分发数据增强与常规设置给 HyperparamTabsWidget
+            self.ui.widget_hyperparamTabs.clear_all_recommendations()
+            hyper_recs = {}
+            
+            if 'in_channels' in rs_params:
+                hyper_recs['in_channels'] = {
+                    'value': rs_params['in_channels'],
+                    'reason': "根据数据集波段自动分配"
+                }
+            
+            if 'crop_size' in rs_params:
+                crop = rs_params['crop_size']
+                crop_val = crop[0] if isinstance(crop, (list, tuple)) else crop
+                hyper_recs['crop_size'] = {
+                    'value': crop_val,
+                    'reason': "基于数据集最小宽度乘 0.8"
+                }
+
+            if 'class_weight' in rs_params and rs_params['class_weight']:
+                hyper_recs['class_weight'] = {
+                    'value': True,
+                    'reason': "由于类别分布不均衡，推荐开启损失权重补偿"
+                }
+                
+            if 'loss_config' in rs_params and rs_params['loss_config'] and 'type' in rs_params['loss_config']:
+                hyper_recs['loss_type'] = {
+                    'value': rs_params['loss_config']['type'],
+                    'reason': rs_params['loss_config'].get('_reason', "基于数据集特点动态适配目标损失")
+                }
+            
+            aug_config = advisor.recommend_augmentation()
+            # 根据 aug_config 设置布尔类型的 aug_xxx
+            aug_types = [aug.get('type') for aug in aug_config.get('augmentations', [])]
+            if 'RandomFlip' in aug_types:
+                hyper_recs['aug_random_flip'] = {'value': True, 'reason': "增加水平翻转以扩充数据及提高泛化"}
+            if 'PhotoMetricDistortion' in aug_types:
+                hyper_recs['aug_photo_distortion'] = {'value': True, 'reason': "光照扰动增加鲁棒性"}
+            if 'RandomRotate' in aug_types:
+                hyper_recs['aug_random_rotate'] = {'value': True, 'reason': "旋转增强适应方向多变的地物"}
+            
+            self.ui.widget_hyperparamTabs.set_recommendations(hyper_recs)
+            
+            # 监听全局的一键应用信号
+            try:
+                self.ui.widget_advisorConfig.apply_all_requested.disconnect()
+            except RuntimeError:
+                pass  # 未连接时不抛错
+            self.ui.widget_advisorConfig.apply_all_requested.connect(self._on_apply_all_recommendations)
             
             # 切换到 Task Config tab
             task_config_idx = self.ui.tabWidget_contextControl.indexOf(self.ui.tab_taskConfig)
@@ -784,9 +844,16 @@ class MainWindow(QMainWindow):
             self._log_to_bottom(f"💡 推荐配置已应用")
             
         except Exception as e:
+            self.ui.widget_advisorConfig.clear()
             self._log_to_bottom(f"❌ 推荐配置生成失败: {e}")
             import traceback
             traceback.print_exc()
+
+    def _on_apply_all_recommendations(self, rs_params: dict):
+        """响应 AdvisorConfigWidget 中的 '一键全部应用' 按钮"""
+        self.ui.widget_advancedConfig.apply_all_recommendations()
+        self.ui.widget_hyperparamTabs.apply_all_recommendations()
+        self._log_to_bottom("✅ 已批量应用所有推荐参数")
 
     # ========== Phase 4: 训练控制 ==========
 
@@ -809,17 +876,35 @@ class MainWindow(QMainWindow):
         try:
             # ====== Step 1: 收集 UI 参数 ======
             model_params = self.ui.widget_modelSelection.get_params()
+            weight_params = self.ui.widget_weightSelection.get_params()
             advisor_params = self.ui.widget_advisorConfig.get_params()
             hyper_params = self.ui.widget_hyperparamTabs.get_params()
             
+            # 合并 model_params 和 weight_params 作为向下传递的完整模型参数
+            full_model_params = {**model_params, **weight_params}
+            
+            # 新增：收集底层高级配置 (专家表单) 以及 JSON 覆写
+            advanced_params = self.ui.widget_advancedConfig.get_params()
+            json_overrides = self.ui.widget_advancedConfig.get_overrides()
+            
+            # 使用 ConfigAggregator 执行优先级合并
+            from core.config_aggregator import ConfigAggregator
+            aggregator = ConfigAggregator()
+            final_ui_params = aggregator.aggregate(
+                advanced_params=advanced_params,
+                hyper_params=hyper_params,
+                advisor_params=advisor_params,
+                json_overrides=json_overrides
+            )
+            
             self._log_to_bottom(f"📋 模型: {model_params['backbone']} | "
-                                f"优化器: {hyper_params['optimizer']} | "
-                                f"LR: {hyper_params['lr']} | "
-                                f"MaxIters: {hyper_params['max_iters']}")
+                                f"优化器: {final_ui_params.get('optimizer', 'Unknown')} | "
+                                f"LR: {final_ui_params.get('learning_rate', 'Unknown')} | "
+                                f"MaxIters: {final_ui_params.get('max_iters', 'Unknown')}")
             
             # ====== Step 2: 组装 ui_params ======
             # 查找 base config（从 mmseg 包中查找，或使用用户指定路径）
-            base_config = self._find_base_config(model_params)
+            base_config = self._find_base_config(full_model_params)
             if not base_config:
                 # 自动查找失败 → 弹出文件选择对话框让用户手动选取
                 from PySide6.QtWidgets import QFileDialog
@@ -830,7 +915,7 @@ class MainWindow(QMainWindow):
                 
                 base_config, _ = QFileDialog.getOpenFileName(
                     self, 
-                    f"选择 {model_params['backbone']} 的 MMSeg 基础配置文件",
+                    f"选择 {full_model_params['backbone']} 的 MMSeg 基础配置文件",
                     start_dir,
                     "Python 配置文件 (*.py);;所有文件 (*)"
                 )
@@ -843,19 +928,11 @@ class MainWindow(QMainWindow):
                 self._last_config_dir = os.path.dirname(base_config)
                 self._log_to_bottom(f"📄 用户选择配置: {base_config}")
             
+            # 将基础配置和前面合并的参数打包，准备传给 MMSegTrainer
             ui_params = {
                 'base_config': base_config,
                 'data_root': self._current_data_root,
-                'max_iters': hyper_params['max_iters'],
-                'batch_size': hyper_params['batch_size'],
-                'lr': hyper_params['lr'],
-                'optimizer': hyper_params['optimizer'],
-                'weight_decay': hyper_params['weight_decay'],
-                'lr_schedule': hyper_params['lr_schedule'],
-                'save_interval': hyper_params['save_interval'],
-                'max_keep_ckpts': hyper_params['max_keep_ckpts'],
-                'num_workers': hyper_params['num_workers'],
-                'val_interval': hyper_params['val_interval'],
+                **final_ui_params  # 将聚合器产生的所有高级配置完全打平进去
             }
             
             # ====== Step 3: 生成训练配置文件 ======

@@ -34,8 +34,10 @@ from ui.widgets.coverage_analysis_widget import CoverageAnalysisCard
 from ui.widgets.health_check_widget import HealthCheckCard
 from ui.inference_panel import InferencePanel
 from ui.widgets.model_selection_widget import ModelSelectionWidget
+from ui.widgets.weight_selection_widget import WeightSelectionWidget
 from ui.widgets.advisor_config_widget import AdvisorConfigWidget
 from ui.widgets.hyperparam_tabs_widget import HyperparamTabsWidget
+from ui.widgets.advanced_config_widget import AdvancedConfigWidget
 
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
@@ -263,64 +265,67 @@ class Ui_MainWindow(object):
         self.verticalLayout_taskConfigContent = QVBoxLayout(self.scrollAreaWidget_taskConfig)
         self.verticalLayout_taskConfigContent.setObjectName(u"verticalLayout_taskConfigContent")
         
-        # 任务类型选择
-        self.groupBox_taskType = QGroupBox(self.scrollAreaWidget_taskConfig)
-        self.groupBox_taskType.setObjectName(u"groupBox_taskType")
-        self.verticalLayout_taskType = QVBoxLayout(self.groupBox_taskType)
-        self.verticalLayout_taskType.setObjectName(u"verticalLayout_taskType")
-        self.tabWidget_tasks = QTabWidget(self.groupBox_taskType)
-        self.tabWidget_tasks.setObjectName(u"tabWidget_tasks")
-        self.tab_train = QWidget()
-        self.tab_train.setObjectName(u"tab_train")
-        self.verticalLayout_train = QVBoxLayout(self.tab_train)
-        self.verticalLayout_train.setObjectName(u"verticalLayout_train")
-        self.verticalLayout_train.setSpacing(6)
-        self.verticalLayout_train.setContentsMargins(4, 4, 4, 4)
+        # 1. 模型选择组
+        self.groupBox_modelSelection = QGroupBox(self.scrollAreaWidget_taskConfig)
+        self.groupBox_modelSelection.setObjectName(u"groupBox_modelSelection")
+        self.verticalLayout_model = QVBoxLayout(self.groupBox_modelSelection)
+        self.verticalLayout_model.setContentsMargins(6, 6, 6, 6)
         
-        # Phase 3 Widget: 模型选择
-        self.widget_modelSelection = ModelSelectionWidget(self.tab_train)
+        self.widget_modelSelection = ModelSelectionWidget(self.groupBox_modelSelection)
         self.widget_modelSelection.setObjectName(u"widget_modelSelection")
-        self.verticalLayout_train.addWidget(self.widget_modelSelection)
+        self.verticalLayout_model.addWidget(self.widget_modelSelection)
+        self.verticalLayout_taskConfigContent.addWidget(self.groupBox_modelSelection)
         
-        # Phase 3 Widget: 数据智能推荐
-        self.widget_advisorConfig = AdvisorConfigWidget(self.tab_train)
+        # 2. 权重选择组
+        self.groupBox_weightSelection = QGroupBox(self.scrollAreaWidget_taskConfig)
+        self.groupBox_weightSelection.setObjectName(u"groupBox_weightSelection")
+        self.verticalLayout_weight = QVBoxLayout(self.groupBox_weightSelection)
+        self.verticalLayout_weight.setContentsMargins(6, 6, 6, 6)
+        
+        self.widget_weightSelection = WeightSelectionWidget(self.groupBox_weightSelection)
+        self.widget_weightSelection.setObjectName(u"widget_weightSelection")
+        self.verticalLayout_weight.addWidget(self.widget_weightSelection)
+        self.verticalLayout_taskConfigContent.addWidget(self.groupBox_weightSelection)
+        
+        # 3. 数据驱动推荐组
+        self.groupBox_advisorConfig = QGroupBox(self.scrollAreaWidget_taskConfig)
+        self.groupBox_advisorConfig.setObjectName(u"groupBox_advisorConfig")
+        self.verticalLayout_advisor = QVBoxLayout(self.groupBox_advisorConfig)
+        self.verticalLayout_advisor.setContentsMargins(6, 6, 6, 6)
+        
+        self.widget_advisorConfig = AdvisorConfigWidget(self.groupBox_advisorConfig)
         self.widget_advisorConfig.setObjectName(u"widget_advisorConfig")
-        self.verticalLayout_train.addWidget(self.widget_advisorConfig)
-        
-        # Phase 3 Widget: 训练超参数
-        self.widget_hyperparamTabs = HyperparamTabsWidget(self.tab_train)
+        self.verticalLayout_advisor.addWidget(self.widget_advisorConfig)
+        self.verticalLayout_taskConfigContent.addWidget(self.groupBox_advisorConfig)
+
+        # 4. 详细参数设置组
+        self.groupBox_hyperparams = QGroupBox(self.scrollAreaWidget_taskConfig)
+        self.groupBox_hyperparams.setObjectName(u"groupBox_hyperparams")
+        self.verticalLayout_hyperparams = QVBoxLayout(self.groupBox_hyperparams)
+        self.verticalLayout_hyperparams.setContentsMargins(6, 6, 6, 6)
+
+        self.widget_hyperparamTabs = HyperparamTabsWidget(self.groupBox_hyperparams)
         self.widget_hyperparamTabs.setObjectName(u"widget_hyperparamTabs")
-        self.verticalLayout_train.addWidget(self.widget_hyperparamTabs)
+        self.verticalLayout_hyperparams.addWidget(self.widget_hyperparamTabs)
+        self.verticalLayout_taskConfigContent.addWidget(self.groupBox_hyperparams)
         
-        # 保留兼容：label_trainInfo 作为训练状态提示标签
-        self.label_trainInfo = QLabel(self.tab_train)
+        # 训练状态提示标签
+        self.label_trainInfo = QLabel(self.scrollAreaWidget_taskConfig)
         self.label_trainInfo.setObjectName(u"label_trainInfo")
         self.label_trainInfo.setStyleSheet("color: #888; font-style: italic; padding: 2px;")
-        self.verticalLayout_train.addWidget(self.label_trainInfo)
+        self.verticalLayout_taskConfigContent.addWidget(self.label_trainInfo)
         
-        self.tabWidget_tasks.addTab(self.tab_train, "")
-        self.tab_inference = QWidget()
-        self.tab_inference.setObjectName(u"tab_inference")
-        self.verticalLayout_inference = QVBoxLayout(self.tab_inference)
-        self.verticalLayout_inference.setObjectName(u"verticalLayout_inference")
-        self.label_inferenceInfo = QLabel(self.tab_inference)
-        self.label_inferenceInfo.setObjectName(u"label_inferenceInfo")
-        self.verticalLayout_inference.addWidget(self.label_inferenceInfo)
-        self.tabWidget_tasks.addTab(self.tab_inference, "")
-        self.verticalLayout_taskType.addWidget(self.tabWidget_tasks)
-        self.verticalLayout_taskConfigContent.addWidget(self.groupBox_taskType)
-        
-        # 参数配置
+        # 参数配置 - 嵌入高级配置组件
         self.groupBox_paramConfig = QGroupBox(self.scrollAreaWidget_taskConfig)
         self.groupBox_paramConfig.setObjectName(u"groupBox_paramConfig")
         self.verticalLayout_paramConfig = QVBoxLayout(self.groupBox_paramConfig)
         self.verticalLayout_paramConfig.setObjectName(u"verticalLayout_paramConfig")
+        self.verticalLayout_paramConfig.setContentsMargins(6, 6, 6, 6)
         
-        self.label_paramPlaceholder = QLabel(self.groupBox_paramConfig)
-        self.label_paramPlaceholder.setObjectName(u"label_paramPlaceholder")
-        self.label_paramPlaceholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.label_paramPlaceholder.setStyleSheet("color: #999; font-style: italic;")
-        self.verticalLayout_paramConfig.addWidget(self.label_paramPlaceholder)
+        self.widget_advancedConfig = AdvancedConfigWidget(self.groupBox_paramConfig)
+        self.widget_advancedConfig.setObjectName(u"widget_advancedConfig")
+        self.verticalLayout_paramConfig.addWidget(self.widget_advancedConfig)
+        
         self.verticalLayout_taskConfigContent.addWidget(self.groupBox_paramConfig)
         
         # 操作按钮
@@ -328,36 +333,6 @@ class Ui_MainWindow(object):
         self.groupBox_actions.setObjectName(u"groupBox_actions")
         self.verticalLayout_actions = QVBoxLayout(self.groupBox_actions)
         self.verticalLayout_actions.setObjectName(u"verticalLayout_actions")
-        
-        # Phase 3.3: 推荐训练配置按钮（放在操作按钮组最顶部，确保可见）
-        self.pushButton_applyRecommend = QPushButton(self.groupBox_actions)
-        self.pushButton_applyRecommend.setObjectName(u"pushButton_applyRecommend")
-        self.pushButton_applyRecommend.setEnabled(False)
-        self.pushButton_applyRecommend.setMinimumHeight(36)
-        self.pushButton_applyRecommend.setStyleSheet(
-            "QPushButton {"
-            "  background-color: #1976D2; color: white; font-weight: bold;"
-            "  border-radius: 4px; padding: 6px 12px; font-size: 13px;"
-            "}"
-            "QPushButton:hover { background-color: #1565C0; }"
-            "QPushButton:disabled {"
-            "  background-color: #B0BEC5; color: #78909C;"
-            "}"
-        )
-        self.verticalLayout_actions.addWidget(self.pushButton_applyRecommend)
-        
-        # Phase 3.3: 推荐摘要显示
-        self.label_recommendSummary = QLabel(self.groupBox_actions)
-        self.label_recommendSummary.setObjectName(u"label_recommendSummary")
-        self.label_recommendSummary.setWordWrap(True)
-        self.label_recommendSummary.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        self.label_recommendSummary.setStyleSheet(
-            "background-color: #E3F2FD; border: 1px solid #90CAF9;"
-            " border-radius: 4px; padding: 8px; font-size: 11px;"
-            " color: #1565C0;"
-        )
-        self.label_recommendSummary.setVisible(False)
-        self.verticalLayout_actions.addWidget(self.label_recommendSummary)
         
         self.pushButton_run = QPushButton(self.groupBox_actions)
         self.pushButton_run.setObjectName(u"pushButton_run")
@@ -525,7 +500,6 @@ class Ui_MainWindow(object):
         self.retranslateUi(MainWindow)
         # slider_opacity 信号连接已移至 SampleManagementSidebar 内部
 
-        self.tabWidget_tasks.setCurrentIndex(0)
         self.tabWidget_bottom.setCurrentIndex(0)
 
 
@@ -578,15 +552,13 @@ class Ui_MainWindow(object):
         
         # Tab 2: 任务配置
         self.tabWidget_contextControl.setTabText(self.tabWidget_contextControl.indexOf(self.tab_taskConfig), QCoreApplication.translate("MainWindow", u"\u4efb\u52a1\u914d\u7f6e (Task Config)", None))
-        self.groupBox_taskType.setTitle(QCoreApplication.translate("MainWindow", u"\u4efb\u52a1\u7c7b\u578b (Task Type)", None))
         self.label_trainInfo.setText(QCoreApplication.translate("MainWindow", u"\u2139\ufe0f \u914d\u7f6e\u53c2\u6570\u540e\uff0c\u70b9\u51fb\u4e0b\u65b9\u300c\u8fd0\u884c\u300d\u6309\u94ae\u5f00\u59cb\u8bad\u7ec3", None))
-        self.tabWidget_tasks.setTabText(self.tabWidget_tasks.indexOf(self.tab_train), QCoreApplication.translate("MainWindow", u"\u8bad\u7ec3 (Train)", None))
-        self.label_inferenceInfo.setText(QCoreApplication.translate("MainWindow", u"\u63a8\u7406\u6a21\u5f0f\u914d\u7f6e", None))
-        self.tabWidget_tasks.setTabText(self.tabWidget_tasks.indexOf(self.tab_inference), QCoreApplication.translate("MainWindow", u"\u63a8\u7406 (Inference)", None))
-        self.groupBox_paramConfig.setTitle(QCoreApplication.translate("MainWindow", u"\u53c2\u6570\u914d\u7f6e (Parameter Config)", None))
-        self.pushButton_applyRecommend.setText(QCoreApplication.translate("MainWindow", u"\U0001f4a1 \u5e94\u7528\u63a8\u8350\u8bad\u7ec3\u914d\u7f6e", None))
-        self.label_paramPlaceholder.setText(QCoreApplication.translate("MainWindow", u"\u53c2\u6570\u914d\u7f6e\u533a\u57df\n"
-"(\u52a8\u6001\u52a0\u8f7d\u53c2\u6570\u63a7\u4ef6)", None))
+        
+        self.groupBox_modelSelection.setTitle(QCoreApplication.translate("MainWindow", u"\u6a21\u578b\u9009\u62e9 (Model Selection)", None))
+        self.groupBox_weightSelection.setTitle(QCoreApplication.translate("MainWindow", u"\u6743\u91cd\u9009\u62e9 (Weight Selection)", None))
+        self.groupBox_advisorConfig.setTitle(QCoreApplication.translate("MainWindow", u"\u6570\u636e\u9a71\u52a8\u63a8\u8350 (Data-Driven Advisor)", None))
+        self.groupBox_hyperparams.setTitle(QCoreApplication.translate("MainWindow", u"\u8be6\u7ec6\u53c2\u6570\u8bbe\u7f6e (Detailed Hyperparameters)", None))
+        self.groupBox_paramConfig.setTitle(QCoreApplication.translate("MainWindow", u"\u9ad8\u7ea7\u53c2\u6570\u914d\u7f6e (Advanced Parameters)", None))
         self.groupBox_actions.setTitle(QCoreApplication.translate("MainWindow", u"\u64cd\u4f5c\u6309\u94ae (Action Buttons)", None))
         self.pushButton_run.setText(QCoreApplication.translate("MainWindow", u"\u8fd0\u884c (Run)", None))
         self.pushButton_stop.setText(QCoreApplication.translate("MainWindow", u"\u505c\u6b62 (Stop)", None))
