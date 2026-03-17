@@ -92,7 +92,8 @@ class ImageLoaderWorker(QObject):
             return
         
         try:
-            data, scale, offset = DynamicImageReader.read_at_level(path, level)
+            # 对于标签图像 (apply_colormap=True)，使用 nearest 重采样以保留类别索引
+            data, scale, offset = DynamicImageReader.read_at_level(path, level, is_label=apply_colormap)
             
             if self._cancelled or data is None:
                 return
@@ -197,9 +198,116 @@ class ImageLoaderThread(QThread):
             self.wait(1000)
 
 
+class MetadataLoaderWorker(QObject):
+    """后台元数据加载工作器 - 用于异步读取大图像的元数据"""
+    finished = Signal(str, int, int, int, list, bool)  # path, width, height, count, overviews, has_pyramid
+    error = Signal(str, str)  # path, error_message
+    
+    def __init__(self):
+        super().__init__()
+        self._cancelled = False
+    
+    def cancel(self):
+        self._cancelled = True
+    
+    def load(self, path: str):
+        """执行元数据加载"""
+        if self._cancelled:
+            return
+        
+        try:
+            if not os.path.exists(path):
+                self.error.emit(path, f"文件不存在: {path}")
+                return
+            
+            width, height, count, overviews = 0, 0, 1, []
+            has_pyramid = False
+            
+            if HAS_RASTERIO:
+                try:
+                    with rasterio.open(path) as src:
+                        width = src.width
+                        height = src.height
+                        count = src.count
+                        overviews = src.overviews(1) if src.count >= 1 else []
+                        has_pyramid = len(overviews) > 0
+                except Exception as e:
+                    # 回退到 OpenCV
+                    width, height, count = self._load_metadata_opencv(path)
+            else:
+                width, height, count = self._load_metadata_opencv(path)
+            
+            if not self._cancelled:
+                self.finished.emit(path, width, height, count, overviews, has_pyramid)
+                
+        except Exception as e:
+            if not self._cancelled:
+                self.error.emit(path, str(e))
+    
+    def _load_metadata_opencv(self, path: str):
+        """使用 OpenCV 读取元数据 (回退方案)"""
+        try:
+            # 只读取头部信息，不完全解码
+            with open(path, 'rb') as f:
+                # 只读取前 64KB 用于解析头部
+                data = np.frombuffer(f.read(65536), dtype=np.uint8)
+            img = cv2.imdecode(data, cv2.IMREAD_UNCHANGED)
+            if img is not None:
+                h, w = img.shape[:2]
+                c = 1 if img.ndim == 2 else img.shape[2]
+                return w, h, c
+        except:
+            pass
+        return 0, 0, 1
+
+
+class MetadataLoaderThread(QThread):
+    """后台元数据加载线程"""
+    finished = Signal(str, int, int, int, list, bool)
+    error = Signal(str, str)
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._worker = MetadataLoaderWorker()
+        self._worker.finished.connect(self.finished)
+        self._worker.error.connect(self.error)
+        self._tasks = []
+        self._mutex = QMutex()
+        self._running = True
+    
+    def add_task(self, path: str):
+        with QMutexLocker(self._mutex):
+            # 避免重复任务
+            if path not in self._tasks:
+                self._tasks.append(path)
+    
+    def run(self):
+        while self._running:
+            task = None
+            with QMutexLocker(self._mutex):
+                if self._tasks:
+                    task = self._tasks.pop(0)
+            
+            if task:
+                self._worker.load(task)
+            else:
+                self.msleep(50)
+    
+    def stop(self):
+        """停止线程"""
+        self._running = False
+        self._worker.cancel()
+        with QMutexLocker(self._mutex):
+            self._tasks.clear()
+        if not self.wait(2000):
+            print("⚠️ MetadataLoaderThread: 强制终止")
+            self.terminate()
+            self.wait(1000)
+
+
 class ImageLayerInfo:
     """图层元数据信息"""
-    def __init__(self, path: str, z_value: int = 0, opacity: float = 1.0, apply_colormap: bool = False):
+    def __init__(self, path: str, z_value: int = 0, opacity: float = 1.0, apply_colormap: bool = False, async_load: bool = False):
         self.path = path
         self.z_value = z_value
         self.opacity = opacity
@@ -216,7 +324,24 @@ class ImageLayerInfo:
         self.cache = LODCache(max_size=4)
         self.loading_level = 0  # 正在加载的级别
         
-        self._load_metadata()
+        # 异步加载状态
+        self.metadata_loaded = False
+        self.loading_metadata = False
+        
+        # 根据参数决定是否同步加载
+        if not async_load:
+            self._load_metadata()
+            self.metadata_loaded = True
+    
+    def set_metadata(self, width: int, height: int, count: int, overviews: list, has_pyramid: bool):
+        """设置元数据 (由异步加载器调用)"""
+        self.width = width
+        self.height = height
+        self.count = count
+        self.overviews = overviews
+        self.has_pyramid = has_pyramid
+        self.metadata_loaded = True
+        self.loading_metadata = False
     
     def _load_metadata(self):
         if not os.path.exists(self.path):
@@ -270,23 +395,24 @@ class DynamicImageReader:
     def read_at_level(
         path: str, 
         level: int, 
-        viewport_rect: Optional[QRectF] = None
+        viewport_rect: Optional[QRectF] = None,
+        is_label: bool = False
     ) -> Tuple[Optional[np.ndarray], float, Tuple[int, int]]:
         if not os.path.exists(path):
             return None, 1.0, (0, 0)
         
         if not HAS_RASTERIO:
-            return DynamicImageReader._read_with_opencv(path, level)
+            return DynamicImageReader._read_with_opencv(path, level, is_label)
         
         try:
             with rasterio.open(path) as src:
                 actual_level = DynamicImageReader._get_best_level(src, level)
                 out_h = max(1, src.height // actual_level)
                 out_w = max(1, src.width // actual_level)
-                data = DynamicImageReader._read_full(src, out_h, out_w)
+                data = DynamicImageReader._read_full(src, out_h, out_w, is_label)
                 return data, 1.0 / actual_level, (0, 0)
         except Exception as e:
-            return DynamicImageReader._read_with_opencv(path, level)
+            return DynamicImageReader._read_with_opencv(path, level, is_label)
     
     @staticmethod
     def _get_best_level(src, requested_level: int) -> int:
@@ -302,9 +428,13 @@ class DynamicImageReader:
         return best
     
     @staticmethod
-    def _read_full(src, out_h: int, out_w: int) -> np.ndarray:
-        # 使用 nearest 进行快速读取
-        resample = Resampling.nearest if out_h * out_w > 2000 * 2000 else Resampling.bilinear
+    def _read_full(src, out_h: int, out_w: int, is_label: bool = False) -> np.ndarray:
+        # 对于标签图像，必须使用 nearest 重采样以保留类别索引
+        if is_label:
+            resample = Resampling.nearest
+        else:
+            # 对于普通图像，大尺寸用 nearest（性能），小尺寸用 bilinear（质量）
+            resample = Resampling.nearest if out_h * out_w > 2000 * 2000 else Resampling.bilinear
         
         if src.count == 1:
             data = src.read(1, out_shape=(out_h, out_w), resampling=resample)
@@ -318,7 +448,7 @@ class DynamicImageReader:
         return data
     
     @staticmethod
-    def _read_with_opencv(path: str, level: int) -> Tuple[Optional[np.ndarray], float, Tuple[int, int]]:
+    def _read_with_opencv(path: str, level: int, is_label: bool = False) -> Tuple[Optional[np.ndarray], float, Tuple[int, int]]:
         try:
             with open(path, 'rb') as f:
                 data = np.frombuffer(f.read(), dtype=np.uint8)
@@ -328,7 +458,9 @@ class DynamicImageReader:
             if level > 1:
                 h, w = img.shape[:2]
                 new_h, new_w = max(1, h // level), max(1, w // level)
-                img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+                # 标签图像必须用 INTER_NEAREST 保留类别索引
+                interp = cv2.INTER_NEAREST if is_label else cv2.INTER_AREA
+                img = cv2.resize(img, (new_w, new_h), interpolation=interp)
             return img, 1.0 / level, (0, 0)
         except:
             return None, 1.0, (0, 0)
@@ -575,9 +707,18 @@ class SmartCanvas(QGraphicsView):
         if not os.path.exists(path):
             return None
         
+        print(f"      🔄 SmartCanvas.load_image_layer: 创建 ImageLayerInfo...")
+        QApplication.processEvents()
+        
         layer_info = ImageLayerInfo(path, z_value, opacity, apply_colormap)
+        
+        QApplication.processEvents()
+        
         if layer_info.width == 0:
+            print(f"      ⚠️ 元数据加载失败，width=0")
             return None
+        
+        print(f"      ✅ 元数据加载完成: {layer_info.width}x{layer_info.height}")
         
         if z_value in self._layers:
             old = self._layers[z_value]
@@ -589,10 +730,53 @@ class SmartCanvas(QGraphicsView):
         
         # 快速初始加载 (低分辨率)
         initial_level = self._calculate_initial_level(layer_info)
+        print(f"      🔄 开始初始加载 level={initial_level}...")
+        
+        QApplication.processEvents()
+        
         self._load_layer_sync(layer_info, initial_level)
+        
+        QApplication.processEvents()
+        
+        # 如果当前已有其他图层，同步到相同的LOD级别
+        if self._current_lod_level > 0 and self._current_lod_level != initial_level:
+            print(f"      🔄 同步到当前LOD级别: {self._current_lod_level}...")
+            self._load_layer_sync(layer_info, self._current_lod_level)
+            QApplication.processEvents()
+        
         self._update_scene_rect()
         
+        print(f"      ✅ SmartCanvas.load_image_layer: 完成")
+        
+        # 调试：打印所有图层状态
+        self.debug_layers()
+        
         return layer_info.item
+    
+    def debug_layers(self):
+        """调试方法：打印所有图层状态"""
+        print(f"\n      ═══════════════════════════════════════════")
+        print(f"      📋 所有图层状态汇总 (共 {len(self._layers)} 个图层)")
+        print(f"      ═══════════════════════════════════════════")
+        
+        for z_value, layer_info in sorted(self._layers.items()):
+            item = layer_info.item
+            if item:
+                print(f"      📦 z={z_value}: {os.path.basename(layer_info.path)}")
+                print(f"         - 原始尺寸: {layer_info.width}x{layer_info.height}")
+                print(f"         - current_level: {layer_info.current_level}")
+                print(f"         - apply_colormap: {layer_info.apply_colormap}")
+                print(f"         - item.zValue(): {item.zValue()}")
+                print(f"         - item.opacity(): {item.opacity()}")
+                print(f"         - item.isVisible(): {item.isVisible()}")
+                print(f"         - item.scale(): {item.scale()}")
+                print(f"         - item.pos(): ({item.pos().x()}, {item.pos().y()})")
+                print(f"         - item.boundingRect(): {item.boundingRect().width():.0f}x{item.boundingRect().height():.0f}")
+                print(f"         - in_scene: {item.scene() is not None}")
+            else:
+                print(f"      📦 z={z_value}: {os.path.basename(layer_info.path)} - ⚠️ item=None")
+        
+        print(f"      ═══════════════════════════════════════════\n")
 
     def load_layer_from_numpy(
         self, img_np: np.ndarray, pos: Tuple[int, int] = (0, 0),
@@ -768,11 +952,14 @@ class SmartCanvas(QGraphicsView):
     
     def _apply_pixmap(self, layer_info: ImageLayerInfo, pixmap: QPixmap, scale: float, offset: tuple, level: int):
         """应用 Pixmap 到图层"""
+        is_new_item = layer_info.item is None
+        
         if layer_info.item is None:
             layer_info.item = QGraphicsPixmapItem(pixmap)
             layer_info.item.setZValue(layer_info.z_value)
             layer_info.item.setOpacity(layer_info.opacity)
             self._scene.addItem(layer_info.item)
+            print(f"      📍 新建 GraphicsItem: z={layer_info.z_value}, opacity={layer_info.opacity}")
         else:
             layer_info.item.setPixmap(pixmap)
         
@@ -780,10 +967,36 @@ class SmartCanvas(QGraphicsView):
         layer_info.item.setScale(1.0 / scale if scale > 0 and scale < 1.0 else 1.0)
         layer_info.item.setPos(offset[0], offset[1])
         layer_info.current_level = level
+        
+        # 调试: 验证图层状态
+        actual_z = layer_info.item.zValue()
+        actual_opacity = layer_info.item.opacity()
+        actual_visible = layer_info.item.isVisible()
+        actual_scale = layer_info.item.scale()
+        actual_pos = layer_info.item.pos()
+        in_scene = layer_info.item.scene() is not None
+        
+        print(f"      📊 图层状态检查:")
+        print(f"         - z-value: {actual_z} (expected: {layer_info.z_value})")
+        print(f"         - opacity: {actual_opacity} (expected: {layer_info.opacity})")
+        print(f"         - visible: {actual_visible}")
+        print(f"         - scale: {actual_scale}")
+        print(f"         - pos: ({actual_pos.x()}, {actual_pos.y()})")
+        print(f"         - in_scene: {in_scene}")
+        print(f"         - pixmap size: {pixmap.width()}x{pixmap.height()}")
     
     def _load_layer_sync(self, layer_info: ImageLayerInfo, level: int):
         """同步加载"""
-        data, scale, offset = DynamicImageReader.read_at_level(layer_info.path, level)
+        print(f"      🔄 _load_layer_sync: 开始读取 level={level}...")
+        QApplication.processEvents()  # 让 UI 有机会更新
+        
+        # 对于标签图像 (apply_colormap=True)，使用 nearest 重采样以保留类别索引
+        data, scale, offset = DynamicImageReader.read_at_level(
+            layer_info.path, level, is_label=layer_info.apply_colormap
+        )
+        
+        QApplication.processEvents()  # 读取完成后更新 UI
+        
         if data is None:
             print(f"⚠️ 同步加载失败: level={level}")
             return
@@ -791,19 +1004,38 @@ class SmartCanvas(QGraphicsView):
         print(f"✅ 已加载: level={level}, shape={data.shape}, scale={scale}, "
               f"原始尺寸=({layer_info.width}, {layer_info.height}), colormap={layer_info.apply_colormap}")
         
+        QApplication.processEvents()
+        
         # 应用伪彩色 (用于 prediction/GT 等灰度标签图)
         if layer_info.apply_colormap:
             # 如果是 3D 数组，取第一个通道
             if data.ndim == 3:
                 data = data[:, :, 0] if data.shape[2] <= 3 else data[:, :, 0]
+            
+            # 调试：打印预测数据的值分布
+            unique_values = np.unique(data)
+            print(f"      📊 预测数据值分布:")
+            print(f"         - dtype: {data.dtype}")
+            print(f"         - 唯一值: {unique_values}")
+            print(f"         - min: {data.min()}, max: {data.max()}")
+            for v in unique_values[:5]:  # 只显示前5个值
+                count = np.sum(data == v)
+                pct = count / data.size * 100
+                print(f"         - 值={v}: {count}个像素 ({pct:.2f}%)")
+            
             # 应用 VOC 调色板
             data = self._apply_voc_colormap(data)
+        
+        QApplication.processEvents()
         
         pixmap = self._numpy_to_pixmap(data)
         print(f"   Pixmap: {pixmap.width()}x{pixmap.height()}")
         
+        QApplication.processEvents()
+        
         layer_info.cache.put(level, pixmap, scale, offset)
         self._apply_pixmap(layer_info, pixmap, scale, offset, level)
+        print(f"      ✅ _load_layer_sync: 完成")
     
     def _restore_cached_overview(self):
         """从缓存恢复低分辨率整图 (退出视口原始分辨率模式时)"""

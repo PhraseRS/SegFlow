@@ -13,7 +13,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFileDialog, QMessageBox, 
-    QToolButton, QMenu, QGraphicsPixmapItem, QTreeWidget
+    QToolButton, QMenu, QGraphicsPixmapItem, QTreeWidget, QProgressDialog, QApplication
 )
 
 from ui.widgets.smart_canvas import SmartCanvas
@@ -147,32 +147,65 @@ class GISCanvasWidget(QWidget):
             bool: 是否加载成功
         """
         if not file_path:
+            print("⚠️ load_base_image: file_path 为空")
             return False
             
         path = str(Path(file_path))
+        print(f"🔄 load_base_image: 开始加载 {path}")
         
         # 检查文件是否存在
         if not Path(path).exists():
             print(f"⚠️ 文件不存在: {path}")
             return False
         
+        # 创建进度对话框 (可选)
+        # 注意：对于快速加载，对话框可能不会显示
+        progress = QProgressDialog("正在加载图像...", None, 0, 100, self)  # 移除取消按钮
+        progress.setWindowTitle("加载中")
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setMinimumDuration(1000)  # 1秒后才显示，避免闪烁
+        progress.setValue(10)
+        QApplication.processEvents()
+        
         # 1. 提取元数据
+        print(f"   → 读取元数据...")
         profile = self._read_profile(path)
+        QApplication.processEvents()
+            
         if not profile:
+            progress.close()
+            print(f"❌ 无法读取元数据: {path}")
             QMessageBox.critical(self, "错误", f"无法读取元数据: {path}")
             return False
+        
+        progress.setValue(30)
+        QApplication.processEvents()
             
         # 2. 清空
+        print(f"   → 清理现有图层...")
         self.clear_all_layers()
         self._base_profile = profile
+        QApplication.processEvents()
+        
+        progress.setValue(50)
         
         # 3. 加载到 SmartCanvas
+        print(f"   → 加载图像到画布...")
+        QApplication.processEvents()
+        
         item = self.canvas.load_image_layer(path, pos=(0, 0), z_value=0)
+            
         if item is None:
+            progress.close()
+            print(f"❌ 加载图像失败: {path}")
             QMessageBox.critical(self, "错误", "加载图像失败")
             return False
+        
+        progress.setValue(80)
+        QApplication.processEvents()
 
         # 4. 如果有 LayerManager，使用模板初始化
+        print(f"   → 初始化图层管理...")
         if self._layer_manager:
             success = self._layer_manager.init_task_group(path, item)
             if success:
@@ -181,8 +214,15 @@ class GISCanvasWidget(QWidget):
             # 兼容旧模式
             self._add_layer_record("Base Image", path, item, 0, 1.0, profile)
         
+        progress.setValue(90)
+        QApplication.processEvents()
+        
         # 5. 适应视图
+        print(f"   → 调整视图...")
         self.canvas.fit_to_view()
+        
+        progress.setValue(100)
+        progress.close()
         
         # 6. 发出信号 (除非被抑制)
         if not suppress_signal:
@@ -248,14 +288,42 @@ class GISCanvasWidget(QWidget):
         Returns:
             bool: 是否成功
         """
+        print(f"🔄 inject_prediction 被调用: {result_path}")
+        
+        if not self._layer_manager:
+            print("⚠️ inject_prediction: _layer_manager 未设置")
+            return False
+            
+        success = self._layer_manager.inject_layer_data(
+            SlotType.TYPE_PRED, 
+            result_path, 
+            apply_colormap=True  # 使用VOC调色板显示
+        )
+        
+        if success:
+            print(f"✅ inject_prediction: 成功注入预测结果")
+        else:
+            print(f"❌ inject_prediction: 注入失败")
+            
+        return success
+        
+    def set_prediction_loading(self, expected_filename: str) -> bool:
+        """
+        设置预测图层为加载状态
+        
+        Args:
+            expected_filename: 预期输出文件名
+            
+        Returns:
+            bool: 是否成功
+        """
         if self._layer_manager:
-            return self._layer_manager.inject_layer_data(
-                SlotType.TYPE_PRED, 
-                result_path, 
-                apply_colormap=False  # 灰度显示
+            return self._layer_manager.set_slot_loading(
+                SlotType.TYPE_PRED,
+                text=expected_filename
             )
         return False
-    
+        
     def inject_ground_truth(self, gt_path: str) -> bool:
         """
         注入 Ground Truth (显示为灰度图)

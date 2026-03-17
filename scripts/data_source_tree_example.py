@@ -484,6 +484,8 @@ class MainWindow(QMainWindow):
         self.ui.inference_panel.inference_started.connect(self._on_inference_started)
         self.ui.inference_panel.inference_finished.connect(self._on_inference_finished)
         self.ui.inference_panel.inference_error.connect(self._on_inference_error)
+        # 连接预测初始化信号
+        self.ui.inference_panel.prediction_initializing.connect(self._on_prediction_initializing)
         
         # 双向同步：GIS 图层控制 <-> 推理面板
         # 方向 1: 左侧 GIS 底图变化 -> 右侧推理面板输入路径
@@ -2039,6 +2041,64 @@ class MainWindow(QMainWindow):
             f"Val: {len(val_samples)} 样本\n"
             f"Test: {len(test_samples)} 样本"
         )
+    
+    def _on_prediction_initializing(self, input_path, expected_output_filename):
+        """
+        预测初始化回调：设置图层为加载状态
+        
+        Args:
+            input_path: 输入文件路径
+            expected_output_filename: 预期输出文件名
+        """
+        self._log_to_bottom(f"🔄 准备接收预测结果: {expected_output_filename}...")
+        
+        # 切换到 Inference 视图
+        if self.ui.tabWidget_contextControl.currentIndex() != 2:
+            self.ui.tabWidget_contextControl.setCurrentIndex(2)
+            
+        # 调用 GISCanvasWidget 的 set_prediction_loading 方法
+        # 如果该方法不存在，需要先在 GISCanvasWidget 中实现
+        if hasattr(self.ui.gisCanvas, 'set_prediction_loading'):
+            self.ui.gisCanvas.set_prediction_loading(expected_output_filename)
+    
+    def _on_inference_finished(self, result):
+        """推理完成回调"""
+        print(f"🔵 _on_inference_finished 被调用")
+        print(f"   result keys: {result.keys() if result else 'None'}")
+        
+        # 显示结果
+        mask = result.get('mask')
+        output_path = result.get('output_path')
+        
+        print(f"   mask is None: {mask is None}")
+        print(f"   output_path: {output_path}")
+        
+        if mask is not None:
+             self._log_to_bottom(f"✅ 推理完成，结果已就绪")
+             
+             if output_path and os.path.exists(output_path):
+                 # 直接加载结果文件
+                 print(f"   → 调用 inject_prediction({output_path})")
+                 self.ui.gisCanvas.inject_prediction(output_path)
+             else:
+                 print(f"   ⚠️ output_path 不存在或为空")
+                 # 内存中的结果 - 尝试其他方式
+                 pass
+             
+             # 尝试从 last_inference_result 获取保存的预览图
+             if hasattr(self.ui.inference_panel, 'last_inference_result'):
+                 saved_path = self.ui.inference_panel.last_inference_result.get('saved_path')
+                 print(f"   last_inference_result.saved_path: {saved_path}")
+                 if saved_path and os.path.exists(saved_path):
+                     self._log_to_bottom(f"🔄 自动加载预览结果: {saved_path}")
+                     self.ui.gisCanvas.inject_prediction(saved_path)
+        else:
+            print(f"   ⚠️ mask 为 None，不调用 inject_prediction")
+            # 对于大图分块推理，mask 可能为 None，但 output_path 存在
+            if output_path and os.path.exists(output_path):
+                print(f"   → 尝试直接使用 output_path: {output_path}")
+                self._log_to_bottom(f"🔄 加载大图推理结果: {output_path}")
+                self.ui.gisCanvas.inject_prediction(output_path)
     
     def _save_split_to_txt(self):
         """保存数据集划分到txt文件"""

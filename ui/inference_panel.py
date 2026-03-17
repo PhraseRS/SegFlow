@@ -10,9 +10,127 @@ from PySide6.QtWidgets import (
     QRadioButton, QCheckBox, QButtonGroup, QFrame, QScrollArea,
     QProgressBar, QFileDialog, QMessageBox, QApplication
 )
-from PySide6.QtCore import Qt, Signal, QTimer
+from PySide6.QtCore import Qt, Signal, QTimer, QThread
 import os
 import numpy as np
+
+
+# =============================================================================
+# Worker Thread Class
+# =============================================================================
+
+class InferenceWorker(QThread):
+    """
+    后台推理工作线程
+    用于在后台执行耗时的推理任务，避免阻塞主界面
+    """
+    # 信号定义
+    finished = Signal(str, dict, dict)  # (image_path, result, params)
+    error = Signal(str)                 # (error_msg)
+    log = Signal(str)                   # (log_msg)
+    progress = Signal(int)              # (progress_value: 0-100)
+    cancelled = Signal()                # 取消完成信号
+    
+    def __init__(self, inference_model: dict, image_path: str, strategy: str, inference_params: dict, output_path: str = None):
+        super().__init__()
+        self.inference_model = inference_model
+        self.image_path = image_path
+        self.strategy = strategy
+        self.inference_params = inference_params
+        self.output_path = output_path
+        
+        # 推理引擎引用 (用于取消)
+        self._engine = None
+        self._cancel_requested = False
+    
+    def request_cancel(self):
+        """请求取消推理"""
+        self._cancel_requested = True
+        if self._engine:
+            self._engine.request_cancel()
+        self.log.emit("🛑 已发送取消请求...")
+    
+    def _on_engine_progress(self, current, total):
+        """推理引擎进度回调"""
+        # 将进度映射到10-90的范围
+        progress_value = int(10 + (current / total) * 80)
+        self.progress.emit(progress_value)
+        
+    def run(self):
+        try:
+            self.log.emit("🔄 开始执行后台推理...")
+            self.log.emit(f"   图像路径: {self.image_path}")
+            self.log.emit(f"   推理策略: {self.strategy}")
+            
+            # 导入推理引擎 (延迟导入避免循环依赖)
+            from core.inference_engine import InferenceEngine
+            
+            # 创建推理引擎
+            self.log.emit("🔧 初始化推理引擎...")
+            self._engine = InferenceEngine(self.inference_model)
+            
+            # 设置进度回调
+            self._engine.set_progress_callback(self._on_engine_progress)
+            
+            self.progress.emit(10)
+            
+            # 执行推理
+            self.log.emit(f"⚙️  正在运行 {self.strategy} 推理...")
+            
+            result = None
+            if self.strategy == 'large_image_block':
+                # 大图分块推理
+                if not self.output_path:
+                    raise ValueError("大图分块推理需要指定输出路径")
+                    
+                self.log.emit(f"📁 输出路径: {self.output_path}")
+                
+                result = self._engine.large_image_block_inference(
+                    self.image_path,
+                    self.output_path,
+                    crop_size=self.inference_params['crop_size'],
+                    overlap_rate=self.inference_params['overlap_rate'],
+                    enable_tta=self.inference_params['enable_tta']
+                )
+                
+            elif self.strategy == 'sliding_window':
+                # 滑窗推理
+                result = self._engine.sliding_window_inference(
+                    self.image_path,
+                    crop_size=self.inference_params['crop_size'],
+                    stride=self.inference_params['stride'],
+                    batch_size=self.inference_params['batch_size'],
+                    enable_tta=self.inference_params['enable_tta']
+                )
+                
+            elif self.strategy == 'resize':
+                # 全图缩放推理
+                result = self._engine.resize_inference(
+                    self.image_path,
+                    enable_tta=self.inference_params['enable_tta']
+                )
+                
+            else:
+                raise ValueError(f"未知的推理策略: {self.strategy}")
+                
+            self.progress.emit(90)
+            
+            # 检查是否被取消
+            if self._cancel_requested:
+                self.log.emit("🛑 推理已取消")
+                self.cancelled.emit()
+                return
+            
+            if result is None:
+                raise RuntimeError("推理返回结果为空")
+                
+            self.finished.emit(self.image_path, result, self.inference_params)
+            
+        except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
+            self.log.emit(f"❌ 后台推理异常: {str(e)}")
+            self.error.emit(f"{str(e)}\n\n{error_details}")
 
 
 class InferencePanel(QWidget):
@@ -29,6 +147,10 @@ class InferencePanel(QWidget):
     # 用于同步到左侧 GIS 图层控制
     input_path_selected = Signal(str)  # 参数: 选择的图像文件路径
     
+    # 新增：预测初始化信号 (用于通知左侧图层列表显示占位符)
+    # 参数: (input_path, output_filename_with_extension)
+    prediction_initializing = Signal(str, str)
+    
     def __init__(self, parent=None):
         super().__init__(parent)
         self.inference_model = None
@@ -37,6 +159,10 @@ class InferencePanel(QWidget):
         # 同步控制标志 - 防止信号循环
         # 当从外部调用 set_image_path 时设为 True，阻止再次发出 input_path_selected 信号
         self._suppress_sync = False
+        
+        # 推理状态追踪
+        self._is_inferencing = False
+        self._inference_engine = None  # 保存引用以便取消
         
         self._setup_ui()
         self._connect_signals()
@@ -304,9 +430,19 @@ class InferencePanel(QWidget):
         
         # 进度条
         self.label_inferenceProgress = QLabel("进度:")
+        progress_layout = QHBoxLayout()
         self.progressBar_inference = QProgressBar()
         self.progressBar_inference.setValue(0)
-        form_layout.addRow(self.label_inferenceProgress, self.progressBar_inference)
+        
+        # 取消按钮
+        self.pushButton_cancelInference = QPushButton("❌ 取消")
+        self.pushButton_cancelInference.setToolTip("取消当前正在进行的推理任务")
+        self.pushButton_cancelInference.setEnabled(False)  # 初始禁用
+        self.pushButton_cancelInference.setMaximumWidth(80)
+        
+        progress_layout.addWidget(self.progressBar_inference)
+        progress_layout.addWidget(self.pushButton_cancelInference)
+        form_layout.addRow(self.label_inferenceProgress, progress_layout)
         
         # 分隔线
         line = QFrame()
@@ -401,6 +537,7 @@ class InferencePanel(QWidget):
         # 推理执行
         self.pushButton_runInference.clicked.connect(self._run_inference)
         self.pushButton_batchInference.clicked.connect(self._run_batch_inference)
+        self.pushButton_cancelInference.clicked.connect(self._cancel_inference)
         
         # 导出结果
         self.pushButton_exportResults.clicked.connect(self._export_results)
@@ -680,18 +817,18 @@ class InferencePanel(QWidget):
         """
         生成输出文件名（自动命名规则）
         
-        规则：input.jpg -> input_Result.png
-        对于大图分块推理，输出为 .tif 格式
+        规则：input.jpg -> input_pred_v1
+        注意：不含扩展名，扩展名由具体保存逻辑决定
         
         Args:
             input_path: 输入图像路径
             
         Returns:
-            输出文件名（不含路径）
+            输出文件名（不含扩展名）
         """
         base_name = os.path.splitext(os.path.basename(input_path))[0]
-        # 对于大图分块推理，输出为 .tif 格式（不含扩展名，由引擎添加）
-        output_filename = f"{base_name}_Result"
+        # 用户需求：input.tif -> input_pred_v1.png
+        output_filename = f"{base_name}_pred_v1"
         return output_filename
     
     def _browse_export_dir(self):
@@ -1015,107 +1152,111 @@ class InferencePanel(QWidget):
             self._emit_log(f"   重叠率: {inference_params['overlap_rate']}")
         self._emit_log(f"   TTA增强: {'启用' if inference_params['enable_tta'] else '禁用'}")
         
-        # 使用 QTimer 异步执行推理，避免阻塞UI
-        QApplication.processEvents()
-        QTimer.singleShot(100, lambda: self._do_run_inference(image_path, strategy, inference_params))
-    
-    def _do_run_inference(self, image_path: str, strategy: str, inference_params: dict):
-        """实际执行推理任务"""
-        try:
-            self._emit_log("🔄 开始执行推理...")
-            self._emit_log(f"   图像路径: {image_path}")
-            self._emit_log(f"   推理策略: {strategy}")
+        # ========== 新增：通知图层列表添加占位符 ==========
+        # 1. 确定输出文件名和扩展名
+        base_output_name = self._generate_output_filename(image_path)
+        if strategy == 'large_image_block':
+            ext = ".tif"
+        else:
+            ext = ".png" # 默认保存为PNG
             
-            # 使用内置推理引擎
-            self._run_default_inference(image_path, strategy, inference_params)
-                
-        except Exception as e:
-            import traceback
-            error_details = traceback.format_exc()
-            self._emit_log(f"❌ 推理异常: {e}")
-            self._emit_log(f"详细错误:\n{error_details}")
-            self._handle_inference_error(f"{str(e)}\n\n详细信息:\n{error_details}")
+        expected_output_filename = f"{base_output_name}{ext}"
         
-        finally:
-            # 重新启用推理按钮
-            self.pushButton_runInference.setEnabled(True)
+        # 2. 发送信号
+        self.prediction_initializing.emit(image_path, expected_output_filename)
+        self._emit_log(f"⏳ 预留图层位置: {expected_output_filename}")
+        # ===============================================
+        
+        # 使用 QThread 异步执行推理
+        self._start_worker(image_path, strategy, inference_params)
+
+    def _start_worker(self, image_path: str, strategy: str, inference_params: dict):
+        """启动后台工作线程"""
+        # 准备大图模式需要的 output_path
+        output_path = None
+        if strategy == 'large_image_block':
+            # 获取输出目录
+            output_dir = self.lineEdit_outputPath.text().strip()
+            if not output_dir:
+                output_dir = os.path.dirname(image_path)
+                self._emit_log(f"⚠️  未设置输出路径，使用默认路径: {output_dir}")
+            
+            # 生成文件名
+            output_filename = self._generate_output_filename(image_path)
+            output_path = os.path.join(output_dir, f"{output_filename}.tif") # 注意这里是大图模式特有的后缀
+        
+        # 创建并启动 Worker
+        self._inference_worker = InferenceWorker(
+            self.inference_model,
+            image_path,
+            strategy,
+            inference_params,
+            output_path
+        )
+        
+        # 连接信号
+        self._inference_worker.log.connect(self._emit_log)
+        self._inference_worker.progress.connect(self.progressBar_inference.setValue)
+        self._inference_worker.finished.connect(self._on_worker_finished)
+        self._inference_worker.error.connect(self._on_worker_error)
+        self._inference_worker.cancelled.connect(self._on_worker_cancelled)  # 取消信号
+        self._inference_worker.finished.connect(self._cleanup_worker)
+        self._inference_worker.error.connect(self._cleanup_worker)
+        self._inference_worker.cancelled.connect(self._cleanup_worker)
+        
+        # 启用取消按钮
+        self._is_inferencing = True
+        self.pushButton_cancelInference.setEnabled(True)
+        
+        # 启动
+        self._inference_worker.start()
+        
+    def _on_worker_finished(self, image_path: str, result: dict, inference_params: dict):
+        """后台推理完成处理"""
+        self.progressBar_inference.setValue(100)
+        
+        success = result.get('success', False)
+        self._emit_log(f"📊 推理结果状态: {'成功' if success else '失败'}")
+        
+        if success:
+            self._handle_inference_success(image_path, result, inference_params)
+        else:
+            error_msg = result.get('error', '未知错误')
+            self._handle_inference_error(error_msg)
+            
+    def _on_worker_error(self, error_msg: str):
+        """后台推理错误处理"""
+        self._handle_inference_error(error_msg)
+        
+    def _cleanup_worker(self):
+        """清理 Worker 资源"""
+        self.pushButton_runInference.setEnabled(True)
+        self.pushButton_cancelInference.setEnabled(False)  # 禁用取消按钮
+        self._is_inferencing = False
+        if hasattr(self, '_inference_worker'):
+            self._inference_worker.deleteLater()
+            self._inference_worker = None
     
-    def _run_default_inference(self, image_path: str, strategy: str, inference_params: dict):
-        """使用默认推理引擎"""
-        try:
-            from core.inference_engine import InferenceEngine
-            
-            # 创建推理引擎
-            self._emit_log("🔧 创建推理引擎...")
-            engine = InferenceEngine(self.inference_model)
-            
-            # 更新进度条
-            self.progressBar_inference.setValue(30)
-            QApplication.processEvents()
-            
-            # 执行推理
-            self._emit_log(f"⚙️  执行{strategy}推理...")
-            
-            if strategy == 'large_image_block':
-                # 大图分块推理
-                # 获取输出路径（优先使用用户选择的输出路径）
-                output_dir = self.lineEdit_outputPath.text().strip()
-                if not output_dir:
-                    # 如果没有设置输出路径，使用图像所在目录
-                    output_dir = os.path.dirname(image_path)
-                    self._emit_log(f"⚠️  未设置输出路径，使用默认路径: {output_dir}")
-                
-                # 生成输出文件名（自动命名规则：input.jpg -> input_Result.tif）
-                output_filename = self._generate_output_filename(image_path)
-                output_path = os.path.join(output_dir, output_filename)
-                
-                self._emit_log(f"📁 输出路径: {output_path}")
-                
-                result = engine.large_image_block_inference(
-                    image_path,
-                    output_path,
-                    crop_size=inference_params['crop_size'],
-                    overlap_rate=inference_params['overlap_rate'],
-                    enable_tta=inference_params['enable_tta']
-                )
-            elif strategy == 'sliding_window':
-                result = engine.sliding_window_inference(
-                    image_path,
-                    crop_size=inference_params['crop_size'],
-                    stride=inference_params['stride'],
-                    batch_size=inference_params['batch_size'],
-                    enable_tta=inference_params['enable_tta']
-                )
-            else:  # resize
-                result = engine.resize_inference(
-                    image_path,
-                    enable_tta=inference_params['enable_tta']
-                )
-            
-            self._emit_log(f"📊 推理结果: success={result.get('success', False)}")
-            
-            # 更新进度条
-            self.progressBar_inference.setValue(80)
-            QApplication.processEvents()
-            
-            # 处理预测结果
-            if result.get('success', False):
-                self._emit_log("✅ 推理成功，处理结果...")
-                self._handle_inference_success(image_path, result, inference_params)
-            else:
-                error_msg = result.get('error', '未知错误')
-                self._emit_log(f"❌ 推理失败: {error_msg}")
-                self._handle_inference_error(error_msg)
-            
-            # 完成进度条
-            self.progressBar_inference.setValue(100)
-            
-        except Exception as e:
-            import traceback
-            error_details = traceback.format_exc()
-            self._emit_log(f"❌ 默认推理异常: {e}")
-            self._emit_log(f"详细错误:\n{error_details}")
-            raise
+    def _cancel_inference(self):
+        """取消当前推理任务"""
+        if not self._is_inferencing:
+            self._emit_log("⚠️  当前没有正在进行的推理任务")
+            return
+        
+        if hasattr(self, '_inference_worker') and self._inference_worker:
+            self._emit_log("🛑 正在取消推理...")
+            self._inference_worker.request_cancel()
+            self.pushButton_cancelInference.setEnabled(False)
+            self.pushButton_cancelInference.setText("取消中...")
+        else:
+            self._emit_log("⚠️  无法取消：Worker 不存在")
+    
+    def _on_worker_cancelled(self):
+        """推理被取消时的处理"""
+        self._emit_log("✅ 推理已成功取消")
+        self.progressBar_inference.setValue(0)
+        self.pushButton_cancelInference.setText("❌ 取消")
+        self.label_inferenceResult.setText("推理已取消\\n\\n可以重新配置参数后再次运行推理。")
     
     def _handle_inference_success(self, image_path: str, result: dict, inference_params: dict):
         """处理推理成功的结果"""
@@ -1237,9 +1378,9 @@ class InferencePanel(QWidget):
                         output_dir = os.path.dirname(image_path)
                         self._emit_log(f"⚠️  未设置输出路径，预览PNG将保存到默认路径: {output_dir}")
                     
-                    # 生成输出文件名（自动命名规则：input.jpg -> input_Result.png）
-                    base_name = os.path.splitext(os.path.basename(image_path))[0]
-                    output_filename = f"{base_name}_Result.png"
+                    # 生成输出文件名（自动命名规则：input.jpg -> input_pred_v1.png）
+                    base_output_name = self._generate_output_filename(image_path)
+                    output_filename = f"{base_output_name}.png"
                     saved_path = os.path.join(output_dir, output_filename)
                     
                     # 保存为PNG格式（预览用）

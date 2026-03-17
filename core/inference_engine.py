@@ -58,7 +58,30 @@ class InferenceEngine:
         """
         self.model_info = model_info
         self.model = None
+        
+        # 取消和进度回调支持
+        self._cancel_requested = False
+        self._progress_callback = None
+        
         self._init_model()
+    
+    def set_progress_callback(self, callback):
+        """
+        设置进度回调函数
+        
+        Args:
+            callback: 接受 (current, total) 参数的回调函数
+        """
+        self._progress_callback = callback
+    
+    def request_cancel(self):
+        """请求取消当前推理任务"""
+        self._cancel_requested = True
+        print("[推理引擎] 🛑 收到取消请求")
+    
+    def reset_cancel(self):
+        """重置取消请求状态"""
+        self._cancel_requested = False
     
     def _init_model(self):
         """初始化模型"""
@@ -77,7 +100,10 @@ class InferenceEngine:
                 device=self.model_info['device']
             )
             
+            print("="*60)
             print(f"[推理引擎] ✅ 模型加载成功（真实模型）")
+            print(f"[推理引擎] 🎯 推理模式: 真实神经网络推理")
+            print("="*60)
             self.use_real_model = True
             
         except ImportError as e:
@@ -147,9 +173,8 @@ class InferenceEngine:
             # 返回None，让调用者知道这是超大图像
             return None
         
-        # 创建结果掩码
-        result_mask = np.zeros((h, w), dtype=np.float32)
-        count_mask = np.zeros((h, w), dtype=np.float32)
+        # 创建结果掩码 - 使用 uint8 节省内存 (原 float32 的 1/4)
+        result_mask = np.zeros((h, w), dtype=np.uint8)
         
         # 计算窗口数量
         num_windows_h = max(1, (h - crop_size) // stride + 1) if h > crop_size else 1
@@ -160,10 +185,23 @@ class InferenceEngine:
         
         window_count = 0
         
+        # 重置取消状态
+        self._cancel_requested = False
+        
         # 滑窗推理
         for y in range(0, h, stride):
+            # 检查取消请求
+            if self._cancel_requested:
+                print("[推理引擎] 🛑 推理已取消")
+                return None
+            
             for x in range(0, w, stride):
                 window_count += 1
+                
+                # 检查取消请求 (内层循环也检查，响应更快)
+                if self._cancel_requested:
+                    print("[推理引擎] 🛑 推理已取消")
+                    return None
                 
                 # 计算窗口边界
                 y_end = min(y + crop_size, h)
@@ -193,11 +231,16 @@ class InferenceEngine:
                     else:
                         window_mask = result[0]
                     
-                    # 将结果合并到完整掩码
-                    result_mask[y:y_end, x:x_end] += window_mask[:y_end-y, :x_end-x]
-                    count_mask[y:y_end, x:x_end] += 1
+                    # 将结果直接覆盖到完整掩码
+                    # 注意：语义分割输出的是类别ID (0, 1, 2...)，不能累加！
+                    # 对于重叠区域，使用最后一次预测的结果
+                    result_mask[y:y_end, x:x_end] = window_mask[:y_end-y, :x_end-x].astype(np.uint8)
                     
-                    # 进度提示
+                    # 细粒度进度反馈 (每个窗口都回调)
+                    if self._progress_callback:
+                        self._progress_callback(window_count, total_windows)
+                    
+                    # 控制台进度 (每10个窗口打印一次)
                     if window_count % 10 == 0:
                         progress = (window_count / total_windows) * 100
                         print(f"[推理引擎] 进度: {window_count}/{total_windows} ({progress:.1f}%)")
@@ -205,11 +248,6 @@ class InferenceEngine:
                 except Exception as e:
                     print(f"[推理引擎] ⚠️  窗口 ({x},{y}) 推理失败: {e}")
                     continue
-        
-        # 平均重叠区域
-        result_mask = np.divide(result_mask, count_mask, 
-                               out=np.zeros_like(result_mask), 
-                               where=count_mask!=0).astype(np.uint8)
         
         print(f"[推理引擎] ✅ 滑窗推理完成")
         
@@ -301,6 +339,9 @@ class InferenceEngine:
             
             print(f"[推理引擎] 分块数量: {x_num} x {y_num} = {total_blocks}")
             
+            # 重置取消状态
+            self._cancel_requested = False
+            
             # 创建临时目录保存分块结果
             temp_dir = output_path + '_blocks'
             if not os.path.exists(temp_dir):
@@ -315,6 +356,11 @@ class InferenceEngine:
             
             # 左上部分
             for j in tqdm(range(y_num - 1), desc='预测分块(主区域)'):
+                # 检查取消请求
+                if self._cancel_requested:
+                    print("[推理引擎] 🛑 分块推理已取消")
+                    return {'success': False, 'error': '用户取消'}
+                
                 for i in range(x_num - 1):
                     x_start = stride * i
                     y_start = stride * j
@@ -334,6 +380,11 @@ class InferenceEngine:
                     block = Block(save_file, j, i, overlap, "", overlap, "", x_start, y_start)
                     dst_blocks[j][i] = block
                     block_count += 1
+                    
+                    # 更新进度 (分块预测占 0-80%)
+                    if self._progress_callback and block_count % 3 == 0:
+                        progress_pct = int((block_count / total_blocks) * 80)
+                        self._progress_callback(progress_pct, 100)
             
             # 下侧边缘
             cur_y = y_num - 1
@@ -341,6 +392,9 @@ class InferenceEngine:
             overlap_y = stride * (cur_y - 1) + crop_size - y_start if cur_y > 0 else 0
             
             for i in tqdm(range(x_num - 1), desc='预测分块(下边缘)'):
+                if self._cancel_requested:
+                    return {'success': False, 'error': '用户取消'}
+                    
                 x_start = stride * i
                 
                 img_block = dataset.ReadAsArray(x_start, y_start, crop_size, crop_size)
@@ -355,6 +409,11 @@ class InferenceEngine:
                 block = Block(save_file, cur_y, i, overlap_y, "", overlap, "", x_start, y_start)
                 dst_blocks[cur_y][i] = block
                 block_count += 1
+                
+                # 更新进度
+                if self._progress_callback and block_count % 3 == 0:
+                    progress_pct = int((block_count / total_blocks) * 80)
+                    self._progress_callback(progress_pct, 100)
             
             # 右侧边缘
             cur_x = x_num - 1
@@ -362,6 +421,9 @@ class InferenceEngine:
             overlap_x = stride * (cur_x - 1) + crop_size - x_start if cur_x > 0 else 0
             
             for j in tqdm(range(y_num - 1), desc='预测分块(右边缘)'):
+                if self._cancel_requested:
+                    return {'success': False, 'error': '用户取消'}
+                    
                 y_start = stride * j
                 
                 img_block = dataset.ReadAsArray(x_start, y_start, crop_size, crop_size)
@@ -376,8 +438,16 @@ class InferenceEngine:
                 block = Block(save_file, j, cur_x, overlap, "", overlap_x, "", x_start, y_start)
                 dst_blocks[j][cur_x] = block
                 block_count += 1
+                
+                # 更新进度
+                if self._progress_callback and block_count % 3 == 0:
+                    progress_pct = int((block_count / total_blocks) * 80)
+                    self._progress_callback(progress_pct, 100)
             
             # 右下角
+            if self._cancel_requested:
+                return {'success': False, 'error': '用户取消'}
+                
             img_block = dataset.ReadAsArray(img_width - crop_size, img_height - crop_size, crop_size, crop_size)
             img_block_cv = self._gdal_data_to_opencv_data(img_block)
             
@@ -391,6 +461,10 @@ class InferenceEngine:
                          img_width - crop_size, img_height - crop_size)
             dst_blocks[cur_y][cur_x] = block
             block_count += 1
+            
+            # 进度: 分块预测完成 (80%)
+            if self._progress_callback:
+                self._progress_callback(80, 100)
             
             print(f'[推理引擎] 分块预测完成，耗时: {(time.time() - t0) / 60:.2f} 分钟')
             
@@ -478,10 +552,19 @@ class InferenceEngine:
     
     def _stitch_blocks(self, dst_blocks, dst_ds, target_size):
         """拼接分块结果，重叠区各取一半"""
+        # 计算总分块数
+        total_blocks = sum(1 for row in dst_blocks for block in row if block is not None)
+        processed_blocks = 0
+        
         for j in tqdm(dst_blocks, desc='拼接分块'):
             for block in j:
                 if block is None:
                     continue
+                
+                # 检查取消请求
+                if self._cancel_requested:
+                    print("[推理引擎] 🛑 拼接已取消")
+                    return
                 
                 # 读取分块
                 block_img = cv2.imread(block.file, cv2.IMREAD_GRAYSCALE)
@@ -505,6 +588,14 @@ class InferenceEngine:
                 
                 # 更新分块文件
                 cv2.imwrite(block.file, block_img)
+                
+                # 更新进度
+                processed_blocks += 1
+                if self._progress_callback and processed_blocks % 5 == 0:
+                    # 拼接阶段占 80%-95% 的进度
+                    base_progress = 80
+                    stitch_progress = int((processed_blocks / total_blocks) * 15)
+                    self._progress_callback(base_progress + stitch_progress, 100)
     
     def sliding_window_inference(
         self,
@@ -545,7 +636,10 @@ class InferenceEngine:
             # 执行推理
             if self.use_real_model:
                 # 使用真实的 MMSegmentation 推理
+                print("="*60)
                 print(f"[推理引擎] 🚀 使用真实模型进行推理...")
+                print(f"[推理引擎] 📊 推理参数: crop={crop_size}, stride={stride}")
+                print("="*60)
                 result_mask = self._real_sliding_window_inference(
                     image_path, crop_size, stride, w, h
                 )
@@ -554,10 +648,15 @@ class InferenceEngine:
                     # 超大图像，无法处理
                     print(f"[推理引擎] ⚠️  图像过大，无法生成完整掩码")
                 else:
+                    print("="*60)
                     print(f"[推理引擎] ✅ 真实推理完成")
+                    print("="*60)
             else:
                 # 模拟推理结果
+                print("="*60)
                 print(f"[推理引擎] ⚠️  使用模拟推理（MMSegmentation未安装或模型加载失败）")
+                print(f"[推理引擎] ⚠️  这不是真正的神经网络推理！")
+                print("="*60)
                 if w * h > 100000000:  # 超过1亿像素
                     print(f"[推理引擎] 检测到超大图像，使用轻量级模式")
                     result_mask = None  # 不创建完整掩码，节省内存

@@ -354,26 +354,30 @@ class LayerManager(QObject):
         Returns:
             bool: 是否成功
         """
+        print(f"🔄 inject_layer_data: slot_type={slot_type}, path={data_path}, colormap={apply_colormap}")
+        
         if not self._current_task:
-            print("⚠️ 没有活动的任务组")
+            print("⚠️ inject_layer_data: 没有活动的任务组")
             return False
         
         if slot_type not in self._current_task.slots:
-            print(f"⚠️ 无效的槽位类型: {slot_type}")
+            print(f"⚠️ inject_layer_data: 无效的槽位类型: {slot_type}")
             return False
         
         if not os.path.exists(data_path):
-            print(f"⚠️ 文件不存在: {data_path}")
+            print(f"⚠️ inject_layer_data: 文件不存在: {data_path}")
             return False
         
         slot = self._current_task.slots[slot_type]
         
         # 如果已有图层，先移除
         if slot.graphics_item and self._remove_layer_callback:
+            print(f"   → 移除旧图层")
             self._remove_layer_callback(slot.graphics_item)
         
         # 加载新图层
         if self._load_layer_callback:
+            print(f"   → 调用 _load_layer_callback...")
             item = self._load_layer_callback(
                 data_path, 
                 slot.default_z_value, 
@@ -389,8 +393,43 @@ class LayerManager(QObject):
                 self.slot_filled.emit(slot.name, data_path)
                 print(f"✅ 已填充 {slot.display_name}: {Path(data_path).name}")
                 return True
+            else:
+                print(f"❌ _load_layer_callback 返回 None")
+        else:
+            print(f"❌ _load_layer_callback 未设置")
         
         return False
+    
+    def set_slot_loading(self, slot_type: SlotType, text: str = "") -> bool:
+        """
+        设置槽位为加载状态
+        
+        Args:
+            slot_type: 槽位类型
+            text: 显示的文件名文本
+        """
+        if not self._current_task:
+            return False
+        
+        if slot_type not in self._current_task.slots:
+            return False
+            
+        slot = self._current_task.slots[slot_type]
+        
+        # 1. 更新树项显示
+        if slot.tree_item:
+            item = slot.tree_item
+            if text:
+                display_text = f"🔄 [处理中...] {text}"
+            else:
+                display_text = f"🔄 [处理中...] {slot.display_name}"
+            
+            item.setText(0, display_text)
+            item.setForeground(0, QBrush(QColor(128, 128, 128)))  # 灰色
+            item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsUserCheckable)  # 禁用复选框
+            item.setCheckState(0, Qt.CheckState.Unchecked)
+        
+        return True
     
     def clear_slot(self, slot_type: SlotType) -> bool:
         """清空指定槽位"""
