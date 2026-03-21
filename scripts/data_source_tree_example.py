@@ -425,6 +425,16 @@ class MainWindow(QMainWindow):
         
         # 初始化视图切换
         self._init_view_switcher()
+        
+        # Phase 5: 训练结果联动推理面板
+        from PySide6.QtWidgets import QPushButton
+        self.btn_send_to_inference = QPushButton("🚀 刚刚训练的模型 -> 发送至推理分析")
+        self.btn_send_to_inference.setStyleSheet("background-color: #E8F5E9; color: #2E7D32; font-weight: bold; padding: 8px;")
+        self.btn_send_to_inference.setMinimumHeight(40)
+        self.btn_send_to_inference.setVisible(False)
+        self.ui.verticalLayout_actions.addWidget(self.btn_send_to_inference)
+        self.btn_send_to_inference.clicked.connect(self._on_send_to_inference_clicked)
+        self._last_work_dir = None
     
     def _init_view_switcher(self):
         """初始化视图切换器"""
@@ -671,8 +681,9 @@ class MainWindow(QMainWindow):
             # 3. 更新健康检查卡片
             self._update_health_check()
             
-            # Phase 3.3: 启用推荐配置按钮
-            self.ui.pushButton_applyRecommend.setEnabled(True)
+            # Phase 3.3: 启用推荐配置按钮 (该按钮已重构至 AdvisorConfigWidget)
+            if hasattr(self.ui, 'pushButton_applyRecommend'):
+                self.ui.pushButton_applyRecommend.setEnabled(True)
     
     def _update_class_distribution(self, class_distribution, image_counts=None):
         """更新类别分布面板
@@ -931,12 +942,10 @@ class MainWindow(QMainWindow):
                 self._log_to_bottom(f"📄 用户选择配置: {base_config}")
             
             # 将基础配置和前面合并的参数打包，准备传给 MMSegTrainer
-            ui_params = {
-                'base_config': base_config,
-                'data_root': self._current_data_root,
-                **final_ui_params  # 将聚合器产生的所有高级配置完全打平进去
-            }
-            
+            ui_params = {}
+            ui_params.update(final_ui_params)  # 先放入所有高级配置
+            ui_params['base_config'] = base_config
+            ui_params['data_root'] = self._current_data_root  # 强制覆盖为真正的绝对路径
             # ====== Step 3: 生成训练配置文件 ======
             import os
             import tempfile
@@ -954,6 +963,9 @@ class MainWindow(QMainWindow):
             
             self._log_to_bottom(f"📄 配置文件已生成: {config_path}")
             self._log_to_bottom(f"📂 工作目录: {work_dir}")
+            
+            self._last_work_dir = work_dir
+            self.btn_send_to_inference.setVisible(False)
             
             # ====== Step 4: 创建并启动训练线程 ======
             from core.training_dispatcher import TrainingThread
@@ -1042,6 +1054,9 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage("训练完成")
             self.ui.label_trainInfo.setText("✅ 训练完成")
             self.ui.label_trainInfo.setStyleSheet("color: #2E7D32; font-weight: bold; padding: 2px;")
+            
+            if hasattr(self, '_last_work_dir') and self._last_work_dir:
+                self.btn_send_to_inference.setVisible(True)
         else:
             self._log_to_bottom(f"⚠️ 训练退出 (exit code: {exit_code})")
             self.statusBar().showMessage(f"训练退出 (code: {exit_code})")
@@ -1058,6 +1073,29 @@ class MainWindow(QMainWindow):
         """重置训练相关 UI 状态"""
         self.ui.pushButton_run.setEnabled(True)
         self.ui.pushButton_stop.setEnabled(False)
+        
+    def _on_send_to_inference_clicked(self):
+        """一键打包流转至推理分析面板"""
+        if not hasattr(self, '_last_work_dir') or not self._last_work_dir:
+            return
+            
+        work_dir = self._last_work_dir
+        
+        if hasattr(self, '_current_data_root') and self._current_data_root:
+            self.ui.inference_panel.scan_trained_models(self._current_data_root)
+            
+        success = self.ui.inference_panel.select_model_by_dir(work_dir)
+        if success:
+            index = self.ui.tabWidget_contextControl.indexOf(self.ui.tab_inferenceVis)
+            if index >= 0:
+                self.ui.tabWidget_contextControl.setCurrentIndex(index)
+            self._log_to_bottom(f"🚀 已自动流转至推理面板并触发模型加载")
+            self.btn_send_to_inference.setVisible(False)
+            
+            # --- 核心行动：真正触发模型在显存中的加载动作，而不仅是填上文件路径 ---
+            self.ui.inference_panel.pushButton_loadModel.click()
+        else:
+            self._log_to_bottom("⚠️ 流转失败：未能在库中找到刚生成的模型记录")
     
     def _find_base_config(self, model_params: dict) -> str:
         """

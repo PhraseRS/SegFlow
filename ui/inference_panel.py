@@ -196,6 +196,25 @@ class InferencePanel(QWidget):
         form_layout.setSpacing(3)  # 压缩行间距
         form_layout.setContentsMargins(6, 6, 6, 6)  # 压缩边距
         
+        # === 新增：模型库选择区 ===
+        self.label_modelRegistry = QLabel("已训练模型库:")
+        registry_layout = QHBoxLayout()
+        self.comboBox_modelRegistry = QComboBox()
+        self.comboBox_modelRegistry.addItem("请选择历史训练模型...", userData=None)
+        
+        self.pushButton_refreshRegistry = QPushButton("🔄 刷新")
+        self.pushButton_refreshRegistry.setMaximumWidth(60)
+        
+        registry_layout.addWidget(self.comboBox_modelRegistry)
+        registry_layout.addWidget(self.pushButton_refreshRegistry)
+        form_layout.addRow(self.label_modelRegistry, registry_layout)
+        
+        # 分隔线
+        line_reg = QFrame()
+        line_reg.setFrameShape(QFrame.HLine)
+        line_reg.setFrameShadow(QFrame.Sunken)
+        form_layout.addRow(line_reg)
+        
         # 配置文件
         self.label_configFile = QLabel("配置文件:")
         config_layout = QHBoxLayout()
@@ -511,6 +530,10 @@ class InferencePanel(QWidget):
 
     def _connect_signals(self):
         """连接信号"""
+        # 模型库区
+        self.comboBox_modelRegistry.currentIndexChanged.connect(self._on_model_registry_changed)
+        self.pushButton_refreshRegistry.clicked.connect(self._manual_refresh_registry)
+        
         # 模型加载区
         self.pushButton_browseConfig.clicked.connect(self._browse_config_file)
         self.pushButton_browseCheckpoint.clicked.connect(self._browse_checkpoint_file)
@@ -541,6 +564,101 @@ class InferencePanel(QWidget):
         
         # 导出结果
         self.pushButton_exportResults.clicked.connect(self._export_results)
+        
+    def scan_trained_models(self, data_root=None):
+        """扫描已训练模型库"""
+        if data_root:
+            self._current_data_root = data_root
+        elif not hasattr(self, '_current_data_root') or not self._current_data_root:
+            return
+            
+        work_dirs_path = os.path.join(self._current_data_root, 'work_dirs')
+        if not os.path.exists(work_dirs_path):
+            return
+            
+        current_data = self.comboBox_modelRegistry.currentData()
+        
+        self.comboBox_modelRegistry.blockSignals(True)
+        self.comboBox_modelRegistry.clear()
+        self.comboBox_modelRegistry.addItem("请选择历史训练模型或者手动指定下方文件...", userData=None)
+        
+        try:
+            dirs = [d for d in os.listdir(work_dirs_path) if os.path.isdir(os.path.join(work_dirs_path, d))]
+            dirs.sort(key=lambda d: os.path.getmtime(os.path.join(work_dirs_path, d)), reverse=True)
+            
+            for d in dirs:
+                dir_path = os.path.join(work_dirs_path, d)
+                config_file = os.path.join(dir_path, 'train_config.py')
+                
+                if not os.path.exists(config_file):
+                    continue
+                    
+                pth_files = [f for f in os.listdir(dir_path) if f.endswith('.pth')]
+                if not pth_files:
+                    continue
+                    
+                self.comboBox_modelRegistry.addItem(f"📦 {d}", userData=dir_path)
+                
+        except Exception as e:
+            self._emit_log(f"⚠️  扫描模型库失败: {e}")
+            
+        self.comboBox_modelRegistry.blockSignals(False)
+        
+        if current_data:
+            index = self.comboBox_modelRegistry.findData(current_data)
+            if index >= 0:
+                self.comboBox_modelRegistry.setCurrentIndex(index)
+                
+    def _manual_refresh_registry(self):
+        """手动刷新模型库"""
+        if hasattr(self, '_current_data_root') and self._current_data_root:
+            self.scan_trained_models(self._current_data_root)
+            self._emit_log("🔄 已刷新已训练模型库")
+        else:
+            self._emit_log("⚠️  无法刷新：尚未挂载数据集目录")
+            
+    def _on_model_registry_changed(self, index):
+        """模型下拉框选择改变时触发"""
+        if index <= 0:
+            return
+            
+        dir_path = self.comboBox_modelRegistry.currentData()
+        if not dir_path or not os.path.exists(dir_path):
+            return
+            
+        config_file = os.path.join(dir_path, 'train_config.py')
+        
+        pth_files = [f for f in os.listdir(dir_path) if f.endswith('.pth')]
+        best_pth = None
+        
+        for pth in pth_files:
+            if 'best' in pth.lower():
+                best_pth = pth
+                break
+                
+        if not best_pth and pth_files:
+            best_pth = max(pth_files, key=lambda f: os.path.getmtime(os.path.join(dir_path, f)))
+            
+        if os.path.exists(config_file):
+            self.lineEdit_configFile.setText(config_file)
+            
+        if best_pth:
+            self.lineEdit_checkpointFile.setText(os.path.join(dir_path, best_pth))
+            
+        self._emit_log(f"✅ 从库中自动填充了模型配置: {os.path.basename(dir_path)}")
+        
+    def select_model_by_dir(self, work_dir):
+        """外部调用：强制下拉框选中指定的目录"""
+        if not work_dir:
+            return False
+            
+        normalized_dir = os.path.normpath(work_dir)
+        for i in range(self.comboBox_modelRegistry.count()):
+            item_data = self.comboBox_modelRegistry.itemData(i)
+            if item_data and os.path.normpath(item_data) == normalized_dir:
+                self.comboBox_modelRegistry.setCurrentIndex(i)
+                return True
+        return False
     
     def _init_inference_config(self):
         """初始化推理配置"""
