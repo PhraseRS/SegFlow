@@ -38,6 +38,7 @@ from ui.widgets.weight_selection_widget import WeightSelectionWidget
 from ui.widgets.advisor_config_widget import AdvisorConfigWidget
 from ui.widgets.hyperparam_tabs_widget import HyperparamTabsWidget
 from ui.widgets.advanced_config_widget import AdvancedConfigWidget
+from ui.widgets.task_config_dashboard import TaskConfigDashboard
 
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
@@ -170,6 +171,11 @@ class Ui_MainWindow(object):
         self.gisCanvas.setMinimumSize(QSize(300, 200))  # 降低最小高度，允许底部面板扩展
         self.verticalLayout_gisView.addWidget(self.gisCanvas)
         self.stackedWidget_views.addWidget(self.page_gisView)
+        
+        # 页面3: 任务配置与训练仪表盘 (Task Config Dashboard)
+        self.page_taskConfigDashboard = TaskConfigDashboard(self.centerPanel)
+        self.page_taskConfigDashboard.setObjectName(u"page_taskConfigDashboard")
+        self.stackedWidget_views.addWidget(self.page_taskConfigDashboard)
         
         # 连接 GIS 侧边栏与 GIS 画布
         self.sidebar_gisLayerControl.set_canvas(self.gisCanvas)

@@ -994,6 +994,10 @@ class MainWindow(QMainWindow):
             self._training_thread.start()
             self._log_to_bottom(f"🚀 训练已启动！")
             
+            # 切换到训练视图
+            if hasattr(self.ui, 'page_taskConfigDashboard'):
+                self.ui.page_taskConfigDashboard.switch_to_training()
+                
         except Exception as e:
             self._log_to_bottom(f"❌ 训练启动失败: {e}")
             import traceback
@@ -1755,9 +1759,56 @@ class MainWindow(QMainWindow):
         # 切换到推理模式时，显示 GIS 视图
         if index == 2:
             self.ui.stackedWidget_views.setCurrentIndex(2)  # GIS View
+        elif index == 1:
+            # 任务配置模式
+            self.ui.stackedWidget_views.setCurrentIndex(3)  # Task Config Dashboard
+            self._update_task_config_dashboard()
         else:
-            # 非推理模式，恢复到之前的视图模式（Detail 或 Grid）
+            # 数据洞察模式，恢复到之前的视图模式（Detail 或 Grid）
             self.ui.stackedWidget_views.setCurrentIndex(self.current_view_mode)
+            
+    def _update_task_config_dashboard(self):
+        """更新任务配置仪表盘状态"""
+        if not hasattr(self.ui, 'page_taskConfigDashboard'):
+            return
+            
+        # 如果正在训练中，切到监控视图并返回
+        if self._training_thread and self._training_thread.isRunning():
+            self.ui.page_taskConfigDashboard.switch_to_training()
+            return
+            
+        # 否则切换到蓝图并在上面显示参数
+        self.ui.page_taskConfigDashboard.switch_to_blueprint()
+        
+        # 收集基本参数给 Dashboard 显示
+        try:
+            params = {}
+            if hasattr(self.ui, 'widget_modelSelection'):
+                model = self.ui.widget_modelSelection.combo_model.currentText()
+                backbone = self.ui.widget_modelSelection.combo_backbone.currentText()
+                if model and backbone:
+                    params['model'] = f"{model} | {backbone}"
+            
+            self.ui.page_taskConfigDashboard.update_config_params(params)
+            
+            # 从数据集中随机提取最多3个样本显示预览
+            import random
+            train_samples = self.data_manager.get_samples('train')
+            if train_samples:
+                num_samples = min(3, len(train_samples))
+                selected_sids = random.sample(train_samples, num_samples)
+                preview_data = []
+                for sid in selected_sids:
+                    img_path, lbl_path = self.data_manager.get_sample_paths(sid, 'train')
+                    preview_data.append({
+                        'img_path': img_path,
+                        'lbl_path': lbl_path,
+                        'name': sid
+                    })
+                self.ui.page_taskConfigDashboard.preview_strip.update_previews(preview_data)
+                
+        except Exception as e:
+            print(f"Update dashboard error: {e}")
         
         # 根据模式更新状态栏提示
         mode_names = {
