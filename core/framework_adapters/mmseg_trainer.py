@@ -31,7 +31,7 @@ class MMSegTrainer(BaseTrainer):
     # 日志解析正则（匹配 MMSeg 2.x / MMEngine 格式）
     # 示例: "2024/01/01 12:00:00 - mmengine - INFO - Iter(train) [100/40000]  lr: 1.0000e-02  loss: 0.1234"
     _RE_TRAIN_LOG = re.compile(
-        r'Iter\(train\)\s*\[(\d+)/(\d+)\]'     # iter / max_iter
+        r'Iter\(train\)\s*\[\s*(\d+)/(\d+)\]'     # iter / max_iter (added \s* for MMEngine formatting)
         r'.*?lr:\s*([\d.eE+-]+)'                # learning rate
         r'.*?loss:\s*([\d.]+)'                   # loss
     )
@@ -88,6 +88,10 @@ class MMSegTrainer(BaseTrainer):
             if hasattr(cfg, 'train_cfg'):
                 cfg.train_cfg.max_iters = int(max_iters)
                 cfg.train_cfg.type = 'IterBasedTrainLoop'
+                
+                # 智能计算验证间隔: 保证整个训练周期内至少采点 10 次，形成动态平滑验证曲线
+                val_interval = max(50, int(max_iters) // 10)
+                cfg.train_cfg.val_interval = val_interval
 
         # ====== 优化器 ======
         optimizer_type = ui_params.get('optimizer', 'AdamW')
@@ -276,7 +280,7 @@ class MMSegTrainer(BaseTrainer):
             raise FileNotFoundError(f"找不到 MMSeg 训练脚本(train.py)。请确保已正确安装 mmsegmentation。尝试的位置: {train_script}")
 
         cmd = [
-            sys.executable, train_script,
+            sys.executable, '-u', train_script,
             config_path,
             '--work-dir', work_dir,
         ]
