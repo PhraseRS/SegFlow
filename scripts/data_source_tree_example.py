@@ -522,7 +522,18 @@ class MainWindow(QMainWindow):
         # ========== 核心：主 Tab 与侧边栏联动 ==========
         # 右侧 Tab 切换时，自动切换左侧侧边栏
         self.ui.tabWidget_contextControl.currentChanged.connect(self._on_main_tab_changed)
-    
+
+        # ========== 任务配置 Dashboard: 参数实时刷新 ==========
+        # 当超参数面板或模型选择面板中任何参数改变时，实时更新蓝图
+        self.ui.widget_hyperparamTabs.config_changed.connect(self._on_config_params_changed)
+        self.ui.widget_modelSelection.config_changed.connect(self._on_config_params_changed)
+
+    def _on_config_params_changed(self):
+        """当任何训练参数改变时，如果任务配置面板当前可见，则刷新蓝图"""
+        if self.ui.tabWidget_contextControl.currentIndex() == 1:
+            self._update_task_config_dashboard()
+
+
     def _init_layer_controls(self):
         """初始化图层控制"""
         # 设置初始透明度显示
@@ -1767,6 +1778,14 @@ class MainWindow(QMainWindow):
             # 数据洞察模式，恢复到之前的视图模式（Detail 或 Grid）
             self.ui.stackedWidget_views.setCurrentIndex(self.current_view_mode)
             
+        # 根据模式更新状态栏提示
+        mode_names = {
+            0: "数据洞察模式",
+            1: "任务配置模式", 
+            2: "推理可视化模式"
+        }
+        self.statusBar().showMessage(f"已切换到 {mode_names.get(index, '未知模式')}")
+            
     def _update_task_config_dashboard(self):
         """更新任务配置仪表盘状态"""
         if not hasattr(self.ui, 'page_taskConfigDashboard'):
@@ -1780,15 +1799,29 @@ class MainWindow(QMainWindow):
         # 否则切换到蓝图并在上面显示参数
         self.ui.page_taskConfigDashboard.switch_to_blueprint()
         
-        # 收集基本参数给 Dashboard 显示
+        # 收集全部参数给 Dashboard 显示
         try:
             params = {}
+            # 模型选择
             if hasattr(self.ui, 'widget_modelSelection'):
-                model = self.ui.widget_modelSelection.combo_model.currentText()
+                framework = self.ui.widget_modelSelection.combo_framework.currentText()
                 backbone = self.ui.widget_modelSelection.combo_backbone.currentText()
-                if model and backbone:
-                    params['model'] = f"{model} | {backbone}"
-            
+                if framework and backbone:
+                    params['model'] = f"UNet/FPN | {backbone}"
+                params['backbone'] = backbone
+
+            # HyperparamTabs 全量参数
+            if hasattr(self.ui, 'widget_hyperparamTabs'):
+                hyper = self.ui.widget_hyperparamTabs.get_params()
+                params.update(hyper)
+
+            # 数据集信息
+            if hasattr(self, '_current_data_root') and self._current_data_root:
+                params['data_root'] = self._current_data_root
+                train_samples = self.data_manager.get_samples('train')
+                val_samples = self.data_manager.get_samples('val')
+                params['dataset_samples'] = len(train_samples) + len(val_samples)
+
             self.ui.page_taskConfigDashboard.update_config_params(params)
             
             # 从数据集中随机提取最多3个样本显示预览
@@ -1805,18 +1838,10 @@ class MainWindow(QMainWindow):
                         'lbl_path': lbl_path,
                         'name': sid
                     })
-                self.ui.page_taskConfigDashboard.preview_strip.update_previews(preview_data)
+                self.ui.page_taskConfigDashboard.blueprint_view.preview_strip.update_previews(preview_data)
                 
         except Exception as e:
             print(f"Update dashboard error: {e}")
-        
-        # 根据模式更新状态栏提示
-        mode_names = {
-            0: "数据洞察模式",
-            1: "任务配置模式", 
-            2: "推理可视化模式"
-        }
-        self.statusBar().showMessage(f"已切换到 {mode_names.get(index, '未知模式')}")
     
     def on_switch_to_detail_view(self):
         """切换到详情视图"""

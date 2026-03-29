@@ -15,7 +15,9 @@ from PySide6.QtGui import QFont, QColor, QPainter, QPen, QPixmap
 
 
 class PipelineNode(QFrame):
-    """蓝图中单个管线节点组件"""
+    """蓝图中单个管线节点组件。
+    大小固定，文字超长时自动换行。
+    """
     def __init__(self, title: str, detail: str = "TBD", parent=None):
         super().__init__(parent)
         self.setProperty("active", False)
@@ -37,20 +39,41 @@ class PipelineNode(QFrame):
             }
         """)
         
+        # 水平布局：Expanding 允许拉伸占满差分布空间，
+        # 但绝对不根据内容向外撑大
+        self.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Preferred
+        )
+        # 限定节点的最小和最大高度，防止垂直方向撤大
+        self.setMinimumHeight(72)
+        self.setMaximumHeight(96)
+        
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(4)
+        layout.setContentsMargins(6, 6, 6, 6)
+        layout.setSpacing(2)
         
         self.title_label = QLabel(title)
         self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.title_label.setWordWrap(True)
         font = self.title_label.font()
         font.setBold(True)
         self.title_label.setFont(font)
         self.title_label.setStyleSheet("color: #343A40;")
+        # 标题占据固定比例，不根据内容扩张
+        self.title_label.setSizePolicy(
+            QSizePolicy.Policy.Preferred,
+            QSizePolicy.Policy.Fixed
+        )
         
         self.detail_label = QLabel(detail)
-        self.detail_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.detail_label.setStyleSheet("color: #6C757D; font-size: 11px;")
+        self.detail_label.setAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignTop)
+        self.detail_label.setWordWrap(True)  # 自动换行
+        self.detail_label.setStyleSheet("color: #6C757D; font-size: 10px;")
+        self.detail_label.setSizePolicy(
+            QSizePolicy.Policy.Preferred,
+            QSizePolicy.Policy.Expanding   # 展开向下填充剩余高度
+        )
         
         layout.addWidget(self.title_label)
         layout.addWidget(self.detail_label)
@@ -312,26 +335,119 @@ class TaskConfigBlueprintWidget(QWidget):
         self.update_blueprint({})
 
     def update_blueprint(self, params: dict):
-        """更新蓝图各项状态与健康度"""
-        has_params = len(params) > 0
-        
-        # 示例：根据传入的 Params 动态更新
-        crop_size = params.get("crop_size", "512")
-        self.blueprint.nodes["aug"].set_active(has_params, f"Crop: {crop_size}x{crop_size}")
-        
-        loss_type = params.get("loss_type", "CE")
-        opt = params.get("optimizer", "SGD")
-        self.blueprint.nodes["loss"].set_active(has_params, f"{loss_type} | {opt}")
-        
-        # 简化的健康度打分逻辑
-        score = 0
-        if has_params:
-            score = 85
-            self.pills_status_update("params", "参数: 已配置", "#D4EDDA", "#155724")
-            self.health_bar.progress_bar.setValue(score)
+        """
+        根据完整的参数字典更新蓝图各节点与健康度。
+        params 整合了 HyperparamTabsWidget / ModelSelectionWidget 以及数据集信息。
+        """
+        # ---- Dataset 节点 ----
+        dataset_samples = params.get("dataset_samples", 0)
+        data_root = params.get("data_root", "")
+        dataset_ready = bool(dataset_samples > 0 or data_root)
+        if dataset_ready:
+            label = f"{dataset_samples} 样本" if dataset_samples else "已加载"
+            self.blueprint.nodes["dataset"].set_active(True, label)
         else:
-            self.health_bar.progress_bar.setValue(0)
-            
+            self.blueprint.nodes["dataset"].set_active(False, "未加载数据集")
+
+        # ---- Augmentation 节点 ----
+        crop_size = params.get("crop_size", 512)
+        augmentations = []
+        if params.get("aug_random_flip", True):
+            augmentations.append("Flip")
+        if params.get("aug_photo_distortion", True):
+            augmentations.append("Color")
+        if params.get("aug_random_rotate", False):
+            augmentations.append("Rotate")
+        if params.get("aug_multi_scale", False):
+            augmentations.append("MultiScale")
+        aug_label = f"Crop:{crop_size} \u00b7 " + "+".join(augmentations) if augmentations else f"Crop:{crop_size}"
+        self.blueprint.nodes["aug"].set_active(len(params) > 0, aug_label)
+
+        # ---- Model 节点 ----
+        model_info = params.get("model", "")
+        backbone = params.get("backbone", "")
+        in_ch = params.get("in_channels", 3)
+        if model_info:
+            model_label = f"{model_info} | {in_ch}ch"
+        elif backbone:
+            model_label = f"{backbone} | {in_ch}ch"
+        else:
+            model_label = "待选择"
+        self.blueprint.nodes["model"].set_active(bool(model_info or backbone), model_label)
+
+        # ---- Loss & Optimizer 节点 ----
+        loss_type = params.get("loss_type", "CrossEntropyLoss")
+        optimizer = params.get("optimizer", "AdamW")
+        lr = params.get("lr", 0.0001)
+        lr_sched = params.get("lr_schedule", "PolyLR")
+        loss_label = f"{loss_type}\n{optimizer} \u00b7 lr={lr:.1e} \u00b7 {lr_sched}"
+        self.blueprint.nodes["loss"].set_active(len(params) > 0, loss_label)
+
+        # ---- Output 节点 ----
+        max_iters = params.get("max_iters", 40000)
+        val_interval = params.get("val_interval", 4000)
+        save_best = "Best\u2713" if params.get("save_best", True) else "Fixed"
+        output_label = f"{max_iters} iters\nVal/{val_interval} \u00b7 {save_best}"
+        self.blueprint.nodes["output"].set_active(len(params) > 0, output_label)
+
+        # ---- 健康度多维评分 ----
+        self._update_health_score(params, dataset_ready)
+
+    def _update_health_score(self, params: dict, dataset_ready: bool):
+        """4维度加权健康度评分（满分100）并更新 Pills"""
+        score = 0
+
+        # 1. 数据集就绪（25分）
+        if dataset_ready:
+            score += 25
+            ds = params.get('dataset_samples', 0)
+            self.pills_status_update("data", f"✅ 数据: {ds or ''}已就绪", "#D4EDDA", "#155724")
+        else:
+            self.pills_status_update("data", "⚠ 数据: 未加载", "#FFF3CD", "#856404")
+
+        # 2. 模型参数已选（25分）
+        if params.get("model") or params.get("backbone"):
+            score += 25
+            self.pills_status_update("params", "✅ 参数: 已配置", "#D4EDDA", "#155724")
+        else:
+            self.pills_status_update("params", "⚠ 参数: 待配置", "#FFF3CD", "#856404")
+
+        # 3. 批大小与显存估算（25分）
+        batch_size = params.get("batch_size", 2)
+        crop_size = params.get("crop_size", 512)
+        in_ch = params.get("in_channels", 3)
+        estimated_vram_gb = round((crop_size ** 2 * in_ch * 4 * batch_size * 4) / 1e9, 1)
+        if estimated_vram_gb <= 8:
+            score += 25
+            self.pills_status_update("vram", f"✅ 显存预估: ~{estimated_vram_gb}GB", "#D4EDDA", "#155724")
+        elif estimated_vram_gb <= 16:
+            score += 15
+            self.pills_status_update("vram", f"⚠ 显存预估: ~{estimated_vram_gb}GB", "#FFF3CD", "#856404")
+        else:
+            self.pills_status_update("vram", f"❌ 显存: ~{estimated_vram_gb}GB OOM风险!", "#F8D7DA", "#721C24")
+
+        # 4. 关键增强选项（25分）
+        if params.get("aug_random_flip", False) or params.get("aug_photo_distortion", False):
+            score += 25
+
+        # 更新进度条（含动态颜色）
+        self.health_bar.progress_bar.setValue(score)
+        chunk_color = "#20C997" if score >= 75 else ("#FFC107" if score >= 50 else "#DC3545")
+        self.health_bar.progress_bar.setStyleSheet(f"""
+            QProgressBar {{
+                border: 1px solid #DEE2E6;
+                border-radius: 12px;
+                text-align: center;
+                background-color: #F8F9FA;
+                color: #212529;
+                font-weight: bold;
+            }}
+            QProgressBar::chunk {{
+                background-color: {chunk_color};
+                border-radius: 11px;
+            }}
+        """)
+
     def pills_status_update(self, name: str, text: str, bg: str, fg: str):
         if name in self.health_bar.pills:
             pill = self.health_bar.pills[name]
