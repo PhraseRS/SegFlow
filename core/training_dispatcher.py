@@ -31,6 +31,7 @@ class TrainingThread(QThread):
     training_finished = Signal(int)
     training_error = Signal(str)
     progress_updated = Signal(int, int)
+    live_prediction_updated = Signal(dict)
 
     def __init__(
         self,
@@ -76,8 +77,11 @@ class TrainingThread(QThread):
                 if parsed:
                     self.log_parsed.emit(parsed)
 
+                    if parsed.get('type') == 'live_prediction':
+                        self.live_prediction_updated.emit(parsed)
+
                     # 发射进度信号
-                    if parsed.get('type') == 'train_loss':
+                    elif parsed.get('type') == 'train_loss':
                         cur_iter = parsed.get('iter', 0)
                         max_iter = parsed.get('max_iter', 0)
                         if max_iter > 0:

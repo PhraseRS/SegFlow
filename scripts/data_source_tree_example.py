@@ -1008,6 +1008,7 @@ class MainWindow(QMainWindow):
             self._training_thread.progress_updated.connect(self._on_training_progress)
             self._training_thread.training_finished.connect(self._on_training_finished)
             self._training_thread.training_error.connect(self._on_training_error)
+            self._training_thread.live_prediction_updated.connect(self._on_live_prediction_updated)
             
             # 更新按钮状态
             self.ui.pushButton_run.setEnabled(False)
@@ -1105,6 +1106,13 @@ class MainWindow(QMainWindow):
                 )
                 if dashboard_plot:
                     dashboard_plot.update_val_metric(self._last_train_iter, miou, macc)
+
+    def _on_live_prediction_updated(self, parsed: dict):
+        """处理实时验证集预测样本"""
+        if hasattr(self.ui, 'page_taskConfigDashboard'):
+            strip = getattr(self.ui.page_taskConfigDashboard.training_view, 'prediction_strip', None)
+            if strip:
+                strip.update_live_predictions(parsed)
     
     def _on_training_progress(self, current: int, total: int):
         """训练进度更新"""

@@ -11,7 +11,10 @@ from PySide6.QtWidgets import (
     QSizePolicy, QProgressBar, QFrame, QScrollArea
 )
 from PySide6.QtCore import Qt, Signal, QSize
-from PySide6.QtGui import QFont, QColor, QPainter, QPen, QPixmap
+from PySide6.QtGui import QFont, QColor, QPainter, QPen, QPixmap, QImage
+import os
+import cv2
+import numpy as np
 
 try:
     from ui.widgets.metrics_plot_widget import MetricsPlotWidget
@@ -497,18 +500,35 @@ class PredictionEvolutionStrip(QWidget):
         title.setStyleSheet("font-weight: bold; color: #495057;")
         layout.addWidget(title)
         
-        # 展示 Input | GT | Pred 结构
-        container_layout = QHBoxLayout()
-        container_layout.setContentsMargins(0, 8, 0, 8)
-        container_layout.setSpacing(16)
+        # Use a horizontal scroll area
+        self.scroll = QScrollArea()
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.scroll.setStyleSheet("background-color: transparent;")
         
+        self.container = QWidget()
+        self.container_layout = QHBoxLayout(self.container)
+        self.container_layout.setContentsMargins(0, 8, 0, 8)
+        self.container_layout.setSpacing(16)
+        
+        self._add_placeholder()
+            
+        self.container_layout.addStretch()
+        self.scroll.setWidget(self.container)
+        layout.addWidget(self.scroll)
+
+        # Internal state to keep track of received iters
+        self.iter_groups = {} # dict[int, list of dicts]
+
+    def _add_placeholder(self):
+        # 展示 Input | GT | Pred 这个样板占位
         for title_text in ["Input Image", "Ground Truth", "Latest Prediction"]:
             group = QVBoxLayout()
             group.setSpacing(4)
             
             box = QLabel(f"[{title_text} Area]")
             box.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            box.setMinimumSize(160, 160)
+            box.setMinimumSize(120, 120)
             box.setStyleSheet("background-color: #E9ECEF; border-radius: 4px; color: #6C757D;")
             
             txt = QLabel(title_text)
@@ -517,9 +537,171 @@ class PredictionEvolutionStrip(QWidget):
             
             group.addWidget(box, stretch=1)
             group.addWidget(txt, stretch=0)
-            container_layout.addLayout(group)
+            self.container_layout.addLayout(group)
+
+    def _clear_layout(self):
+        while self.container_layout.count() > 1:
+            item = self.container_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+            elif item.layout():
+                # clear nested layouts
+                self._clear_nested_layout(item.layout())
+
+    def _clear_nested_layout(self, layout):
+        while layout.count():
+            item = layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+            elif item.layout():
+                self._clear_nested_layout(item.layout())
+        layout.deleteLater()
+
+    def _get_colorized_pixmap(self, mask_path: str, size: int=120) -> QPixmap:
+        if not mask_path or not os.path.exists(mask_path):
+            return QPixmap()
+        try:
+            # Use imdecode to robustly handle paths containing Chinese/unicode characters
+            mask_data = np.fromfile(mask_path, dtype=np.uint8)
+            mask = cv2.imdecode(mask_data, cv2.IMREAD_GRAYSCALE)
+            if mask is None:
+                return QPixmap()
+            colors = [
+                [0,0,0], [0,200,0], [0,128,0], [128,128,0], [0,0,128], [128,0,128], [0,128,128], [128,128,128],
+                [64,0,0], [192,0,0], [64,128,0], [192,128,0], [64,0,128], [192,0,128], [64,128,128], [192,128,128],
+                [0,64,0], [128,64,0], [0,192,0], [128,192,0], [0,64,128]
+            ]
+            h, w = mask.shape
+            color_mask = np.zeros((h, w, 3), dtype=np.uint8)
+            for i, color in enumerate(colors):
+                color_mask[mask == i] = color
+            color_mask[mask > len(colors)-1] = [255, 255, 255]
+            # Convert BGR to RGB using cv2 to guarantee a C-contiguous array
+            color_mask = cv2.cvtColor(color_mask, cv2.COLOR_BGR2RGB)
             
-        layout.addLayout(container_layout)
+            # Use .copy() to ensure the memory belongs to QImage, preventing silent garbage collection crashes/corruption
+            qimg = QImage(color_mask.data, w, h, w*3, QImage.Format_RGB888).copy()
+            pix = QPixmap.fromImage(qimg)
+            return pix.scaled(size, size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+        except Exception as e:
+            print(f"Failed to colorize pic: {e}")
+            return QPixmap()
+
+    def update_live_predictions(self, data: dict):
+        """
+        data 格式: {"type": "live_prediction", "iter": 4000, "img": "...", "gt": "...", "pred": "..."}
+        """
+        iter_num = data.get('iter', 0)
+        if iter_num not in self.iter_groups:
+            self.iter_groups[iter_num] = []
+        
+        # 只保留最新的 3 个 iter 以免 UI 过硬
+        if len(self.iter_groups) > 3:
+            oldest_iter = min(self.iter_groups.keys())
+            if iter_num != oldest_iter:
+                del self.iter_groups[oldest_iter]
+
+        self.iter_groups[iter_num].append(data)
+        self._render_predictions()
+
+    def _render_predictions(self):
+        self._clear_layout()
+        
+        if not self.iter_groups:
+            self._add_placeholder()
+            self.container_layout.addStretch()
+            return
+            
+        # 按 Iter 降序排序展示（最新的在左边）
+        sorted_iters = sorted(self.iter_groups.keys(), reverse=True)
+        
+        for iter_num in sorted_iters:
+            samples = self.iter_groups[iter_num]
+            if not samples:
+                continue
+            
+            # 一个 Iter 块
+            iter_widget = QWidget()
+            iter_widget.setStyleSheet("""
+                QWidget {
+                    background-color: #F8F9FA;
+                    border: 1px solid #DEE2E6;
+                    border-radius: 8px;
+                }
+            """)
+            iter_layout = QVBoxLayout(iter_widget)
+            iter_layout.setContentsMargins(12, 12, 12, 12)
+            
+            header = QLabel(f"Iteration: {iter_num}")
+            header.setStyleSheet("font-weight: bold; color: #212529; border: none; background: transparent;")
+            iter_layout.addWidget(header)
+            
+            # Use first sample only per iter group (hook now sends 1 per iter)
+            s = samples[0]
+            IMG_SIZE = 140
+            MASK_SIZE = 140
+
+            panels_layout = QHBoxLayout()
+            panels_layout.setSpacing(8)
+
+            def _make_panel(title_text, lbl_widget):
+                col = QVBoxLayout()
+                col.setSpacing(4)
+                ttl = QLabel(title_text)
+                ttl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                ttl.setStyleSheet("color: #6C757D; font-size: 10px; border: none; background: transparent;")
+                col.addWidget(lbl_widget)
+                col.addWidget(ttl)
+                return col
+
+            # --- Input Image ---
+            img_lbl = QLabel()
+            img_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            img_lbl.setFixedSize(IMG_SIZE, IMG_SIZE)
+            img_lbl.setStyleSheet("background-color: #000; border-radius: 6px; border: none;")
+            img_path = s.get('img', '')
+            if os.path.exists(img_path):
+                img_data = np.fromfile(img_path, dtype=np.uint8)
+                img_cv = cv2.imdecode(img_data, cv2.IMREAD_COLOR)
+                if img_cv is not None:
+                    img_rgb = cv2.cvtColor(img_cv, cv2.COLOR_BGR2RGB)
+                    h, w, _ = img_rgb.shape
+                    qimg = QImage(img_rgb.data, w, h, w*3, QImage.Format_RGB888).copy()
+                    pix = QPixmap.fromImage(qimg).scaled(IMG_SIZE, IMG_SIZE, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                    img_lbl.setPixmap(pix)
+                else:
+                    img_lbl.setText("Img")
+            else:
+                img_lbl.setText("No Img")
+
+            # --- Ground Truth ---
+            gt_lbl = QLabel()
+            gt_lbl.setFixedSize(MASK_SIZE, MASK_SIZE)
+            gt_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            gt_lbl.setStyleSheet("background-color: #1A1A2E; border-radius: 6px; border: none;")
+            gt_pix = self._get_colorized_pixmap(s.get('gt', ''), MASK_SIZE)
+            if not gt_pix.isNull():
+                gt_lbl.setPixmap(gt_pix)
+            else:
+                gt_lbl.setText("GT")
+
+            # --- Prediction ---
+            pred_lbl = QLabel()
+            pred_lbl.setFixedSize(MASK_SIZE, MASK_SIZE)
+            pred_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            pred_lbl.setStyleSheet("background-color: #1A1A2E; border-radius: 6px; border: 2px solid #20C997;")
+            pred_pix = self._get_colorized_pixmap(s.get('pred', ''), MASK_SIZE)
+            if not pred_pix.isNull():
+                pred_lbl.setPixmap(pred_pix)
+            else:
+                pred_lbl.setText("Pred")
+
+            panels_layout.addLayout(_make_panel("Input", img_lbl))
+            panels_layout.addLayout(_make_panel("GT", gt_lbl))
+            panels_layout.addLayout(_make_panel("Pred ✓", pred_lbl))
+
+            iter_layout.addLayout(panels_layout)
+            self.container_layout.insertWidget(self.container_layout.count() - 1, iter_widget)
 
 
 class ResourceMonitorWidget(QWidget):

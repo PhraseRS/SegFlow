@@ -14,8 +14,74 @@ import subprocess
 import sys
 import time
 from typing import Dict, Optional
+import json
 
 from core.framework_adapters.base_trainer import BaseTrainer
+
+HOOK_CODE = """
+import os
+import cv2
+import random
+import numpy as np
+import json
+from mmengine.registry import HOOKS
+from mmengine.hooks import Hook
+
+@HOOKS.register_module()
+class LivePredictionHook(Hook):
+    def __init__(self, num_val_samples=25):
+        # 验证集样本总量的估算值，用于随机索引
+        self.num_val_samples = num_val_samples
+        self._target_idx = 0
+
+    def before_val_epoch(self, runner):
+        # 每次验证开始时随机挑一个样本的 batch_idx
+        self._target_idx = random.randint(0, max(0, self.num_val_samples - 1))
+
+    def after_val_iter(self, runner, batch_idx, data_batch=None, outputs=None):
+        # 只处理本次随机抽到的那个 batch
+        if batch_idx != self._target_idx:
+            return
+        
+        try:
+            if not outputs:
+                return
+                
+            sample = outputs[0]
+            img_path = getattr(sample, 'img_path', '')
+            
+            if not img_path:
+                return
+
+            iter_num = getattr(runner, 'iter', 0)
+            pred_tensor = sample.pred_sem_seg.data[0].cpu().numpy()
+            
+            out_dir = os.path.join(runner.work_dir, 'live_predictions')
+            os.makedirs(out_dir, exist_ok=True)
+            
+            safe_name = os.path.basename(img_path).rsplit('.', 1)[0]
+            pred_path = os.path.join(out_dir, f"iter_{iter_num}_{safe_name}_pred.png")
+            gt_path = os.path.join(out_dir, f"iter_{iter_num}_{safe_name}_gt.png")
+            
+            # Save raw prediction and gt masks
+            cv2.imencode('.png', pred_tensor.astype(np.uint8))[1].tofile(pred_path)
+            
+            if hasattr(sample, 'gt_sem_seg'):
+                gt_tensor = sample.gt_sem_seg.data[0].cpu().numpy()
+                cv2.imencode('.png', gt_tensor.astype(np.uint8))[1].tofile(gt_path)
+            
+            # Use a strict JSON format for robust logging parsing
+            msg = {
+                "type": "live_prediction",
+                "iter": iter_num,
+                "img": img_path,
+                "gt": gt_path,
+                "pred": pred_path
+            }
+            print(f"[LIVE_PRED] {json.dumps(msg)}", flush=True)
+        except Exception:
+            pass
+"""
 
 
 class MMSegTrainer(BaseTrainer):
@@ -229,8 +295,26 @@ class MMSegTrainer(BaseTrainer):
                 if hasattr(cfg.model, 'decode_head'):
                     cfg.model.decode_head.loss_decode = clean_loss
 
+        # ====== Live Prediction Custom Hook ======
+        work_dir = os.path.dirname(save_path)
+        os.makedirs(work_dir, exist_ok=True)
+        hook_file = os.path.join(work_dir, 'custom_live_pred_hook.py')
+        try:
+            with open(hook_file, 'w', encoding='utf-8') as f:
+                f.write(HOOK_CODE)
+            cfg.custom_imports = dict(imports=['custom_live_pred_hook'], allow_failed_imports=True)
+            new_hook = dict(type='LivePredictionHook', num_val_samples=25)
+            if hasattr(cfg, 'custom_hooks'):
+                if isinstance(cfg.custom_hooks, list):
+                    cfg.custom_hooks.append(new_hook)
+                else:
+                    cfg.custom_hooks = [cfg.custom_hooks, new_hook]
+            else:
+                cfg.custom_hooks = [new_hook]
+        except Exception as e:
+            print(f"Warning: Failed to setup live prediction hook: {e}")
+
         # ====== 保存 ======
-        os.makedirs(os.path.dirname(save_path), exist_ok=True)
         cfg.dump(save_path)
         
         # --- 硬核补丁：绕过 MMEngine 底层 AST 锁死机制，直接对落盘文件进行文本替换 ---
@@ -284,9 +368,14 @@ class MMSegTrainer(BaseTrainer):
             config_path,
             '--work-dir', work_dir,
         ]
+        
+        env = os.environ.copy()
+        current_pythonpath = env.get('PYTHONPATH', '')
+        env['PYTHONPATH'] = f"{os.path.abspath(work_dir)}{os.pathsep}{current_pythonpath}" if current_pythonpath else os.path.abspath(work_dir)
 
         self._process = subprocess.Popen(
             cmd,
+            env=env,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,  # 合并 stderr 到 stdout
             text=True,
@@ -334,6 +423,13 @@ class MMSegTrainer(BaseTrainer):
             return None
 
         line = line.strip()
+        
+        if "[LIVE_PRED]" in line:
+            try:
+                json_str = line.split("[LIVE_PRED]", 1)[1].strip()
+                return json.loads(json_str)
+            except Exception:
+                pass
 
         # 尝试匹配训练日志
         train_match = self._RE_TRAIN_LOG.search(line)
