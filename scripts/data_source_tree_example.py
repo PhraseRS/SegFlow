@@ -1440,6 +1440,10 @@ class MainWindow(QMainWindow):
         # 有数据时启用 Resplit 按钮
         total = train_count + val_count + test_count
         self.ui.btn_resplit.setEnabled(total > 0)
+        
+        # 当数据集发生变化时，如果当前处于任务配置选项卡，则主动刷新一次蓝图
+        if self.ui.tabWidget_contextControl.currentIndex() == 1:
+            self._update_task_config_dashboard()
     
     def _validate_voc_structure(self, data_root):
         """
@@ -1857,8 +1861,21 @@ class MainWindow(QMainWindow):
             if hasattr(self.ui, 'widget_modelSelection'):
                 framework = self.ui.widget_modelSelection.combo_framework.currentText()
                 backbone = self.ui.widget_modelSelection.combo_backbone.currentText()
-                if model and backbone:
-                    params['model'] = f"{model} | {backbone}"
+                if framework and backbone:
+                    params['model'] = f"UNet/FPN | {backbone}"
+                params['backbone'] = backbone
+
+            # HyperparamTabs 全量参数
+            if hasattr(self.ui, 'widget_hyperparamTabs'):
+                hyper = self.ui.widget_hyperparamTabs.get_params()
+                params.update(hyper)
+
+            # 数据集信息
+            if hasattr(self, '_current_data_root') and self._current_data_root:
+                params['data_root'] = self._current_data_root
+                train_samples = self.data_manager.get_samples('train')
+                val_samples = self.data_manager.get_samples('val')
+                params['dataset_samples'] = len(train_samples) + len(val_samples)
             
             self.ui.page_taskConfigDashboard.update_config_params(params)
             
@@ -1880,14 +1897,6 @@ class MainWindow(QMainWindow):
                 
         except Exception as e:
             print(f"Update dashboard error: {e}")
-        
-        # 根据模式更新状态栏提示
-        mode_names = {
-            0: "数据洞察模式",
-            1: "任务配置模式", 
-            2: "推理可视化模式"
-        }
-        self.statusBar().showMessage(f"已切换到 {mode_names.get(index, '未知模式')}")
     
     def on_switch_to_detail_view(self):
         """切换到详情视图"""
