@@ -13,6 +13,12 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Signal, QSize
 from PySide6.QtGui import QFont, QColor, QPainter, QPen, QPixmap
 
+try:
+    from ui.widgets.metrics_plot_widget import MetricsPlotWidget
+    _HAS_METRICS_PLOT = True
+except ImportError:
+    _HAS_METRICS_PLOT = False
+
 
 class PipelineNode(QFrame):
     """蓝图中单个管线节点组件。
@@ -565,11 +571,16 @@ class TrainingExecutionDashboard(QWidget):
         header.setStyleSheet("font-size: 18px; font-weight: bold; color: #212529;")
         layout.addWidget(header)
         
-        self.loss_placeholder = LossCurvePlaceholder()
+        # 实时训练曲线图表：优先使用真实的 MetricsPlotWidget，降级到占位符
+        if _HAS_METRICS_PLOT:
+            self.metrics_plot = MetricsPlotWidget()
+        else:
+            self.metrics_plot = LossCurvePlaceholder()
+        
         self.prediction_strip = PredictionEvolutionStrip()
         self.resource_monitor = ResourceMonitorWidget()
         
-        layout.addWidget(self.loss_placeholder, stretch=2)
+        layout.addWidget(self.metrics_plot, stretch=3)
         layout.addWidget(self.prediction_strip, stretch=2)
         layout.addWidget(self.resource_monitor, stretch=1)
 

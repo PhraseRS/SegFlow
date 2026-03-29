@@ -392,6 +392,21 @@ class MainWindow(QMainWindow):
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
         
+        # --- 注入实时训练曲线组件 (训练指标 Tab 内部) ---
+        try:
+            from ui.widgets.metrics_plot_widget import MetricsPlotWidget
+            self.metrics_plot = MetricsPlotWidget(self.ui.tab_metrics)
+            # 移除原有的占位 Label
+            self.ui.verticalLayout_metrics.removeWidget(self.ui.label_metricsPlaceholder)
+            self.ui.label_metricsPlaceholder.deleteLater()
+            # 加入精美的动态图表
+            self.ui.verticalLayout_metrics.addWidget(self.metrics_plot)
+        except Exception as e:
+            print(f"MetricsPlotWidget loading failed: {e}")
+            self.metrics_plot = None
+            
+        self._last_train_iter = 0
+        
         # 当前视图模式
         self.current_view_mode = VIEW_MODE_DETAIL
         
@@ -1001,6 +1016,19 @@ class MainWindow(QMainWindow):
             self.ui.label_trainInfo.setStyleSheet("color: #1565C0; font-weight: bold; padding: 2px;")
             self.statusBar().showMessage("训练已启动")
             
+            # 启动前清理旧的曲线残留并自动切换到指标 Tab
+            if getattr(self, 'metrics_plot', None):
+                self.metrics_plot.clear_plots()
+                self.ui.tabWidget_bottom.setCurrentWidget(self.ui.tab_metrics)
+            
+            # 同步清理任务配置仓表板内嵌的图表
+            if hasattr(self.ui, 'page_taskConfigDashboard'):
+                dashboard_plot = getattr(
+                    self.ui.page_taskConfigDashboard.training_view, 'metrics_plot', None
+                )
+                if dashboard_plot:
+                    dashboard_plot.clear_plots()
+                
             # 启动
             self._training_thread.start()
             self._log_to_bottom(f"🚀 训练已启动！")
@@ -1041,6 +1069,7 @@ class MainWindow(QMainWindow):
         
         if log_type == 'train_loss':
             iter_num = parsed.get('iter', 0)
+            self._last_train_iter = iter_num  # 保存当前 iter 供 validation 使用
             max_iter = parsed.get('max_iter', 0)
             loss = parsed.get('loss', 0)
             lr = parsed.get('lr', 0)
@@ -1050,10 +1079,32 @@ class MainWindow(QMainWindow):
                 msg += f"  ETA: {eta}"
             self.statusBar().showMessage(msg)
             
+            # 更新实时曲线 (指标 Tab)
+            if getattr(self, 'metrics_plot', None):
+                self.metrics_plot.update_train_loss(iter_num, loss)
+            # 同步更新仓表板内嵌曲线
+            if hasattr(self.ui, 'page_taskConfigDashboard'):
+                dashboard_plot = getattr(
+                    self.ui.page_taskConfigDashboard.training_view, 'metrics_plot', None
+                )
+                if dashboard_plot:
+                    dashboard_plot.update_train_loss(iter_num, loss)
+            
         elif log_type == 'val_metric':
             miou = parsed.get('mIoU', 0)
             macc = parsed.get('mAcc', 0)
             self._log_to_bottom(f"✅ 验证结果 — mIoU: {miou:.4f}  mAcc: {macc:.4f}")
+            
+            # 更新实时散点/折线 (指标 Tab)
+            if getattr(self, 'metrics_plot', None):
+                self.metrics_plot.update_val_metric(self._last_train_iter, miou, macc)
+            # 同步更新仓表板内嵌曲线
+            if hasattr(self.ui, 'page_taskConfigDashboard'):
+                dashboard_plot = getattr(
+                    self.ui.page_taskConfigDashboard.training_view, 'metrics_plot', None
+                )
+                if dashboard_plot:
+                    dashboard_plot.update_val_metric(self._last_train_iter, miou, macc)
     
     def _on_training_progress(self, current: int, total: int):
         """训练进度更新"""
@@ -1806,22 +1857,9 @@ class MainWindow(QMainWindow):
             if hasattr(self.ui, 'widget_modelSelection'):
                 framework = self.ui.widget_modelSelection.combo_framework.currentText()
                 backbone = self.ui.widget_modelSelection.combo_backbone.currentText()
-                if framework and backbone:
-                    params['model'] = f"UNet/FPN | {backbone}"
-                params['backbone'] = backbone
-
-            # HyperparamTabs 全量参数
-            if hasattr(self.ui, 'widget_hyperparamTabs'):
-                hyper = self.ui.widget_hyperparamTabs.get_params()
-                params.update(hyper)
-
-            # 数据集信息
-            if hasattr(self, '_current_data_root') and self._current_data_root:
-                params['data_root'] = self._current_data_root
-                train_samples = self.data_manager.get_samples('train')
-                val_samples = self.data_manager.get_samples('val')
-                params['dataset_samples'] = len(train_samples) + len(val_samples)
-
+                if model and backbone:
+                    params['model'] = f"{model} | {backbone}"
+            
             self.ui.page_taskConfigDashboard.update_config_params(params)
             
             # 从数据集中随机提取最多3个样本显示预览
@@ -1842,6 +1880,14 @@ class MainWindow(QMainWindow):
                 
         except Exception as e:
             print(f"Update dashboard error: {e}")
+        
+        # 根据模式更新状态栏提示
+        mode_names = {
+            0: "数据洞察模式",
+            1: "任务配置模式", 
+            2: "推理可视化模式"
+        }
+        self.statusBar().showMessage(f"已切换到 {mode_names.get(index, '未知模式')}")
     
     def on_switch_to_detail_view(self):
         """切换到详情视图"""
