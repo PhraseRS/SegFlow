@@ -7,7 +7,7 @@ TaskConfigDashboard - 任务配置与训练执行中心仪表盘 (Visual Dashboa
 """
 
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QStackedWidget,
+    QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QStackedWidget,
     QSizePolicy, QProgressBar, QFrame, QScrollArea
 )
 from PySide6.QtCore import Qt, Signal, QSize
@@ -127,126 +127,195 @@ class PipelineBlueprintWidget(QWidget):
 
 
 class AugmentationPreviewStrip(QWidget):
-    """样本增强实时预览横向滚动带"""
+    """样本增强实时预览网格"""
+    PREVIEW_SIZE = 128
+    ROW_COUNT = 3
+    AUGMENTATION_COLUMNS = [
+        ("original", "Original"),
+        ("flip", "Flip"),
+        ("color", "Color"),
+        ("rotate", "Rotate"),
+        ("multiscale", "MultiScale"),
+    ]
+
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.preview_data = []
+        self.augmentation_states = {
+            "flip": True,
+            "color": True,
+            "rotate": False,
+            "multiscale": False,
+        }
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        
+
         title = QLabel("实时增强预览 (Live Augmentation Preview)")
         title.setStyleSheet("font-weight: bold; color: #495057;")
         layout.addWidget(title)
-        
-        # 这里用作占位，展示对比视图卡片
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setStyleSheet("background-color: transparent;")
-        
-        container = QWidget()
-        self.container_layout = QHBoxLayout(container)
-        self.container_layout.setContentsMargins(0, 8, 0, 8)
-        self.container_layout.setSpacing(16)
-        
-        # 添加 3 个占位对
-        self._create_placeholders()
-            
-        self.container_layout.addStretch()
-        scroll.setWidget(container)
-        layout.addWidget(scroll)
 
-    def _create_placeholders(self):
-        """清空并重新创建 3 个占位符"""
-        # 清除现有
-        while self.container_layout.count() > 1:  # 保留结尾的 stretch
-            item = self.container_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-                
-        for i in range(3):
-            pair_widget = QWidget()
-            pair_layout = QVBoxLayout(pair_widget)
-            pair_layout.setContentsMargins(0, 0, 0, 0)
-            
-            img_pair = QLabel(f"[暂无样本 {i+1}]")
-            img_pair.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            img_pair.setMinimumSize(256, 128)
-            img_pair.setStyleSheet("""
-                background-color: #E9ECEF; 
-                border: 1px dashed #CED4DA; 
-                border-radius: 4px;
-                color: #6C757D;
-            """)
-            
-            desc = QLabel(f"等待样本载入...")
-            desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            desc.setStyleSheet("color: #868E96; font-size: 11px;")
-            
-            pair_layout.addWidget(img_pair)
-            pair_layout.addWidget(desc)
-            
-            self.container_layout.insertWidget(self.container_layout.count() - 1, pair_widget)
+        self.scroll = QScrollArea()
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.scroll.setStyleSheet("background-color: transparent;")
+
+        self.container = QWidget()
+        self.grid_layout = QGridLayout(self.container)
+        self.grid_layout.setContentsMargins(0, 8, 0, 8)
+        self.grid_layout.setHorizontalSpacing(16)
+        self.grid_layout.setVerticalSpacing(12)
+        self.scroll.setWidget(self.container)
+        layout.addWidget(self.scroll)
+
+        self._render_grid()
+
+    def _clear_grid(self):
+        while self.grid_layout.count():
+            item = self.grid_layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
+
+    def _read_image_cv(self, img_path: str):
+        if not img_path or not os.path.exists(img_path):
+            return None
+        try:
+            img_data = np.fromfile(img_path, dtype=np.uint8)
+            if img_data.size == 0:
+                return None
+            return cv2.imdecode(img_data, cv2.IMREAD_COLOR)
+        except Exception:
+            return None
+
+    def _cv_to_pixmap(self, img_cv, size: int = None) -> QPixmap:
+        if img_cv is None:
+            return QPixmap()
+        size = size or self.PREVIEW_SIZE
+        rgb = cv2.cvtColor(img_cv, cv2.COLOR_BGR2RGB)
+        h, w, _ = rgb.shape
+        qimg = QImage(rgb.data, w, h, w * 3, QImage.Format_RGB888).copy()
+        return QPixmap.fromImage(qimg).scaled(
+            size,
+            size,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+
+    def _simulate_augmentation(self, img_cv, aug_key: str):
+        if img_cv is None:
+            return None
+
+        if aug_key == "original":
+            return img_cv.copy()
+        if aug_key == "flip":
+            return cv2.flip(img_cv, 1)
+        if aug_key == "color":
+            return cv2.convertScaleAbs(img_cv, alpha=1.15, beta=22)
+        if aug_key == "rotate":
+            h, w = img_cv.shape[:2]
+            center = (w / 2, h / 2)
+            matrix = cv2.getRotationMatrix2D(center, 18, 1.0)
+            return cv2.warpAffine(
+                img_cv,
+                matrix,
+                (w, h),
+                flags=cv2.INTER_LINEAR,
+                borderMode=cv2.BORDER_REFLECT_101,
+            )
+        if aug_key == "multiscale":
+            h, w = img_cv.shape[:2]
+            scale = 1.2
+            resized = cv2.resize(img_cv, None, fx=scale, fy=scale, interpolation=cv2.INTER_LINEAR)
+            new_h, new_w = resized.shape[:2]
+            start_y = max((new_h - h) // 2, 0)
+            start_x = max((new_w - w) // 2, 0)
+            cropped = resized[start_y:start_y + h, start_x:start_x + w]
+            if cropped.shape[:2] != (h, w):
+                cropped = cv2.resize(cropped, (w, h), interpolation=cv2.INTER_LINEAR)
+            return cropped
+        return img_cv.copy()
+
+    def _make_image_label(self, pixmap: QPixmap = None, text: str = "", is_placeholder: bool = False) -> QLabel:
+        label = QLabel()
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        label.setFixedSize(self.PREVIEW_SIZE, self.PREVIEW_SIZE)
+        if is_placeholder:
+            label.setStyleSheet("background-color: #000000; border-radius: 6px; color: #495057;")
+        else:
+            label.setStyleSheet("background-color: #E9ECEF; border-radius: 6px; color: #6C757D;")
+        if pixmap is not None and not pixmap.isNull():
+            label.setPixmap(pixmap)
+        else:
+            label.setText(text)
+        return label
+
+    def _make_cell_widget(self, title_text: str, pixmap: QPixmap = None, text: str = "", is_placeholder: bool = False):
+        cell = QWidget()
+        cell_layout = QVBoxLayout(cell)
+        cell_layout.setContentsMargins(0, 0, 0, 0)
+        cell_layout.setSpacing(6)
+
+        img_label = self._make_image_label(pixmap=pixmap, text=text, is_placeholder=is_placeholder)
+        caption = QLabel(title_text)
+        caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        caption.setStyleSheet("color: #495057; font-size: 11px; font-weight: bold;")
+
+        cell_layout.addWidget(img_label, alignment=Qt.AlignmentFlag.AlignCenter)
+        cell_layout.addWidget(caption)
+        return cell
+
+    def _render_grid(self):
+        self._clear_grid()
+
+        for col, (_, header_text) in enumerate(self.AUGMENTATION_COLUMNS):
+            header = QLabel(header_text)
+            header.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            header.setStyleSheet("color: #212529; font-size: 11px; font-weight: bold;")
+            self.grid_layout.addWidget(header, 0, col)
+
+        rows = self.preview_data[:self.ROW_COUNT]
+        for row_index in range(self.ROW_COUNT):
+            sample = rows[row_index] if row_index < len(rows) else None
+            img_cv = self._read_image_cv(sample.get('img_path', '')) if sample else None
+            sample_name = sample.get('name', f'样本 {row_index + 1}') if sample else f'样本 {row_index + 1}'
+
+            for col_index, (aug_key, _) in enumerate(self.AUGMENTATION_COLUMNS):
+                if sample is None:
+                    cell = self._make_cell_widget(
+                        sample_name if aug_key == "original" else ("未启用" if not self.augmentation_states.get(aug_key, False) else "等待样本"),
+                        text="暂无样本" if aug_key == "original" else "",
+                        is_placeholder=(aug_key != "original" and not self.augmentation_states.get(aug_key, False)),
+                    )
+                else:
+                    if aug_key == "original":
+                        pixmap = self._cv_to_pixmap(self._simulate_augmentation(img_cv, aug_key))
+                        cell = self._make_cell_widget(sample_name, pixmap=pixmap, text="无图片")
+                    elif self.augmentation_states.get(aug_key, False):
+                        pixmap = self._cv_to_pixmap(self._simulate_augmentation(img_cv, aug_key))
+                        cell = self._make_cell_widget(sample_name, pixmap=pixmap, text="无预览")
+                    else:
+                        cell = self._make_cell_widget("未启用", is_placeholder=True)
+                self.grid_layout.addWidget(cell, row_index + 1, col_index)
+
+        self.grid_layout.setColumnStretch(len(self.AUGMENTATION_COLUMNS), 1)
+
+    def set_augmentation_states(self, states: dict):
+        self.augmentation_states.update({
+            "flip": bool(states.get("flip", self.augmentation_states["flip"])),
+            "color": bool(states.get("color", self.augmentation_states["color"])),
+            "rotate": bool(states.get("rotate", self.augmentation_states["rotate"])),
+            "multiscale": bool(states.get("multiscale", self.augmentation_states["multiscale"])),
+        })
+        self._render_grid()
 
     def update_previews(self, preview_data):
         """
         接入真实样本数据
         :param preview_data: list of dicts [{'img_path': str, 'lbl_path': str, 'name': str}]
         """
-        # 清除现有控件（保留结尾 stretch）
-        while self.container_layout.count() > 1:
-            item = self.container_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-                
-        if not preview_data:
-            self._create_placeholders()
-            return
-
-        for data in preview_data:
-            pair_widget = QWidget()
-            pair_layout = QVBoxLayout(pair_widget)
-            pair_layout.setContentsMargins(0, 0, 0, 0)
-            
-            # 显示区域
-            imgs_container = QWidget()
-            imgs_layout = QHBoxLayout(imgs_container)
-            imgs_layout.setContentsMargins(0, 0, 0, 0)
-            
-            # 读取图片
-            img_lbl = QLabel()
-            img_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            img_lbl.setStyleSheet("background-color: #E9ECEF; border-radius: 4px;")
-            img_lbl.setMinimumSize(128, 128)
-            if data['img_path']:
-                pix = QPixmap(data['img_path']).scaled(128, 128, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-                img_lbl.setPixmap(pix)
-            else:
-                img_lbl.setText("无图片")
-                
-            # 读取标签
-            lbl_lbl = QLabel()
-            lbl_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            lbl_lbl.setStyleSheet("background-color: #E9ECEF; border-radius: 4px;")
-            lbl_lbl.setMinimumSize(128, 128)
-            if data['lbl_path']:
-                pix_gt = QPixmap(data['lbl_path']).scaled(128, 128, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-                lbl_lbl.setPixmap(pix_gt)
-            else:
-                lbl_lbl.setText("无标签")
-                
-            imgs_layout.addWidget(img_lbl)
-            imgs_layout.addWidget(QLabel("➡️"))
-            imgs_layout.addWidget(lbl_lbl)
-            
-            # 描述文字
-            desc = QLabel(f"样本: {data['name']}")
-            desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            desc.setStyleSheet("color: #495057; font-size: 11px; font-weight: bold;")
-            
-            pair_layout.addWidget(imgs_container)
-            pair_layout.addWidget(desc)
-            
-            self.container_layout.insertWidget(self.container_layout.count() - 1, pair_widget)
+        self.preview_data = list(preview_data or [])
+        self._render_grid()
 
 
 class ConfigHealthBar(QWidget):
@@ -371,6 +440,12 @@ class TaskConfigBlueprintWidget(QWidget):
             augmentations.append("MultiScale")
         aug_label = f"Crop:{crop_size} \u00b7 " + "+".join(augmentations) if augmentations else f"Crop:{crop_size}"
         self.blueprint.nodes["aug"].set_active(len(params) > 0, aug_label)
+        self.preview_strip.set_augmentation_states({
+            "flip": params.get("aug_random_flip", True),
+            "color": params.get("aug_photo_distortion", True),
+            "rotate": params.get("aug_random_rotate", False),
+            "multiscale": params.get("aug_multi_scale", False),
+        })
 
         # ---- Model 节点 ----
         model_info = params.get("model", "")
