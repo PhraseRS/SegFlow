@@ -1174,31 +1174,66 @@ class MainWindow(QMainWindow):
     def _find_base_config(self, model_params: dict) -> str:
         """
         Phase 4: 根据模型参数查找 base config 文件路径。
-        
+
         多策略查找：mmseg.__file__ 上溯、glob 模糊匹配、项目本地 configs/ 等。
+        支持算法+Backbone组合查找。
         """
         import os
         import glob
-        
+
+        method = model_params.get('method', '')
         backbone_key = model_params.get('backbone_key', 'resnet50')
-        
-        # 映射 backbone → (子目录, 文件名关键词) 用于精确匹配和 glob 回退
+
+        # 映射 (算法, backbone) → (子目录, 文件名关键词)
         CONFIG_MAP = {
-            'resnet50': ('deeplabv3plus', 'deeplabv3plus_r50*d8*voc*512x512.py'),
-            'resnet101': ('deeplabv3plus', 'deeplabv3plus_r101*d8*voc*512x512.py'),
-            'hrnet_w48': ('hrnet', 'fcn_hr48*voc*512x512.py'),
-            'swin_tiny': ('swin', 'upernet_swin-tiny*512x512.py'),
-            'swin_base': ('swin', 'upernet_swin-base*512x512.py'),
-            'mit_b0': ('segformer', 'segformer_mit-b0*512x512.py'),
-            'mit_b2': ('segformer', 'segformer_mit-b2*512x512.py'),
-            'mit_b5': ('segformer', 'segformer_mit-b5*512x512.py'),
+            ('PSPNet', 'resnet50'): ('pspnet', 'pspnet_r50*d8*512x512.py'),
+            ('PSPNet', 'resnet101'): ('pspnet', 'pspnet_r101*d8*512x512.py'),
+            ('DeepLabV3+', 'resnet50'): ('deeplabv3plus', 'deeplabv3plus_r50*d8*512x512.py'),
+            ('DeepLabV3+', 'resnet101'): ('deeplabv3plus', 'deeplabv3plus_r101*d8*512x512.py'),
+            ('DeepLabV3+', 'mobilenet_v2'): ('mobilenet_v2', 'deeplabv3plus_m-v2*d8*512x512.py'),
+            ('SegFormer', 'mit_b0'): ('segformer', 'segformer_mit-b0*512x512.py'),
+            ('SegFormer', 'mit_b1'): ('segformer', 'segformer_mit-b1*512x512.py'),
+            ('SegFormer', 'mit_b2'): ('segformer', 'segformer_mit-b2*512x512.py'),
+            ('SegFormer', 'mit_b5'): ('segformer', 'segformer_mit-b5*512x512.py'),
+            ('UperNet', 'swin_tiny'): ('swin', 'upernet_swin-tiny*512x512.py'),
+            ('UperNet', 'swin_base'): ('swin', 'upernet_swin-base*512x512.py'),
+            ('UperNet', 'resnet50'): ('upernet', 'upernet_r50*512x512.py'),
+            ('FCN', 'resnet50'): ('fcn', 'fcn_r50*d8*512x512.py'),
+            ('FCN', 'resnet101'): ('fcn', 'fcn_r101*d8*512x512.py'),
+            ('FCN', 'hrnet_w48'): ('hrnet', 'fcn_hr48*512x512.py'),
+            ('UNet', 'resnet50'): ('unet', 'unet_s5*d16_fcn*r50*d8*512x512.py'),
+            ('Swin-Transformer', 'swin_tiny'): ('swin', 'swin-tiny*upernet*512x512.py'),
+            ('Swin-Transformer', 'swin_small'): ('swin', 'swin-small*upernet*512x512.py'),
+            ('Swin-Transformer', 'swin_base'): ('swin', 'swin-base*upernet*512x512.py'),
+            ('Swin-Transformer', 'swin_large'): ('swin', 'swin-large*upernet*512x512.py'),
         }
-        
-        entry = CONFIG_MAP.get(backbone_key)
+
+        # 优先使用算法+Backbone组合查找
+        entry = CONFIG_MAP.get((method, backbone_key))
+
+        # 回退：如果没有找到组合，尝试用旧的 backbone 映射（兼容性）
         if not entry:
-            self._log_to_bottom(f"⚠️ 未定义 {backbone_key} 的配置映射")
+            LEGACY_MAP = {
+                'resnet50': ('deeplabv3plus', 'deeplabv3plus_r50*d8*512x512.py'),
+                'resnet101': ('deeplabv3plus', 'deeplabv3plus_r101*d8*512x512.py'),
+                'hrnet_w48': ('hrnet', 'fcn_hr48*512x512.py'),
+                'swin_tiny': ('swin', 'upernet_swin-tiny*512x512.py'),
+                'swin_small': ('swin', 'swin-small*upernet*512x512.py'),
+                'swin_base': ('swin', 'upernet_swin-base*512x512.py'),
+                'swin_large': ('swin', 'swin-large*upernet*512x512.py'),
+                'mit_b0': ('segformer', 'segformer_mit-b0*512x512.py'),
+                'mit_b1': ('segformer', 'segformer_mit-b1*512x512.py'),
+                'mit_b2': ('segformer', 'segformer_mit-b2*512x512.py'),
+                'mit_b5': ('segformer', 'segformer_mit-b5*512x512.py'),
+            }
+            entry = LEGACY_MAP.get(backbone_key)
+            if entry:
+                self._log_to_bottom(f"⚠️ 使用兼容模式: {backbone_key} → {entry[0]}")
+
+        if not entry:
+            self._log_to_bottom(f"⚠️ 未定义 ({method}, {backbone_key}) 的配置映射")
             return ''
-        
+
         sub_dir, file_pattern = entry
         
         # ====== 收集候选 configs 根目录 ======

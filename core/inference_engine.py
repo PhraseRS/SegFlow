@@ -492,11 +492,24 @@ class InferenceEngine:
             dst_ds.FlushCache()
             dst_ds = None
             dataset = None
-            
+
+            # 【关键】为输出结果构建金字塔，确保快速预览
+            print(f'[推理引擎] 正在为输出结果构建金字塔...')
+            from utils.pyramid_builder import PyramidBuilder
+            pyramid_ok = PyramidBuilder.build_pyramids(
+                output_path,
+                levels=[2, 4, 8, 16, 32],
+                resampling='NEAREST'
+            )
+            if pyramid_ok:
+                print(f'[推理引擎] ✅ 金字塔构建成功')
+            else:
+                print(f'[推理引擎] ⚠️ 金字塔构建失败，但不影响结果')
+
             print(f'[推理引擎] ✅ 大图像分块推理完成！')
             print(f'[推理引擎] 总耗时: {(time.time() - t0) / 60:.2f} 分钟')
             print(f'[推理引擎] 输出文件: {output_path}')
-            
+
             return {
                 'success': True,
                 'output_path': output_path,
@@ -504,6 +517,7 @@ class InferenceEngine:
                 'image_shape': (img_height, img_width),
                 'strategy': 'large_image_block',
                 'use_real_model': True,
+                'image_path': image_path,  # 新增：原始图像路径（用于后续读取渲染）
                 'params': {
                     'crop_size': crop_size,
                     'overlap_rate': overlap_rate,
@@ -663,9 +677,23 @@ class InferenceEngine:
                 else:
                     result_mask = np.zeros((h, w), dtype=np.uint8)
             
+            # 读取原始图像用于渲染
+            image_array = None
+            if result_mask is not None:
+                try:
+                    image_pil = Image.open(image_path)
+                    image_array = np.array(image_pil)
+                    if image_array.ndim == 2:  # 灰度图转RGB
+                        image_array = cv2.cvtColor(image_array, cv2.COLOR_GRAY2RGB)
+                    elif image_array.shape[2] == 4:  # RGBA转RGB
+                        image_array = cv2.cvtColor(image_array, cv2.COLOR_RGBA2RGB)
+                except Exception as e:
+                    print(f"[推理引擎] ⚠️  读取原始图像失败: {e}")
+
             return {
                 'success': True,
                 'mask': result_mask,
+                'image': image_array,  # 新增：原始图像数组
                 'image_shape': (h, w),
                 'strategy': 'sliding_window',
                 'use_real_model': self.use_real_model,  # 标识是否使用真实模型
@@ -737,9 +765,23 @@ class InferenceEngine:
                 else:
                     result_mask = np.zeros((h, w), dtype=np.uint8)
             
+            # 读取原始图像用于渲染
+            image_array = None
+            if result_mask is not None:
+                try:
+                    image_pil = Image.open(image_path)
+                    image_array = np.array(image_pil)
+                    if image_array.ndim == 2:  # 灰度图转RGB
+                        image_array = cv2.cvtColor(image_array, cv2.COLOR_GRAY2RGB)
+                    elif image_array.shape[2] == 4:  # RGBA转RGB
+                        image_array = cv2.cvtColor(image_array, cv2.COLOR_RGBA2RGB)
+                except Exception as e:
+                    print(f"[推理引擎] ⚠️  读取原始图像失败: {e}")
+
             return {
                 'success': True,
                 'mask': result_mask,
+                'image': image_array,  # 新增：原始图像数组
                 'image_shape': (h, w),
                 'strategy': 'resize',
                 'use_real_model': self.use_real_model,  # 标识是否使用真实模型

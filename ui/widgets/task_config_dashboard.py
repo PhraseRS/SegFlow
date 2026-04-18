@@ -448,16 +448,19 @@ class TaskConfigBlueprintWidget(QWidget):
         })
 
         # ---- Model 节点 ----
-        model_info = params.get("model", "")
+        method = params.get("method", "")
         backbone = params.get("backbone", "")
         in_ch = params.get("in_channels", 3)
-        if model_info:
-            model_label = f"{model_info} | {in_ch}ch"
+
+        if method and backbone:
+            model_label = f"{method}\n{backbone} | {in_ch}ch"
+        elif method:
+            model_label = f"{method} | {in_ch}ch"
         elif backbone:
             model_label = f"{backbone} | {in_ch}ch"
         else:
             model_label = "待选择"
-        self.blueprint.nodes["model"].set_active(bool(model_info or backbone), model_label)
+        self.blueprint.nodes["model"].set_active(bool(method or backbone), model_label)
 
         # ---- Loss & Optimizer 节点 ----
         loss_type = params.get("loss_type", "CrossEntropyLoss")
@@ -490,7 +493,7 @@ class TaskConfigBlueprintWidget(QWidget):
             self.pills_status_update("data", "⚠ 数据: 未加载", "#FFF3CD", "#856404")
 
         # 2. 模型参数已选（25分）
-        if params.get("model") or params.get("backbone"):
+        if params.get("method") or params.get("backbone"):
             score += 25
             self.pills_status_update("params", "✅ 参数: 已配置", "#D4EDDA", "#155724")
         else:

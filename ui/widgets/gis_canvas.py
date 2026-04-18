@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 
 from ui.widgets.smart_canvas import SmartCanvas
 from ui.widgets.layer_manager import LayerManager, SlotType, create_layer_manager
+from utils.pyramid_builder import PyramidBuilder
 
 try:
     import rasterio
@@ -157,16 +158,32 @@ class GISCanvasWidget(QWidget):
         if not Path(path).exists():
             print(f"⚠️ 文件不存在: {path}")
             return False
-        
+
         # 创建进度对话框 (可选)
         # 注意：对于快速加载，对话框可能不会显示
         progress = QProgressDialog("正在加载图像...", None, 0, 100, self)  # 移除取消按钮
         progress.setWindowTitle("加载中")
         progress.setWindowModality(Qt.WindowModality.WindowModal)
         progress.setMinimumDuration(1000)  # 1秒后才显示，避免闪烁
-        progress.setValue(10)
+        progress.setValue(5)
         QApplication.processEvents()
-        
+
+        # 【关键】检查并构建金字塔（确保大图快速显示）
+        print(f"   → 检查金字塔...")
+
+        def pyramid_progress(percent, message):
+            progress.setValue(5 + int(percent * 0.2))  # 5-25%
+            progress.setLabelText(f"正在构建金字塔: {message}")
+            QApplication.processEvents()
+
+        pyramid_ok = PyramidBuilder.ensure_pyramids(path, progress_callback=pyramid_progress)
+        if not pyramid_ok:
+            print(f"⚠️ 金字塔构建失败，但继续加载")
+
+        progress.setValue(30)
+        progress.setLabelText("正在加载图像...")
+        QApplication.processEvents()
+
         # 1. 提取元数据
         print(f"   → 读取元数据...")
         profile = self._read_profile(path)

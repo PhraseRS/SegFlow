@@ -14,6 +14,9 @@ from PySide6.QtCore import Qt, Signal, QTimer, QThread
 import os
 import numpy as np
 
+from ui.widgets.visualization_settings_widget import VisualizationSettingsWidget
+from ui.widgets.inference_visualization_widget import InferenceVisualizationWidget
+
 
 # =============================================================================
 # Worker Thread Class
@@ -519,13 +522,23 @@ class InferencePanel(QWidget):
         layout = QVBoxLayout(self.groupBox_inferenceResult)
         layout.setSpacing(3)  # 压缩行间距
         layout.setContentsMargins(6, 6, 6, 6)  # 压缩边距
-        
+
         self.label_inferenceResult = QLabel("暂无推理结果\n\n请加载模型并运行推理，结果将显示在此处。")
         self.label_inferenceResult.setWordWrap(True)
         self.label_inferenceResult.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         self.label_inferenceResult.setMinimumHeight(100)
         layout.addWidget(self.label_inferenceResult)
-        
+
+        # 可视化设置组件
+        self.visualization_settings = VisualizationSettingsWidget()
+        self.visualization_settings.setVisible(False)
+        layout.addWidget(self.visualization_settings)
+
+        # 可视化渲染组件
+        self.visualization_widget = InferenceVisualizationWidget()
+        self.visualization_widget.setVisible(False)
+        layout.addWidget(self.visualization_widget)
+
         parent_layout.addWidget(self.groupBox_inferenceResult)
 
     def _connect_signals(self):
@@ -561,9 +574,14 @@ class InferencePanel(QWidget):
         self.pushButton_runInference.clicked.connect(self._run_inference)
         self.pushButton_batchInference.clicked.connect(self._run_batch_inference)
         self.pushButton_cancelInference.clicked.connect(self._cancel_inference)
-        
+
         # 导出结果
         self.pushButton_exportResults.clicked.connect(self._export_results)
+
+        # 可视化设置信号
+        self.visualization_settings.palette_changed.connect(self._on_palette_changed)
+        self.visualization_settings.alpha_changed.connect(self._on_alpha_changed)
+        self.visualization_settings.apply_requested.connect(self._apply_visualization_settings)
         
     def scan_trained_models(self, data_root=None):
         """扫描已训练模型库"""
@@ -1431,10 +1449,19 @@ class InferencePanel(QWidget):
                     'result': result,
                     'params': inference_params
                 }
-                
+
+                # 初始化可视化设置（调色板）
+                classes = self.inference_model.get('classes', [])
+                palette = self.inference_model.get('palette', [])
+                if classes and palette:
+                    self.visualization_settings.set_classes_and_palette(classes, palette)
+
+                # 渲染可视化结果
+                self._render_inference_result()
+
                 # 发送推理完成信号
                 self.inference_finished.emit(result)
-                
+
                 self._emit_log("✅ 大图分块推理完成")
                 self._emit_log(f"   输出文件: {output_path}")
                 
@@ -1516,13 +1543,23 @@ class InferencePanel(QWidget):
             
             # 发送推理完成信号
             self.inference_finished.emit(result)
-            
+
             self._emit_log("✅ 推理完成")
             if mask is not None:
                 self._emit_log(f"   检测到 {len(unique_classes)} 个类别")
             else:
                 self._emit_log(f"   超大图像模式：未生成完整掩码（正常）")
-            
+
+            # 初始化可视化设置（调色板）
+            classes = result.get('classes', [])
+            if classes and self.inference_model:
+                palette = self.inference_model.get('palette', [])
+                if palette:
+                    self.visualization_settings.set_classes_and_palette(classes, palette)
+
+            # 渲染可视化结果
+            self._render_inference_result()
+
             # 提示用户可以导出结果
             message = f"推理已成功完成！\n\n图像: {os.path.basename(image_path)}\n策略: {strategy}\n"
             if saved_path:
@@ -1530,7 +1567,7 @@ class InferencePanel(QWidget):
                 message += "\n💡 提示：如需其他格式（NumPy/JSON）或正式存档，\n请使用下方的'导出结果'功能。"
             else:
                 message += "\n您可以在下方查看详细结果，或点击'导出结果'保存推理结果。"
-            
+
             QMessageBox.information(
                 self,
                 "推理完成",
@@ -1795,9 +1832,149 @@ class InferencePanel(QWidget):
     def get_current_input_path(self) -> str:
         """
         获取当前的输入路径
-        
+
         Returns:
             str: 当前配置的输入路径（输入影像框中的路径）
         """
         return self.lineEdit_inputPath.text().strip()
+
+    # ==================== 可视化设置回调方法 ====================
+
+    def _on_palette_changed(self, palette: dict):
+        """调色板变化回调"""
+        self._emit_log(f"调色板已更新")
+        # 实时重新渲染
+        self._render_inference_result()
+
+    def _on_alpha_changed(self, alpha: float):
+        """透明度变化回调"""
+        self._emit_log(f"透明度已调整: {int(alpha * 100)}%")
+        # 实时重新渲染
+        self._render_inference_result()
+
+    def _render_inference_result(self):
+        """渲染推理结果的可视化"""
+        if not self.last_inference_result:
+            return
+
+        try:
+            # 显示可视化组件
+            self.visualization_settings.setVisible(True)
+            self.visualization_widget.setVisible(True)
+
+            # 获取当前设置
+            current_palette = self.visualization_settings.get_current_palette()
+            current_alpha = self.visualization_settings.get_current_alpha()
+
+            # 转换调色板格式：dict -> list
+            palette_list = [current_palette.get(i, [128, 128, 128]) for i in range(len(current_palette))]
+
+            result = self.last_inference_result.get('result', {})
+            strategy = result.get('strategy', '')
+
+            # 大图推理结果
+            if strategy == 'large_image_block':
+                output_path = result.get('output_path', '')
+                image_path = self.last_inference_result.get('image_path', '')
+
+                if output_path and os.path.exists(output_path):
+                    classes = self.inference_model.get('classes', [])
+                    self.visualization_widget.render_large_image(
+                        image_path=image_path,
+                        mask_path=output_path,
+                        classes=classes,
+                        palette=palette_list,
+                        alpha=current_alpha
+                    )
+
+            # 小图推理结果
+            else:
+                mask = self.last_inference_result.get('mask')
+                image_array = result.get('image')
+
+                if mask is not None and image_array is not None:
+                    classes = self.inference_model.get('classes', [])
+                    self.visualization_widget.render(
+                        image=image_array,
+                        mask=mask,
+                        classes=classes,
+                        palette=palette_list,
+                        alpha=current_alpha
+                    )
+
+        except Exception as e:
+            self._emit_log(f"渲染可视化失败: {e}")
+
+    def _apply_visualization_settings(self):
+        """应用可视化设置到预览"""
+        if not self.last_inference_result:
+            QMessageBox.warning(
+                self,
+                "无法应用",
+                "没有可用的推理结果。\n\n请先运行推理，然后再调整可视化设置。"
+            )
+            return
+
+        try:
+            self._emit_log("正在应用新的可视化设置...")
+
+            # 获取当前设置
+            current_palette = self.visualization_settings.get_current_palette()
+            current_alpha = self.visualization_settings.get_current_alpha()
+
+            # 转换调色板格式：dict -> list
+            palette_list = [current_palette.get(i, [128, 128, 128]) for i in range(len(current_palette))]
+
+            result = self.last_inference_result.get('result', {})
+            strategy = result.get('strategy', '')
+
+            # 大图推理结果
+            if strategy == 'large_image_block':
+                output_path = result.get('output_path', '')
+                image_path = self.last_inference_result.get('image_path', '')
+
+                if not output_path or not os.path.exists(output_path):
+                    raise Exception("找不到大图推理结果文件")
+
+                # 获取类别信息
+                classes = self.inference_model.get('classes', [])
+
+                self._emit_log("重新渲染大图...")
+                self.visualization_widget.render_large_image(
+                    image_path=image_path,
+                    mask_path=output_path,
+                    classes=classes,
+                    palette=palette_list,
+                    alpha=current_alpha
+                )
+                self._emit_log("大图渲染完成")
+
+            # 小图推理结果
+            else:
+                mask = self.last_inference_result.get('mask')
+                image_array = result.get('image')
+
+                if mask is None or image_array is None:
+                    raise Exception("推理结果数据不完整")
+
+                # 获取类别信息
+                classes = self.inference_model.get('classes', [])
+
+                self._emit_log("重新渲染小图...")
+                self.visualization_widget.render(
+                    image=image_array,
+                    mask=mask,
+                    classes=classes,
+                    palette=palette_list,
+                    alpha=current_alpha
+                )
+                self._emit_log("小图渲染完成")
+
+        except Exception as e:
+            self._emit_log(f"应用可视化设置失败: {e}")
+            QMessageBox.critical(
+                self,
+                "应用失败",
+                f"应用可视化设置时发生错误。\n\n错误信息:\n{e}"
+            )
 

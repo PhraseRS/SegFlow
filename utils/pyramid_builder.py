@@ -1,0 +1,226 @@
+# -*- coding: utf-8 -*-
+"""
+金字塔构建工具 (Pyramid Builder)
+自动检测并为大图构建金字塔，确保快速显示
+"""
+
+import os
+from typing import Optional, List, Tuple
+from pathlib import Path
+
+try:
+    from osgeo import gdal
+    HAS_GDAL = True
+except ImportError:
+    HAS_GDAL = False
+
+
+class PyramidBuilder:
+    """金字塔构建器"""
+
+    DEFAULT_LEVELS = [2, 4, 8, 16, 32, 64]
+    DEFAULT_RESAMPLING = 'NEAREST'
+
+    @staticmethod
+    def check_has_pyramids(file_path: str) -> bool:
+        """
+        检查文件是否已有金字塔
+
+        Args:
+            file_path: 图像文件路径
+
+        Returns:
+            bool: 是否已有金字塔
+        """
+        if not HAS_GDAL:
+            return False
+
+        try:
+            ds = gdal.Open(file_path, gdal.GA_ReadOnly)
+            if not ds:
+                return False
+
+            band = ds.GetRasterBand(1)
+            overview_count = band.GetOverviewCount()
+            ds = None
+
+            return overview_count > 0
+
+        except Exception as e:
+            print(f"检查金字塔失败: {e}")
+            return False
+
+    @staticmethod
+    def get_pyramid_info(file_path: str) -> dict:
+        """
+        获取金字塔信息
+
+        Args:
+            file_path: 图像文件路径
+
+        Returns:
+            dict: 金字塔信息
+        """
+        if not HAS_GDAL:
+            return {'has_pyramids': False, 'levels': []}
+
+        try:
+            ds = gdal.Open(file_path, gdal.GA_ReadOnly)
+            if not ds:
+                return {'has_pyramids': False, 'levels': []}
+
+            band = ds.GetRasterBand(1)
+            overview_count = band.GetOverviewCount()
+
+            levels = []
+            for i in range(overview_count):
+                overview = band.GetOverview(i)
+                levels.append({
+                    'index': i,
+                    'width': overview.XSize,
+                    'height': overview.YSize,
+                    'scale': ds.RasterXSize / overview.XSize
+                })
+
+            ds = None
+
+            return {
+                'has_pyramids': overview_count > 0,
+                'count': overview_count,
+                'levels': levels
+            }
+
+        except Exception as e:
+            print(f"获取金字塔信息失败: {e}")
+            return {'has_pyramids': False, 'levels': []}
+
+    @staticmethod
+    def build_pyramids(file_path: str,
+                      levels: Optional[List[int]] = None,
+                      resampling: str = 'NEAREST',
+                      progress_callback: Optional[callable] = None) -> bool:
+        """
+        为图像构建金字塔
+
+        Args:
+            file_path: 图像文件路径
+            levels: 金字塔级别列表，如 [2, 4, 8, 16]
+            resampling: 重采样方法 ('NEAREST', 'AVERAGE', 'BILINEAR', 'CUBIC')
+            progress_callback: 进度回调函数 callback(progress: float, message: str)
+
+        Returns:
+            bool: 是否构建成功
+        """
+        if not HAS_GDAL:
+            if progress_callback:
+                progress_callback(0, "GDAL 未安装")
+            return False
+
+        if levels is None:
+            levels = PyramidBuilder.DEFAULT_LEVELS
+
+        try:
+            # 以更新模式打开
+            ds = gdal.Open(file_path, gdal.GA_Update)
+            if not ds:
+                if progress_callback:
+                    progress_callback(0, f"无法打开文件: {file_path}")
+                return False
+
+            width = ds.RasterXSize
+            height = ds.RasterYSize
+
+            if progress_callback:
+                progress_callback(0, f"开始构建金字塔: {width}x{height}")
+
+            # 构建金字塔
+            ds.BuildOverviews(resampling, levels)
+
+            if progress_callback:
+                progress_callback(100, "金字塔构建完成")
+
+            ds = None
+            return True
+
+        except Exception as e:
+            if progress_callback:
+                progress_callback(0, f"构建金字塔失败: {e}")
+            print(f"构建金字塔失败: {e}")
+            return False
+
+    @staticmethod
+    def ensure_pyramids(file_path: str,
+                       levels: Optional[List[int]] = None,
+                       resampling: str = 'NEAREST',
+                       progress_callback: Optional[callable] = None) -> bool:
+        """
+        确保图像有金字塔，如果没有则自动构建
+
+        Args:
+            file_path: 图像文件路径
+            levels: 金字塔级别列表
+            resampling: 重采样方法
+            progress_callback: 进度回调函数
+
+        Returns:
+            bool: 是否成功（已有或构建成功）
+        """
+        if not os.path.exists(file_path):
+            if progress_callback:
+                progress_callback(0, f"文件不存在: {file_path}")
+            return False
+
+        # 检查是否已有金字塔
+        if PyramidBuilder.check_has_pyramids(file_path):
+            if progress_callback:
+                progress_callback(100, "金字塔已存在")
+            return True
+
+        # 构建金字塔
+        if progress_callback:
+            progress_callback(0, "检测到无金字塔，开始构建...")
+
+        return PyramidBuilder.build_pyramids(
+            file_path, levels, resampling, progress_callback
+        )
+
+    @staticmethod
+    def calculate_optimal_levels(width: int, height: int,
+                                min_size: int = 256) -> List[int]:
+        """
+        根据图像尺寸计算最优金字塔级别
+
+        Args:
+            width: 图像宽度
+            height: 图像高度
+            min_size: 最小尺寸阈值
+
+        Returns:
+            List[int]: 金字塔级别列表
+        """
+        max_dim = max(width, height)
+        levels = []
+
+        level = 2
+        while max_dim / level > min_size:
+            levels.append(level)
+            level *= 2
+
+        return levels if levels else [2]
+
+
+def prepare_large_image(file_path: str,
+                       progress_callback: Optional[callable] = None) -> bool:
+    """
+    准备大图：检查并构建金字塔
+
+    这是加载大图前的必要步骤，确保图像能快速显示
+
+    Args:
+        file_path: 图像文件路径
+        progress_callback: 进度回调函数
+
+    Returns:
+        bool: 是否准备成功
+    """
+    return PyramidBuilder.ensure_pyramids(file_path, progress_callback=progress_callback)

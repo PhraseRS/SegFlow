@@ -17,14 +17,29 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Signal
 
 
-# 预定义的 Backbone 和预训练模型
+# 算法-Backbone映射关系
+METHOD_BACKBONE_MAP = {
+    'PSPNet': ['ResNet-50', 'ResNet-101'],
+    'DeepLabV3+': ['ResNet-50', 'ResNet-101', 'MobileNetV2'],
+    'SegFormer': ['MiT-B0', 'MiT-B1', 'MiT-B2', 'MiT-B5'],
+    'UperNet': ['Swin-Tiny', 'Swin-Base', 'ResNet-50'],
+    'FCN': ['ResNet-50', 'ResNet-101'],
+    'UNet': ['ResNet-50'],
+    'Swin-Transformer': ['Swin-Tiny', 'Swin-Small', 'Swin-Base', 'Swin-Large'],
+}
+
+# Backbone内部标识映射
 BACKBONE_CHOICES = {
     'ResNet-50': 'resnet50',
     'ResNet-101': 'resnet101',
+    'MobileNetV2': 'mobilenet_v2',
     'HRNet-W48': 'hrnet_w48',
     'Swin-Tiny': 'swin_tiny',
+    'Swin-Small': 'swin_small',
     'Swin-Base': 'swin_base',
+    'Swin-Large': 'swin_large',
     'MiT-B0': 'mit_b0',
+    'MiT-B1': 'mit_b1',
     'MiT-B2': 'mit_b2',
     'MiT-B5': 'mit_b5',
 }
@@ -32,10 +47,14 @@ BACKBONE_CHOICES = {
 PRETRAINED_MODELS = {
     'ResNet-50': ['ImageNet-1K', 'COCO (DeepLabV3+)'],
     'ResNet-101': ['ImageNet-1K', 'COCO (DeepLabV3+)', 'Cityscapes'],
+    'MobileNetV2': ['ImageNet-1K'],
     'HRNet-W48': ['ImageNet-1K', 'Cityscapes'],
     'Swin-Tiny': ['ImageNet-1K', 'ADE20K'],
+    'Swin-Small': ['ImageNet-1K', 'ADE20K'],
     'Swin-Base': ['ImageNet-22K', 'ADE20K'],
+    'Swin-Large': ['ImageNet-22K', 'ADE20K'],
     'MiT-B0': ['ImageNet-1K'],
+    'MiT-B1': ['ImageNet-1K'],
     'MiT-B2': ['ImageNet-1K', 'ADE20K'],
     'MiT-B5': ['ImageNet-1K', 'ADE20K'],
 }
@@ -76,20 +95,45 @@ class ModelSelectionWidget(QWidget):
         self.combo_framework.setToolTip("目前仅支持 MMSegmentation")
         top_form.addRow("框架:", self.combo_framework)
 
+        self.combo_method = QComboBox()
+        self.combo_method.addItems(list(METHOD_BACKBONE_MAP.keys()))
+        self.combo_method.setToolTip("选择分割算法/架构")
+        top_form.addRow("算法:", self.combo_method)
+
         self.combo_backbone = QComboBox()
-        self.combo_backbone.addItems(list(BACKBONE_CHOICES.keys()))
+        self.combo_backbone.setEnabled(False)
         self.combo_backbone.setToolTip("选择模型的 Backbone 架构")
         top_form.addRow("Backbone:", self.combo_backbone)
 
         layout.addLayout(top_form)
+
+        # 初始化第一个算法的 Backbone 列表
+        self._update_backbone_list(self.combo_method.currentText())
 
         # (预训练权重相关配置已移至 weight_selection_widget)
         # layout.addLayout(top_form) 已经完成使命，不过原代码是 addLayout 到主 layout
 
 
     def _connect_signals(self):
+        self.combo_method.currentTextChanged.connect(self._on_method_changed)
         self.combo_backbone.currentTextChanged.connect(self._on_backbone_changed)
         self.combo_framework.currentTextChanged.connect(lambda: self.config_changed.emit())
+
+    def _update_backbone_list(self, method_name: str):
+        """根据选中的算法更新Backbone列表"""
+        self.combo_backbone.clear()
+        backbones = METHOD_BACKBONE_MAP.get(method_name, [])
+        if backbones:
+            self.combo_backbone.addItems(backbones)
+            self.combo_backbone.setEnabled(True)
+            self.combo_backbone.setCurrentIndex(0)
+        else:
+            self.combo_backbone.setEnabled(False)
+
+    def _on_method_changed(self, method_name: str):
+        """算法改变时更新Backbone列表"""
+        self._update_backbone_list(method_name)
+        self.config_changed.emit()
 
     def _on_backbone_changed(self, backbone_name):
         self.config_changed.emit()
@@ -101,13 +145,16 @@ class ModelSelectionWidget(QWidget):
         Returns:
             dict: {
                 'framework': str,
+                'method': str,
                 'backbone': str,
                 'backbone_key': str,
             }
         """
         backbone_name = self.combo_backbone.currentText()
+        method_name = self.combo_method.currentText()
         return {
             'framework': self.combo_framework.currentText(),
+            'method': method_name,
             'backbone': backbone_name,
             'backbone_key': BACKBONE_CHOICES.get(backbone_name, ''),
         }

@@ -393,20 +393,28 @@ class DynamicImageReader:
     
     @staticmethod
     def read_at_level(
-        path: str, 
-        level: int, 
+        path: str,
+        level: int,
         viewport_rect: Optional[QRectF] = None,
         is_label: bool = False
     ) -> Tuple[Optional[np.ndarray], float, Tuple[int, int]]:
         if not os.path.exists(path):
             return None, 1.0, (0, 0)
-        
+
         if not HAS_RASTERIO:
             return DynamicImageReader._read_with_opencv(path, level, is_label)
-        
+
         try:
             with rasterio.open(path) as src:
                 actual_level = DynamicImageReader._get_best_level(src, level)
+
+                # 【优化】如果提供了视口矩形，只读取可见区域
+                if viewport_rect and HAS_RASTERIO:
+                    return DynamicImageReader._read_viewport(
+                        src, actual_level, viewport_rect, is_label
+                    )
+
+                # 否则读取全图
                 out_h = max(1, src.height // actual_level)
                 out_w = max(1, src.width // actual_level)
                 data = DynamicImageReader._read_full(src, out_h, out_w, is_label)
@@ -428,6 +436,48 @@ class DynamicImageReader:
         return best
     
     @staticmethod
+    def _read_viewport(
+        src, level: int, viewport_rect: QRectF, is_label: bool = False
+    ) -> Tuple[Optional[np.ndarray], float, Tuple[int, int]]:
+        """读取视口区域（切片渲染）"""
+        try:
+            # 计算视口在原始图像中的位置
+            x = max(0, int(viewport_rect.x()))
+            y = max(0, int(viewport_rect.y()))
+            w = min(src.width - x, int(viewport_rect.width()))
+            h = min(src.height - y, int(viewport_rect.height()))
+
+            if w <= 0 or h <= 0:
+                return None, 1.0, (0, 0)
+
+            # 根据 level 计算输出尺寸
+            out_w = max(1, w // level)
+            out_h = max(1, h // level)
+
+            # 选择重采样方法
+            resample = Resampling.nearest if is_label else Resampling.bilinear
+
+            # 使用 rasterio 的 window 读取
+            from rasterio.windows import Window
+            window = Window(x, y, w, h)
+
+            if src.count == 1:
+                data = src.read(1, window=window, out_shape=(out_h, out_w), resampling=resample)
+            elif src.count >= 3:
+                r = src.read(1, window=window, out_shape=(out_h, out_w), resampling=resample)
+                g = src.read(2, window=window, out_shape=(out_h, out_w), resampling=resample)
+                b = src.read(3, window=window, out_shape=(out_h, out_w), resampling=resample)
+                data = cv2.merge([b, g, r])
+            else:
+                data = src.read(1, window=window, out_shape=(out_h, out_w), resampling=resample)
+
+            return data, 1.0 / level, (x, y)
+
+        except Exception as e:
+            print(f"视口读取失败: {e}")
+            return None, 1.0, (0, 0)
+
+    @staticmethod
     def _read_full(src, out_h: int, out_w: int, is_label: bool = False) -> np.ndarray:
         # 对于标签图像，必须使用 nearest 重采样以保留类别索引
         if is_label:
@@ -435,7 +485,7 @@ class DynamicImageReader:
         else:
             # 对于普通图像，大尺寸用 nearest（性能），小尺寸用 bilinear（质量）
             resample = Resampling.nearest if out_h * out_w > 2000 * 2000 else Resampling.bilinear
-        
+
         if src.count == 1:
             data = src.read(1, out_shape=(out_h, out_w), resampling=resample)
         elif src.count >= 3:
@@ -825,6 +875,22 @@ class SmartCanvas(QGraphicsView):
 
     def get_current_lod_level(self) -> int:
         return self._current_lod_level
+
+    def set_image_visible(self, visible: bool):
+        """设置底图（z_value=0）的可见性"""
+        if 0 in self._layers and self._layers[0].item:
+            self._layers[0].item.setVisible(visible)
+
+    def set_label_visible(self, visible: bool):
+        """设置标签层（z_value=1）的可见性"""
+        if 1 in self._layers and self._layers[1].item:
+            self._layers[1].item.setVisible(visible)
+
+    def set_label_opacity(self, opacity: int):
+        """设置标签层的透明度 (0-100)"""
+        if 1 in self._layers and self._layers[1].item:
+            self._layers[1].item.setOpacity(opacity / 100.0)
+            self._layers[1].opacity = opacity / 100.0
 
     # ========== Compatibility ==========
     
