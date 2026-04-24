@@ -201,6 +201,100 @@ class MaskRenderer:
             if original_palette is not None:
                 self.palette = original_palette
 
+    def render_overlay_with_legend(self, image: np.ndarray, mask: np.ndarray,
+                                    class_names: Optional[list] = None,
+                                    palette: Optional[Dict[int, list]] = None,
+                                    alpha: Optional[float] = None) -> np.ndarray:
+        """
+        渲染叠加图像，并在右侧添加图例
+
+        Args:
+            image: (H, W, 3) 原始RGB图像
+            mask: (H, W) 灰度索引图
+            class_names: 类别名称列表，用于绘制图例
+            palette: 可选的调色板
+            alpha: 可选的透明度
+
+        Returns:
+            result: (H, W+legend_width, 3) 包含图例的结果图像
+        """
+        # 先进行基本渲染
+        overlay = self.render(image, mask, palette, alpha)
+
+        # 如果没有类别名称，直接返回叠加图像
+        if not class_names:
+            return overlay
+
+        # 绘制图例
+        return self._add_legend(overlay, class_names)
+
+    def _add_legend(self, image: np.ndarray, class_names: list, 
+                    legend_bg_color: tuple = (255, 255, 255),
+                    text_color: tuple = (0, 0, 0),
+                    font_scale: float = 0.4,
+                    thickness: int = 1) -> np.ndarray:
+        """
+        为图像添加图例
+
+        Args:
+            image: (H, W, 3) 输入图像
+            class_names: 类别名称列表
+            legend_bg_color: 图例背景颜色 (B, G, R)
+            text_color: 文本颜色 (B, G, R)
+            font_scale: 字体缩放系数
+            thickness: 字体厚度
+
+        Returns:
+            带图例的图像
+        """
+        h, w, c = image.shape
+        
+        # 计算图例宽度（基于最长的类别名称）
+        max_name_len = max([len(name) for name in class_names]) if class_names else 5
+        legend_width = max(150, int(max_name_len * 8 + 80))
+        
+        # 计算每个类别行的高度
+        line_height = int(font_scale * 30 + 10)
+        
+        # 创建包含图例的图像
+        legend_height = max(h, len(class_names) * line_height + 20)
+        result = np.ones((legend_height, w + legend_width, c), dtype=np.uint8) * 255
+        
+        # 复制原图像到左侧
+        result[:h, :w] = image
+        
+        # 绘制图例背景
+        result[:, w:, :] = legend_bg_color
+        
+        # 绘制图例内容
+        y_offset = 10
+        for class_id, class_name in enumerate(class_names):
+            # 绘制颜色块
+            color_block_size = int(line_height * 0.6)
+            color = self.palette.get(class_id, [128, 128, 128])
+            # OpenCV使用BGR格式，需要反转
+            color_bgr = (color[2], color[1], color[0])
+            x_start = w + 5
+            y_start = y_offset + line_height // 2 - color_block_size // 2
+            
+            cv2.rectangle(result, 
+                         (x_start, y_start),
+                         (x_start + color_block_size, y_start + color_block_size),
+                         color_bgr, -1)
+            
+            # 绘制文本
+            cv2.putText(result,
+                       class_name,
+                       (x_start + color_block_size + 5, y_offset + line_height),
+                       cv2.FONT_HERSHEY_SIMPLEX,
+                       font_scale,
+                       text_color,
+                       thickness)
+            
+            y_offset += line_height
+        
+        return result
+
     @staticmethod
     def create_from_mmseg_palette(mmseg_palette: list, alpha: float = 0.5) -> 'MaskRenderer':
         """

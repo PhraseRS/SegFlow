@@ -192,7 +192,7 @@ class LayerManager(QObject):
     def set_load_callback(self, callback: Callable):
         """
         设置图层加载回调
-        callback(path, z_value, opacity, apply_colormap) -> QGraphicsPixmapItem
+        callback(path, z_value, opacity, apply_colormap, palette) -> QGraphicsPixmapItem
         """
         self._load_layer_callback = callback
     
@@ -338,7 +338,8 @@ class LayerManager(QObject):
         self, 
         slot_type: SlotType, 
         data_path: str,
-        apply_colormap: bool = False
+        apply_colormap: bool = False,
+        palette=None
     ) -> bool:
         """
         注入图层数据到指定槽位
@@ -382,7 +383,8 @@ class LayerManager(QObject):
                 data_path, 
                 slot.default_z_value, 
                 slot.default_opacity,
-                apply_colormap
+                apply_colormap,
+                palette
             )
             if item:
                 slot.graphics_item = item
@@ -724,14 +726,15 @@ def create_layer_manager(tree_widget: QTreeWidget, canvas) -> LayerManager:
     manager = LayerManager(tree_widget)
     
     # 设置加载回调
-    def load_callback(path, z_value, opacity, apply_colormap):
+    def load_callback(path, z_value, opacity, apply_colormap, palette=None):
         if hasattr(canvas, 'load_image_layer'):
             return canvas.load_image_layer(
                 path, 
                 pos=(0, 0), 
                 z_value=z_value, 
                 opacity=opacity,
-                apply_colormap=apply_colormap
+                apply_colormap=apply_colormap,
+                palette=palette
             )
         return None
     

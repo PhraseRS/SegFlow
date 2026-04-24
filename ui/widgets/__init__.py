@@ -19,6 +19,7 @@ from ui.widgets.dataset_overview_widget import DatasetOverviewWidget
 from ui.widgets.health_check_widget import HealthCheckCard
 from ui.widgets.class_distribution_widget import ClassDistributionWidget
 from ui.widgets.task_config_dashboard import TaskConfigDashboard
+from ui.widgets.env_config_widget import EnvConfigWidget
 
 from ui.widgets.layer_manager import (
     LayerManager,
@@ -45,6 +46,7 @@ __all__ = [
     'HealthCheckCard',
     'ClassDistributionWidget',
     'TaskConfigDashboard',
+    'EnvConfigWidget',
     # Layer Manager
     'LayerManager',
     'LayerSlot',

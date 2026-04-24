@@ -86,7 +86,14 @@ class ImageLoaderWorker(QObject):
     def cancel(self):
         self._cancelled = True
     
-    def load(self, z_value: int, path: str, level: int, apply_colormap: bool):
+    def load(
+        self,
+        z_value: int,
+        path: str,
+        level: int,
+        apply_colormap: bool,
+        palette: Optional[Any] = None,
+    ):
         """执行加载"""
         if self._cancelled:
             return
@@ -103,7 +110,7 @@ class ImageLoaderWorker(QObject):
                 # 如果是 3D 数组，取第一个通道
                 if data.ndim == 3:
                     data = data[:, :, 0]
-                data = self._apply_voc_colormap(data)
+                data = self._apply_voc_colormap(data, palette)
             
             # 转换为 QPixmap
             pixmap = self._numpy_to_pixmap(data)
@@ -114,17 +121,8 @@ class ImageLoaderWorker(QObject):
         except Exception as e:
             print(f"⚠️ 后台加载失败: {e}")
     
-    def _apply_voc_colormap(self, label_np: np.ndarray) -> np.ndarray:
-        h, w = label_np.shape
-        bgra = np.zeros((h, w, 4), dtype=np.uint8)
-        for i, color in enumerate(VOC_PALETTE_BGR):
-            if i >= len(VOC_PALETTE_BGR):
-                break
-            mask = label_np == i
-            if np.any(mask):
-                bgra[mask, :3] = color
-                bgra[mask, 3] = 0 if i == 0 else 255
-        return bgra
+    def _apply_voc_colormap(self, label_np: np.ndarray, palette: Optional[Any] = None) -> np.ndarray:
+        return apply_label_colormap(label_np, palette)
     
     def _numpy_to_pixmap(self, img_np: np.ndarray) -> QPixmap:
         h, w = img_np.shape[:2]
@@ -161,11 +159,17 @@ class ImageLoaderThread(QThread):
         self._mutex = QMutex()
         self._running = True
     
-    def add_task(self, z_value: int, path: str, level: int, apply_colormap: bool):
+    def add_task(
+        self,
+        z_value: int,
+        path: str,
+        level: int,
+        apply_colormap: bool,
+        palette: Optional[Any] = None,
+    ):
         with QMutexLocker(self._mutex):
-            # 替换相同z_value的任务
-            self._tasks = [(z, p, l, c) for z, p, l, c in self._tasks if z != z_value]
-            self._tasks.append((z_value, path, level, apply_colormap))
+            self._tasks = [(z, p, l, c, pal) for z, p, l, c, pal in self._tasks if z != z_value]
+            self._tasks.append((z_value, path, level, apply_colormap, palette))
     
     def run(self):
         while self._running:
@@ -175,11 +179,11 @@ class ImageLoaderThread(QThread):
                     task = self._tasks.pop(0)
             
             if task:
-                z_value, path, level, apply_colormap = task
+                z_value, path, level, apply_colormap, palette = task
                 # 执行任务前再次检查停止标志
                 if not self._running:
                     break
-                self._worker.load(z_value, path, level, apply_colormap)
+                self._worker.load(z_value, path, level, apply_colormap, palette)
             else:
                 # 减少等待时间以便更快响应停止请求
                 self.msleep(20)
@@ -307,11 +311,20 @@ class MetadataLoaderThread(QThread):
 
 class ImageLayerInfo:
     """图层元数据信息"""
-    def __init__(self, path: str, z_value: int = 0, opacity: float = 1.0, apply_colormap: bool = False, async_load: bool = False):
+    def __init__(
+        self,
+        path: str,
+        z_value: int = 0,
+        opacity: float = 1.0,
+        apply_colormap: bool = False,
+        async_load: bool = False,
+        palette: Optional[Any] = None,
+    ):
         self.path = path
         self.z_value = z_value
         self.opacity = opacity
         self.apply_colormap = apply_colormap
+        self.palette = palette
         
         self.width = 0
         self.height = 0
@@ -527,6 +540,52 @@ VOC_PALETTE_BGR = [
 ]
 
 
+def normalize_palette(palette: Optional[Any]) -> Optional[List[Tuple[int, int, int]]]:
+    if palette is None:
+        return None
+
+    if isinstance(palette, dict):
+        try:
+            keys = sorted(palette.keys(), key=int)
+        except Exception:
+            keys = list(palette.keys())
+        values = [palette[key] for key in keys]
+    else:
+        values = list(palette)
+
+    normalized: List[Tuple[int, int, int]] = []
+    for color in values:
+        if not isinstance(color, (list, tuple)) or len(color) < 3:
+            normalized.append((128, 128, 128))
+            continue
+        r = int(max(0, min(255, color[0])))
+        g = int(max(0, min(255, color[1])))
+        b = int(max(0, min(255, color[2])))
+        normalized.append((b, g, r))
+    return normalized
+
+
+def apply_label_colormap(label_np: np.ndarray, palette: Optional[Any] = None) -> np.ndarray:
+    custom_palette = normalize_palette(palette) or []
+    max_label = int(label_np.max()) if label_np.size else 0
+    palette_bgr: List[Tuple[int, int, int]] = []
+    for class_id in range(max(max_label + 1, len(custom_palette), len(VOC_PALETTE_BGR))):
+        if class_id < len(custom_palette):
+            palette_bgr.append(custom_palette[class_id])
+        elif class_id < len(VOC_PALETTE_BGR):
+            palette_bgr.append(VOC_PALETTE_BGR[class_id])
+        else:
+            palette_bgr.append((128, 128, 128))
+    h, w = label_np.shape
+    bgra = np.zeros((h, w, 4), dtype=np.uint8)
+    for class_id, color in enumerate(palette_bgr):
+        mask = label_np == class_id
+        if np.any(mask):
+            bgra[mask, :3] = color
+            bgra[mask, 3] = 0 if class_id == 0 else 255
+    return bgra
+
+
 class SmartCanvas(QGraphicsView):
     """高性能图像查看器 - 优化版"""
     
@@ -570,6 +629,13 @@ class SmartCanvas(QGraphicsView):
         
         # 是否处于"视口原始分辨率"模式 (只加载了视口区域)
         self._is_native_viewport_mode = False
+        
+        # Swipe compare state. The base image stays unchanged; label/prediction
+        # layers are clipped to the left side of this divider.
+        self._swipe_enabled = False
+        self._swipe_position = 50
+        self._swipe_line_item: Optional[QGraphicsLineItem] = None
+        self._swipe_line_shadow_item: Optional[QGraphicsLineItem] = None
         
         # 右键菜单
         self._setup_context_menu()
@@ -707,9 +773,10 @@ class SmartCanvas(QGraphicsView):
                 if layer_info.apply_colormap:
                     if data.ndim == 3:
                         data = data[:, :, 0]
-                    data = self._apply_voc_colormap(data)
+                    data = self._apply_voc_colormap(data, layer_info.palette)
                 
                 pixmap = self._numpy_to_pixmap(data)
+                layer_info.source_pixmap = pixmap
                 
                 # 创建或更新 item，设置正确的位置偏移
                 if layer_info.item is None:
@@ -724,6 +791,8 @@ class SmartCanvas(QGraphicsView):
                 layer_info.item.setScale(1.0)  # 1:1 显示
                 layer_info.item.setPos(x1, y1)  # 设置位置偏移
                 layer_info.current_level = 1
+                if self._is_swipe_layer(layer_info.z_value):
+                    self._apply_swipe_clip_to_layer(layer_info)
                 
                 print(f"   ✅ 视口区域已加载")
                 
@@ -751,8 +820,13 @@ class SmartCanvas(QGraphicsView):
         self._schedule_lod_update(self.LOD_UPDATE_DELAY_ZOOM)
 
     def load_image_layer(
-        self, path: str, pos: Tuple[int, int] = (0, 0), 
-        z_value: int = 0, opacity: float = 1.0, apply_colormap: bool = False
+        self,
+        path: str,
+        pos: Tuple[int, int] = (0, 0),
+        z_value: int = 0,
+        opacity: float = 1.0,
+        apply_colormap: bool = False,
+        palette: Optional[Any] = None,
     ) -> Optional[QGraphicsPixmapItem]:
         if not os.path.exists(path):
             return None
@@ -760,7 +834,7 @@ class SmartCanvas(QGraphicsView):
         print(f"      🔄 SmartCanvas.load_image_layer: 创建 ImageLayerInfo...")
         QApplication.processEvents()
         
-        layer_info = ImageLayerInfo(path, z_value, opacity, apply_colormap)
+        layer_info = ImageLayerInfo(path, z_value, opacity, apply_colormap, palette=palette)
         
         QApplication.processEvents()
         
@@ -795,6 +869,8 @@ class SmartCanvas(QGraphicsView):
             QApplication.processEvents()
         
         self._update_scene_rect()
+        if self._swipe_enabled:
+            self._apply_swipe_to_layers()
         
         print(f"      ✅ SmartCanvas.load_image_layer: 完成")
         
@@ -829,11 +905,16 @@ class SmartCanvas(QGraphicsView):
         print(f"      ═══════════════════════════════════════════\n")
 
     def load_layer_from_numpy(
-        self, img_np: np.ndarray, pos: Tuple[int, int] = (0, 0),
-        z_value: int = 0, opacity: float = 1.0, apply_colormap: bool = False
+        self,
+        img_np: np.ndarray,
+        pos: Tuple[int, int] = (0, 0),
+        z_value: int = 0,
+        opacity: float = 1.0,
+        apply_colormap: bool = False,
+        palette: Optional[Any] = None,
     ) -> Optional[QGraphicsPixmapItem]:
         if apply_colormap and img_np.ndim == 2:
-            img_np = self._apply_voc_colormap(img_np)
+            img_np = self._apply_voc_colormap(img_np, palette)
         return self._create_and_add_item(img_np, 1.0, pos, z_value, opacity)
 
     def clear_all(self):
@@ -843,6 +924,12 @@ class SmartCanvas(QGraphicsView):
         self._scene.clear()
         self._layers.clear()
         self._current_lod_level = 0
+        self._swipe_line_item = None
+        self._swipe_line_shadow_item = None
+
+    def clear(self):
+        """Compatibility wrapper used by the dataset panel."""
+        self.clear_all()
 
     def set_interactive_mode(self, mode: str):
         if mode == 'pan':
@@ -891,6 +978,121 @@ class SmartCanvas(QGraphicsView):
         if 1 in self._layers and self._layers[1].item:
             self._layers[1].item.setOpacity(opacity / 100.0)
             self._layers[1].opacity = opacity / 100.0
+
+    def set_layer_palette(self, z_value: int, palette: Optional[Any]) -> bool:
+        layer_info = self._layers.get(z_value)
+        if layer_info is None or not layer_info.apply_colormap:
+            return False
+
+        layer_info.palette = palette
+        layer_info.cache.clear()
+        layer_info.loading_level = 0
+        layer_info.source_pixmap = None
+
+        if self._is_native_viewport_mode and HAS_RASTERIO:
+            viewport_rect = self.mapToScene(self.viewport().rect()).boundingRect()
+            self._load_viewport_at_native(layer_info, viewport_rect)
+        else:
+            target_level = layer_info.current_level or self._current_lod_level or self._calculate_initial_level(layer_info)
+            self._load_layer_sync(layer_info, target_level)
+
+        self.viewport().update()
+        return True
+
+    def set_swipe_enabled(self, enabled: bool):
+        """Enable/disable swipe comparison for label/prediction layers."""
+        self._swipe_enabled = bool(enabled)
+        self._apply_swipe_to_layers()
+
+    def set_swipe_position(self, position: int):
+        """Set swipe divider position as a percentage of the scene width."""
+        self._swipe_position = max(0, min(100, int(position)))
+        if self._swipe_enabled:
+            self._apply_swipe_to_layers()
+
+    def _is_swipe_layer(self, z_value: int) -> bool:
+        """Only overlay layers are clipped; z=0 is the base image."""
+        return z_value > 0
+
+    def _get_swipe_scene_x(self) -> float:
+        rect = self._scene.sceneRect()
+        if not rect.isValid() or rect.width() <= 0:
+            return 0.0
+        return rect.left() + rect.width() * (self._swipe_position / 100.0)
+
+    def _apply_swipe_to_layers(self):
+        for z_value, layer_info in self._layers.items():
+            if self._is_swipe_layer(z_value):
+                self._apply_swipe_clip_to_layer(layer_info)
+        self._update_swipe_line()
+        self.viewport().update()
+
+    def _apply_swipe_clip_to_layer(self, layer_info: ImageLayerInfo):
+        if layer_info.item is None:
+            return
+
+        source_pixmap = getattr(layer_info, "source_pixmap", None)
+        if source_pixmap is None or source_pixmap.isNull():
+            source_pixmap = layer_info.item.pixmap()
+            layer_info.source_pixmap = source_pixmap
+
+        if not self._swipe_enabled:
+            layer_info.item.setPixmap(source_pixmap)
+            return
+
+        item_scale = layer_info.item.scale()
+        if item_scale == 0:
+            item_scale = 1.0
+
+        scene_x = self._get_swipe_scene_x()
+        local_x = int(round((scene_x - layer_info.item.pos().x()) / item_scale))
+        clip_width = max(0, min(source_pixmap.width(), local_x))
+
+        clipped = QPixmap(source_pixmap.size())
+        clipped.fill(Qt.GlobalColor.transparent)
+
+        if clip_width > 0:
+            painter = QPainter(clipped)
+            painter.setClipRect(0, 0, clip_width, source_pixmap.height())
+            painter.drawPixmap(0, 0, source_pixmap)
+            painter.end()
+
+        layer_info.item.setPixmap(clipped)
+
+    def _ensure_swipe_line_items(self):
+        if self._swipe_line_shadow_item is None:
+            self._swipe_line_shadow_item = QGraphicsLineItem()
+            shadow_pen = QPen(QColor(0, 0, 0, 190), 3)
+            shadow_pen.setCosmetic(True)
+            self._swipe_line_shadow_item.setPen(shadow_pen)
+            self._swipe_line_shadow_item.setZValue(999998)
+            self._scene.addItem(self._swipe_line_shadow_item)
+
+        if self._swipe_line_item is None:
+            self._swipe_line_item = QGraphicsLineItem()
+            line_pen = QPen(QColor(255, 255, 255, 235), 1)
+            line_pen.setCosmetic(True)
+            self._swipe_line_item.setPen(line_pen)
+            self._swipe_line_item.setZValue(999999)
+            self._scene.addItem(self._swipe_line_item)
+
+    def _update_swipe_line(self):
+        if not self._swipe_enabled or not self._layers:
+            if self._swipe_line_item:
+                self._swipe_line_item.setVisible(False)
+            if self._swipe_line_shadow_item:
+                self._swipe_line_shadow_item.setVisible(False)
+            return
+
+        rect = self._scene.sceneRect()
+        if not rect.isValid() or rect.height() <= 0:
+            return
+
+        self._ensure_swipe_line_items()
+        x = self._get_swipe_scene_x()
+        for item in (self._swipe_line_shadow_item, self._swipe_line_item):
+            item.setLine(x, rect.top(), x, rect.bottom())
+            item.setVisible(True)
 
     # ========== Compatibility ==========
     
@@ -960,7 +1162,7 @@ class SmartCanvas(QGraphicsView):
                 if layer_info.loading_level != required_level:
                     layer_info.loading_level = required_level
                     self._loader_thread.add_task(
-                        z_value, layer_info.path, required_level, layer_info.apply_colormap
+                        z_value, layer_info.path, required_level, layer_info.apply_colormap, layer_info.palette
                     )
         
         self.lod_changed.emit(required_level)
@@ -987,7 +1189,7 @@ class SmartCanvas(QGraphicsView):
                 if layer_info.loading_level != level:
                     layer_info.loading_level = level
                     self._loader_thread.add_task(
-                        z_value, layer_info.path, level, layer_info.apply_colormap
+                        z_value, layer_info.path, level, layer_info.apply_colormap, layer_info.palette
                     )
         
         self.lod_changed.emit(level)
@@ -1019,6 +1221,7 @@ class SmartCanvas(QGraphicsView):
     def _apply_pixmap(self, layer_info: ImageLayerInfo, pixmap: QPixmap, scale: float, offset: tuple, level: int):
         """应用 Pixmap 到图层"""
         is_new_item = layer_info.item is None
+        layer_info.source_pixmap = pixmap
         
         if layer_info.item is None:
             layer_info.item = QGraphicsPixmapItem(pixmap)
@@ -1033,6 +1236,8 @@ class SmartCanvas(QGraphicsView):
         layer_info.item.setScale(1.0 / scale if scale > 0 and scale < 1.0 else 1.0)
         layer_info.item.setPos(offset[0], offset[1])
         layer_info.current_level = level
+        if self._is_swipe_layer(layer_info.z_value):
+            self._apply_swipe_clip_to_layer(layer_info)
         
         # 调试: 验证图层状态
         actual_z = layer_info.item.zValue()
@@ -1090,7 +1295,7 @@ class SmartCanvas(QGraphicsView):
                 print(f"         - 值={v}: {count}个像素 ({pct:.2f}%)")
             
             # 应用 VOC 调色板
-            data = self._apply_voc_colormap(data)
+            data = self._apply_voc_colormap(data, layer_info.palette)
         
         QApplication.processEvents()
         
@@ -1155,17 +1360,8 @@ class SmartCanvas(QGraphicsView):
         self._scene.setSceneRect(self._scene.itemsBoundingRect())
         return item
 
-    def _apply_voc_colormap(self, label_np: np.ndarray) -> np.ndarray:
-        h, w = label_np.shape
-        bgra = np.zeros((h, w, 4), dtype=np.uint8)
-        for i, color in enumerate(VOC_PALETTE_BGR):
-            if i >= len(VOC_PALETTE_BGR):
-                break
-            mask = label_np == i
-            if np.any(mask):
-                bgra[mask, :3] = color
-                bgra[mask, 3] = 0 if i == 0 else 255
-        return bgra
+    def _apply_voc_colormap(self, label_np: np.ndarray, palette: Optional[Any] = None) -> np.ndarray:
+        return apply_label_colormap(label_np, palette)
 
     def _numpy_to_pixmap(self, img_np: np.ndarray) -> QPixmap:
         h, w = img_np.shape[:2]

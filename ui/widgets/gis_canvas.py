@@ -295,7 +295,7 @@ class GISCanvasWidget(QWidget):
 
     # ==================== LayerManager 便捷方法 ====================
     
-    def inject_prediction(self, result_path: str) -> bool:
+    def inject_prediction(self, result_path: str, palette=None) -> bool:
         """
         注入预测结果 (显示为灰度图)
         
@@ -314,7 +314,8 @@ class GISCanvasWidget(QWidget):
         success = self._layer_manager.inject_layer_data(
             SlotType.TYPE_PRED, 
             result_path, 
-            apply_colormap=True  # 使用VOC调色板显示
+            apply_colormap=True,  # 使用调色板显示
+            palette=palette
         )
         
         if success:
@@ -340,6 +341,34 @@ class GISCanvasWidget(QWidget):
                 text=expected_filename
             )
         return False
+
+    def set_prediction_opacity(self, opacity: float) -> bool:
+        """Update prediction layer opacity in the GIS canvas."""
+        if not self._layer_manager:
+            return False
+
+        slot = self._layer_manager.get_slot(SlotType.TYPE_PRED)
+        if not slot or not slot.graphics_item:
+            return False
+
+        slot.default_opacity = opacity
+        slot.graphics_item.setOpacity(opacity)
+        self.canvas.viewport().update()
+        return True
+
+    def set_prediction_palette(self, palette) -> bool:
+        """Apply a custom palette to the prediction layer in the central canvas."""
+        if not self._layer_manager:
+            return False
+
+        slot = self._layer_manager.get_slot(SlotType.TYPE_PRED)
+        if not slot or not slot.graphics_item:
+            return False
+
+        updated = self.canvas.set_layer_palette(slot.default_z_value, palette)
+        if updated:
+            self.canvas.viewport().update()
+        return updated
         
     def inject_ground_truth(self, gt_path: str) -> bool:
         """

@@ -511,6 +511,12 @@ class MainWindow(QMainWindow):
         self.ui.inference_panel.inference_error.connect(self._on_inference_error)
         # 连接预测初始化信号
         self.ui.inference_panel.prediction_initializing.connect(self._on_prediction_initializing)
+        self.ui.inference_panel.visualization_settings.alpha_changed.connect(
+            lambda alpha: self.ui.gisCanvas.set_prediction_opacity(alpha)
+        )
+        self.ui.inference_panel.visualization_settings.palette_changed.connect(
+            lambda palette: self.ui.gisCanvas.set_prediction_palette(palette)
+        )
         
         # 双向同步：GIS 图层控制 <-> 推理面板
         # 方向 1: 左侧 GIS 底图变化 -> 右侧推理面板输入路径
@@ -533,6 +539,12 @@ class MainWindow(QMainWindow):
         )
         # 初始化调用一次以填充默认的预训练列表
         self.ui.widget_weightSelection.update_backbone(self.ui.widget_modelSelection.combo_backbone.currentText())
+        self.ui.widget_modelSelection.combo_framework.currentTextChanged.connect(
+            self.ui.widget_envConfig.set_framework
+        )
+        self.ui.widget_envConfig.set_framework(
+            self.ui.widget_modelSelection.combo_framework.currentText()
+        )
         
         # ========== 核心：主 Tab 与侧边栏联动 ==========
         # 右侧 Tab 切换时，自动切换左侧侧边栏
@@ -911,6 +923,18 @@ class MainWindow(QMainWindow):
         if not hasattr(self, '_current_data_root') or not self._current_data_root:
             QMessageBox.warning(self, "未加载数据集", "请先通过「添加样本」加载 VOC 数据集。")
             return
+
+        if hasattr(self.ui, 'widget_envConfig'):
+            is_env_ready, env_message = self.ui.widget_envConfig.ensure_ready_for_training()
+            if not is_env_ready:
+                self.ui.tabWidget_contextControl.setCurrentWidget(self.ui.tab_taskConfig)
+                QMessageBox.warning(
+                    self,
+                    "环境未就绪",
+                    f"当前训练环境校验未通过：\n\n{env_message}\n\n"
+                    "请先在“环境准备状态”面板中选择或校验 Python 解释器。",
+                )
+                return
         
         try:
             # ====== Step 1: 收集 UI 参数 ======
@@ -2284,33 +2308,34 @@ class MainWindow(QMainWindow):
         
         print(f"   mask is None: {mask is None}")
         print(f"   output_path: {output_path}")
+        palette = None
+        if hasattr(self.ui.inference_panel, 'visualization_settings'):
+            palette = self.ui.inference_panel.visualization_settings.get_current_palette()
         
         if mask is not None:
              self._log_to_bottom(f"✅ 推理完成，结果已就绪")
-             
+
+             preferred_path = None
              if output_path and os.path.exists(output_path):
-                 # 直接加载结果文件
-                 print(f"   → 调用 inject_prediction({output_path})")
-                 self.ui.gisCanvas.inject_prediction(output_path)
-             else:
-                 print(f"   ⚠️ output_path 不存在或为空")
-                 # 内存中的结果 - 尝试其他方式
-                 pass
-             
-             # 尝试从 last_inference_result 获取保存的预览图
-             if hasattr(self.ui.inference_panel, 'last_inference_result'):
+                 preferred_path = output_path
+             elif hasattr(self.ui.inference_panel, 'last_inference_result'):
                  saved_path = self.ui.inference_panel.last_inference_result.get('saved_path')
                  print(f"   last_inference_result.saved_path: {saved_path}")
                  if saved_path and os.path.exists(saved_path):
-                     self._log_to_bottom(f"🔄 自动加载预览结果: {saved_path}")
-                     self.ui.gisCanvas.inject_prediction(saved_path)
+                     preferred_path = saved_path
+
+             if preferred_path:
+                 print(f"   → 调用 inject_prediction({preferred_path})")
+                 self.ui.gisCanvas.inject_prediction(preferred_path, palette=palette)
+             else:
+                 print(f"   ⚠️ output_path 和 saved_path 都不可用")
         else:
             print(f"   ⚠️ mask 为 None，不调用 inject_prediction")
             # 对于大图分块推理，mask 可能为 None，但 output_path 存在
             if output_path and os.path.exists(output_path):
                 print(f"   → 尝试直接使用 output_path: {output_path}")
                 self._log_to_bottom(f"🔄 加载大图推理结果: {output_path}")
-                self.ui.gisCanvas.inject_prediction(output_path)
+                self.ui.gisCanvas.inject_prediction(output_path, palette=palette)
     
     def _save_split_to_txt(self):
         """保存数据集划分到txt文件"""

@@ -39,6 +39,7 @@ from ui.widgets.advisor_config_widget import AdvisorConfigWidget
 from ui.widgets.hyperparam_tabs_widget import HyperparamTabsWidget
 from ui.widgets.advanced_config_widget import AdvancedConfigWidget
 from ui.widgets.task_config_dashboard import TaskConfigDashboard
+from ui.widgets.env_config_widget import EnvConfigWidget
 
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
@@ -281,6 +282,18 @@ class Ui_MainWindow(object):
         self.widget_modelSelection.setObjectName(u"widget_modelSelection")
         self.verticalLayout_model.addWidget(self.widget_modelSelection)
         self.verticalLayout_taskConfigContent.addWidget(self.groupBox_modelSelection)
+
+        self.groupBox_environment = QGroupBox(self.scrollAreaWidget_taskConfig)
+        self.groupBox_environment.setObjectName(u"groupBox_environment")
+        self.verticalLayout_environment = QVBoxLayout(self.groupBox_environment)
+        self.verticalLayout_environment.setObjectName(u"verticalLayout_environment")
+        self.verticalLayout_environment.setContentsMargins(6, 6, 6, 6)
+
+        self.widget_envConfig = EnvConfigWidget(self.groupBox_environment)
+        self.widget_envConfig.setObjectName(u"widget_envConfig")
+        self.verticalLayout_environment.addWidget(self.widget_envConfig)
+
+        self.verticalLayout_taskConfigContent.addWidget(self.groupBox_environment)
         
         # 2. 权重选择组
         self.groupBox_weightSelection = QGroupBox(self.scrollAreaWidget_taskConfig)
@@ -565,6 +578,7 @@ class Ui_MainWindow(object):
         self.groupBox_advisorConfig.setTitle(QCoreApplication.translate("MainWindow", u"\u6570\u636e\u9a71\u52a8\u63a8\u8350 (Data-Driven Advisor)", None))
         self.groupBox_hyperparams.setTitle(QCoreApplication.translate("MainWindow", u"\u8be6\u7ec6\u53c2\u6570\u8bbe\u7f6e (Detailed Hyperparameters)", None))
         self.groupBox_paramConfig.setTitle(QCoreApplication.translate("MainWindow", u"\u9ad8\u7ea7\u53c2\u6570\u914d\u7f6e (Advanced Parameters)", None))
+        self.groupBox_environment.setTitle(QCoreApplication.translate("MainWindow", u"\u73af\u5883\u51c6\u5907\u72b6\u6001 (Environment Readiness)", None))
         self.groupBox_actions.setTitle(QCoreApplication.translate("MainWindow", u"\u64cd\u4f5c\u6309\u94ae (Action Buttons)", None))
         self.pushButton_run.setText(QCoreApplication.translate("MainWindow", u"\u8fd0\u884c (Run)", None))
         self.pushButton_stop.setText(QCoreApplication.translate("MainWindow", u"\u505c\u6b62 (Stop)", None))

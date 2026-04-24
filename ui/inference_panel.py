@@ -16,6 +16,7 @@ import numpy as np
 
 from ui.widgets.visualization_settings_widget import VisualizationSettingsWidget
 from ui.widgets.inference_visualization_widget import InferenceVisualizationWidget
+from core.mask_renderer import MaskRenderer
 
 
 # =============================================================================
@@ -158,6 +159,7 @@ class InferencePanel(QWidget):
         super().__init__(parent)
         self.inference_model = None
         self.last_inference_result = None  # 保存最后一次推理结果
+        self.last_visualization_metadata = None
         
         # 同步控制标志 - 防止信号循环
         # 当从外部调用 set_image_path 时设为 True，阻止再次发出 input_path_selected 信号
@@ -1450,11 +1452,8 @@ class InferencePanel(QWidget):
                     'params': inference_params
                 }
 
-                # 初始化可视化设置（调色板）
-                classes = self.inference_model.get('classes', [])
-                palette = self.inference_model.get('palette', [])
-                if classes and palette:
-                    self.visualization_settings.set_classes_and_palette(classes, palette)
+                # 初始化可视化设置（允许使用回退 classes/palette）
+                self._ensure_visualization_controls(mask=mask, result=result)
 
                 # 渲染可视化结果
                 self._render_inference_result()
@@ -1505,9 +1504,19 @@ class InferencePanel(QWidget):
             # 更新结果显示
             self.label_inferenceResult.setText(result_text)
             
+            # 读取原始图像数据（用于后续可视化调整）
+            image_array = None
+            try:
+                from PIL import Image
+                img = Image.open(image_path).convert('RGB')
+                image_array = np.array(img)
+            except Exception as e:
+                self._emit_log(f"⚠️  读取原始图像失败: {e}")
+            
             # 保存推理结果供导出使用
             self.last_inference_result = {
                 'image_path': image_path,
+                'image': image_array,  # 保存图像数组用于可视化调整
                 'mask': mask,
                 'result': result,
                 'params': inference_params
@@ -1541,24 +1550,18 @@ class InferencePanel(QWidget):
                 except Exception as save_error:
                     self._emit_log(f"⚠️  预览PNG自动保存失败: {save_error}")
             
-            # 发送推理完成信号
-            self.inference_finished.emit(result)
-
             self._emit_log("✅ 推理完成")
             if mask is not None:
                 self._emit_log(f"   检测到 {len(unique_classes)} 个类别")
             else:
                 self._emit_log(f"   超大图像模式：未生成完整掩码（正常）")
 
-            # 初始化可视化设置（调色板）
-            classes = result.get('classes', [])
-            if classes and self.inference_model:
-                palette = self.inference_model.get('palette', [])
-                if palette:
-                    self.visualization_settings.set_classes_and_palette(classes, palette)
-
-            # 渲染可视化结果
+            # 先准备可视化元数据，再通知外部使用当前 palette 注入主画布。
+            self._ensure_visualization_controls(mask=mask, result=result)
             self._render_inference_result()
+
+            # 发送推理完成信号
+            self.inference_finished.emit(result)
 
             # 提示用户可以导出结果
             message = f"推理已成功完成！\n\n图像: {os.path.basename(image_path)}\n策略: {strategy}\n"
@@ -1838,6 +1841,83 @@ class InferencePanel(QWidget):
         """
         return self.lineEdit_inputPath.text().strip()
 
+    def _build_visualization_metadata(self, mask=None, result=None):
+        """Normalize classes/palette so rendering still works with partial config metadata."""
+        result = result or {}
+        model_info = self.inference_model or {}
+
+        classes = model_info.get('classes') or result.get('classes') or []
+        palette = model_info.get('palette') or result.get('palette') or []
+
+        normalized_classes = []
+        for idx, name in enumerate(classes or []):
+            normalized_classes.append(str(name) if name is not None else f"Class {idx}")
+
+        mask_class_count = 0
+        if mask is not None:
+            mask_array = np.asarray(mask)
+            if mask_array.size > 0:
+                mask_class_count = int(mask_array.max()) + 1
+        elif isinstance(result, dict):
+            output_path = result.get('output_path', '')
+            if output_path and os.path.exists(output_path):
+                try:
+                    from osgeo import gdal
+
+                    dataset = gdal.Open(output_path)
+                    if dataset:
+                        band = dataset.GetRasterBand(1)
+                        sample_w = min(512, dataset.RasterXSize)
+                        sample_h = min(512, dataset.RasterYSize)
+                        sample = band.ReadAsArray(0, 0, sample_w, sample_h)
+                        if sample is not None and np.size(sample) > 0:
+                            mask_class_count = int(np.max(sample)) + 1
+                except Exception:
+                    pass
+
+        class_count = max(len(normalized_classes), len(palette or []), mask_class_count)
+        if class_count <= 0:
+            self.last_visualization_metadata = {'classes': [], 'palette': []}
+            return [], []
+
+        if not normalized_classes:
+            normalized_classes = [f"Class {idx}" for idx in range(class_count)]
+        elif len(normalized_classes) < class_count:
+            normalized_classes.extend(
+                f"Class {idx}" for idx in range(len(normalized_classes), class_count)
+            )
+
+        fallback_palette = MaskRenderer(num_classes=class_count).get_palette()
+        normalized_palette = []
+        for idx in range(class_count):
+            if idx < len(palette or []) and isinstance(palette[idx], (list, tuple)) and len(palette[idx]) >= 3:
+                normalized_palette.append(
+                    [int(palette[idx][0]), int(palette[idx][1]), int(palette[idx][2])]
+                )
+            else:
+                normalized_palette.append(list(fallback_palette[idx]))
+
+        self.last_visualization_metadata = {
+            'classes': normalized_classes,
+            'palette': normalized_palette,
+        }
+        return normalized_classes, normalized_palette
+
+    def _ensure_visualization_controls(self, mask=None, result=None):
+        classes, palette = self._build_visualization_metadata(mask=mask, result=result)
+        self.visualization_settings.set_classes_and_palette(classes, palette)
+        return classes, palette
+
+    def _get_active_visualization_metadata(self, mask=None, result=None):
+        classes, palette = self._build_visualization_metadata(mask=mask, result=result)
+        current_palette = self.visualization_settings.get_current_palette()
+        if current_palette:
+            palette = [
+                list(current_palette.get(idx, palette[idx]))
+                for idx in range(len(classes))
+            ]
+        return classes, palette
+
     # ==================== 可视化设置回调方法 ====================
 
     def _on_palette_changed(self, palette: dict):
@@ -1862,15 +1942,11 @@ class InferencePanel(QWidget):
             self.visualization_settings.setVisible(True)
             self.visualization_widget.setVisible(True)
 
-            # 获取当前设置
-            current_palette = self.visualization_settings.get_current_palette()
-            current_alpha = self.visualization_settings.get_current_alpha()
-
-            # 转换调色板格式：dict -> list
-            palette_list = [current_palette.get(i, [128, 128, 128]) for i in range(len(current_palette))]
-
             result = self.last_inference_result.get('result', {})
             strategy = result.get('strategy', '')
+            mask = self.last_inference_result.get('mask')
+            classes, palette_list = self._get_active_visualization_metadata(mask=mask, result=result)
+            current_alpha = self.visualization_settings.get_current_alpha()
 
             # 大图推理结果
             if strategy == 'large_image_block':
@@ -1878,7 +1954,6 @@ class InferencePanel(QWidget):
                 image_path = self.last_inference_result.get('image_path', '')
 
                 if output_path and os.path.exists(output_path):
-                    classes = self.inference_model.get('classes', [])
                     self.visualization_widget.render_large_image(
                         image_path=image_path,
                         mask_path=output_path,
@@ -1889,11 +1964,19 @@ class InferencePanel(QWidget):
 
             # 小图推理结果
             else:
-                mask = self.last_inference_result.get('mask')
-                image_array = result.get('image')
+                image_path = self.last_inference_result.get('image_path', '')
+                
+                # 如果 last_inference_result 中有 image，直接使用；否则从文件读取
+                image_array = self.last_inference_result.get('image')
+                if image_array is None and image_path and os.path.exists(image_path):
+                    try:
+                        from PIL import Image
+                        img = Image.open(image_path).convert('RGB')
+                        image_array = np.array(img)
+                    except Exception as e:
+                        self._emit_log(f"⚠️  读取原始图像失败: {e}")
 
                 if mask is not None and image_array is not None:
-                    classes = self.inference_model.get('classes', [])
                     self.visualization_widget.render(
                         image=image_array,
                         mask=mask,
@@ -1901,6 +1984,11 @@ class InferencePanel(QWidget):
                         palette=palette_list,
                         alpha=current_alpha
                     )
+                else:
+                    if mask is None:
+                        self._emit_log("⚠️  预测掩码为空，无法渲染")
+                    if image_array is None:
+                        self._emit_log("⚠️  原始图像为空，无法渲染")
 
         except Exception as e:
             self._emit_log(f"渲染可视化失败: {e}")
@@ -1918,15 +2006,11 @@ class InferencePanel(QWidget):
         try:
             self._emit_log("正在应用新的可视化设置...")
 
-            # 获取当前设置
-            current_palette = self.visualization_settings.get_current_palette()
-            current_alpha = self.visualization_settings.get_current_alpha()
-
-            # 转换调色板格式：dict -> list
-            palette_list = [current_palette.get(i, [128, 128, 128]) for i in range(len(current_palette))]
-
             result = self.last_inference_result.get('result', {})
             strategy = result.get('strategy', '')
+            mask = self.last_inference_result.get('mask')
+            classes, palette_list = self._get_active_visualization_metadata(mask=mask, result=result)
+            current_alpha = self.visualization_settings.get_current_alpha()
 
             # 大图推理结果
             if strategy == 'large_image_block':
@@ -1935,9 +2019,6 @@ class InferencePanel(QWidget):
 
                 if not output_path or not os.path.exists(output_path):
                     raise Exception("找不到大图推理结果文件")
-
-                # 获取类别信息
-                classes = self.inference_model.get('classes', [])
 
                 self._emit_log("重新渲染大图...")
                 self.visualization_widget.render_large_image(
@@ -1951,14 +2032,23 @@ class InferencePanel(QWidget):
 
             # 小图推理结果
             else:
-                mask = self.last_inference_result.get('mask')
-                image_array = result.get('image')
+                image_path = self.last_inference_result.get('image_path', '')
+                
+                # 如果 last_inference_result 中有 image，直接使用；否则从文件读取
+                image_array = self.last_inference_result.get('image')
+                if image_array is None and image_path and os.path.exists(image_path):
+                    try:
+                        from PIL import Image
+                        img = Image.open(image_path).convert('RGB')
+                        image_array = np.array(img)
+                    except Exception as e:
+                        self._emit_log(f"⚠️  读取原始图像失败: {e}")
 
                 if mask is None or image_array is None:
-                    raise Exception("推理结果数据不完整")
-
-                # 获取类别信息
-                classes = self.inference_model.get('classes', [])
+                    if mask is None:
+                        raise Exception("推理结果掩码不完整")
+                    if image_array is None:
+                        raise Exception("无法读取原始图像")
 
                 self._emit_log("重新渲染小图...")
                 self.visualization_widget.render(
