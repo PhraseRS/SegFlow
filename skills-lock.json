@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "pyqt6-ui-development-rules": {
+      "source": "oimiragieo/agent-studio",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/pyqt6-ui-development-rules/SKILL.md",
+      "computedHash": "7d67c0d5cad20f9631cf6fe659cc6fbadee7dfb6a19f19dbe82a6c283a71d4fb"
+    }
+  }
+}
