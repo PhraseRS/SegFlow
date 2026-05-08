@@ -192,9 +192,15 @@ class GISCanvasWidget(QWidget):
         if not profile:
             progress.close()
             print(f"❌ 无法读取元数据: {path}")
-            QMessageBox.critical(self, "错误", f"无法读取元数据: {path}")
+            is_tiff = Path(path).suffix.lower() in {'.tif', '.tiff'}
+            detail = (
+                "\n\n当前文件为 TIFF/GeoTIFF，通常需要本机正确安装并配置 rasterio/GDAL，"
+                "且底层驱动支持该影像格式。"
+                if is_tiff else ""
+            )
+            QMessageBox.critical(self, "错误", f"无法读取元数据:\n{path}{detail}")
             return False
-        
+
         progress.setValue(30)
         QApplication.processEvents()
             
@@ -215,9 +221,14 @@ class GISCanvasWidget(QWidget):
         if item is None:
             progress.close()
             print(f"❌ 加载图像失败: {path}")
-            QMessageBox.critical(self, "错误", "加载图像失败")
+            is_tiff = Path(path).suffix.lower() in {'.tif', '.tiff'}
+            detail = (
+                "\n\n可能原因：当前机器的 rasterio/GDAL 环境不完整，或该 TIFF/GeoTIFF 的压缩/波段格式暂不受支持。"
+                if is_tiff else ""
+            )
+            QMessageBox.critical(self, "错误", f"加载图像失败:\n{path}{detail}")
             return False
-        
+
         progress.setValue(80)
         QApplication.processEvents()
 

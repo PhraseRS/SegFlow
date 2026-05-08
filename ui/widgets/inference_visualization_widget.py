@@ -11,6 +11,7 @@ from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import QLabel, QScrollArea, QVBoxLayout, QWidget
 
 from core.mask_renderer import MaskRenderer
+from ui.widgets.smart_canvas import DynamicImageReader
 
 
 class InferenceVisualizationWidget(QWidget):
@@ -66,45 +67,18 @@ class InferenceVisualizationWidget(QWidget):
             return
 
         try:
-            from osgeo import gdal
+            image_tile = DynamicImageReader.read_center_preview(image_path, tile_size=tile_size, is_label=False)
+            mask_tile = DynamicImageReader.read_center_preview(mask_path, tile_size=tile_size, is_label=True)
 
-            image_ds = gdal.Open(image_path)
-            mask_ds = gdal.Open(mask_path)
-            if not image_ds or not mask_ds:
-                self.image_label.setText("无法打开图像或掩膜文件")
+            if image_tile is None or mask_tile is None:
+                self.image_label.setText(
+                    "无法打开图像或掩膜文件\n\n"
+                    "请检查当前机器是否正确安装 rasterio/GDAL，并确认该 TIFF/GeoTIFF 格式受支持。"
+                )
                 return
 
-            width = image_ds.RasterXSize
-            height = image_ds.RasterYSize
-            preview_size = min(tile_size, width, height)
-            x_offset = max((width - preview_size) // 2, 0)
-            y_offset = max((height - preview_size) // 2, 0)
-
-            image_tile = np.zeros((preview_size, preview_size, 3), dtype=np.uint8)
-            available_bands = max(1, min(3, image_ds.RasterCount))
-            band_arrays = []
-            for band_index in range(available_bands):
-                band = image_ds.GetRasterBand(band_index + 1)
-                band_array = band.ReadAsArray(x_offset, y_offset, preview_size, preview_size)
-                if band_array is None:
-                    raise ValueError("读取大图预览块失败")
-                band_arrays.append(band_array)
-
-            if len(band_arrays) == 1:
-                image_tile[:, :, 0] = band_arrays[0]
-                image_tile[:, :, 1] = band_arrays[0]
-                image_tile[:, :, 2] = band_arrays[0]
-            else:
-                for idx, band_array in enumerate(band_arrays[:3]):
-                    image_tile[:, :, idx] = band_array
-
-            mask_band = mask_ds.GetRasterBand(1)
-            mask_tile = mask_band.ReadAsArray(x_offset, y_offset, preview_size, preview_size)
-            if mask_tile is None:
-                raise ValueError("读取大图掩膜预览块失败")
-
-            self._cached_image = image_tile
-            self._cached_mask = np.asarray(mask_tile)
+            self._cached_image = np.asarray(image_tile).copy()
+            self._cached_mask = np.asarray(mask_tile).copy()
             self._cached_source = source
             self._render_from_cache(classes, palette, alpha)
 

@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "pyqt6-ui-development-rulesInput",
-  "description": "Input schema for Specific rules for PyQt6 based UI development focusing on UI/UX excellence and performance.",
+  "title": "pyside6-ui-development-rulesInput",
+  "description": "Input schema for Specific rules for PySide6 based UI development focusing on UI/UX excellence and performance.",
   "type": "object",
   "additionalProperties": true,
   "properties": {
