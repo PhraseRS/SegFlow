@@ -3,18 +3,23 @@
 模型选择组件 (Model Selection Widget)
 
 提供框架选择、Backbone 选择、预训练权重管理。
-包含两个子 Tab：公共预训练和自有遥感权重。
+框架列表从 FrameworkRegistry 动态读取，无需硬编码。
 
 Training Roadmap Phase 3, Task 3.1
 """
 
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
-    QGroupBox, QComboBox, QTabWidget, QCheckBox,
-    QPushButton, QLineEdit, QFileDialog, QLabel,
+    QWidget, QVBoxLayout, QFormLayout,
+    QGroupBox, QComboBox,
     QSizePolicy
 )
 from PySide6.QtCore import Signal
+
+from core.framework_registry import (
+    get_all_display_names,
+    get_required_packages,
+    get_key_by_display_name,
+)
 
 
 # 算法-Backbone映射关系
@@ -65,16 +70,15 @@ class ModelSelectionWidget(QWidget):
     模型选择组件
 
     布局：
-    - 顶部：框架选择 + Backbone 选择
-    - 下方 QTabWidget：
-        - Tab 1 "公共预训练": ImageNet/COCO 预训练复选框 + 模型下拉列表
-        - Tab 2 "自有遥感权重": 文件选择器选择 .pth 文件
+    - 顶部：框架选择 + Backbone 选择（框架列表从 FrameworkRegistry 动态读取）
 
     Signals:
-        config_changed(): 任何配置项变更时触发
+        config_changed():               任何配置项变更时触发
+        framework_changed(str, list):   框架切换时触发，携带 (display_name, required_packages)
     """
 
     config_changed = Signal()
+    framework_changed = Signal(str, list)   # (display_name, required_packages)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -91,8 +95,10 @@ class ModelSelectionWidget(QWidget):
         top_form.setSpacing(4)
 
         self.combo_framework = QComboBox()
-        self.combo_framework.addItems(['MMSegmentation'])
-        self.combo_framework.setToolTip("目前仅支持 MMSegmentation")
+        # 从注册表动态读取框架列表
+        framework_names = get_all_display_names()
+        self.combo_framework.addItems(framework_names)
+        self.combo_framework.setToolTip("选择底层训练框架")
         top_form.addRow("框架:", self.combo_framework)
 
         self.combo_method = QComboBox()
@@ -110,14 +116,10 @@ class ModelSelectionWidget(QWidget):
         # 初始化第一个算法的 Backbone 列表
         self._update_backbone_list(self.combo_method.currentText())
 
-        # (预训练权重相关配置已移至 weight_selection_widget)
-        # layout.addLayout(top_form) 已经完成使命，不过原代码是 addLayout 到主 layout
-
-
     def _connect_signals(self):
         self.combo_method.currentTextChanged.connect(self._on_method_changed)
         self.combo_backbone.currentTextChanged.connect(self._on_backbone_changed)
-        self.combo_framework.currentTextChanged.connect(lambda: self.config_changed.emit())
+        self.combo_framework.currentTextChanged.connect(self._on_framework_changed)
 
     def _update_backbone_list(self, method_name: str):
         """根据选中的算法更新Backbone列表"""
@@ -129,6 +131,12 @@ class ModelSelectionWidget(QWidget):
             self.combo_backbone.setCurrentIndex(0)
         else:
             self.combo_backbone.setEnabled(False)
+
+    def _on_framework_changed(self, display_name: str):
+        """框架切换：广播 framework_changed 信号，携带所需包列表。"""
+        packages = get_required_packages(display_name)
+        self.framework_changed.emit(display_name, packages)
+        self.config_changed.emit()
 
     def _on_method_changed(self, method_name: str):
         """算法改变时更新Backbone列表"""
@@ -144,7 +152,8 @@ class ModelSelectionWidget(QWidget):
 
         Returns:
             dict: {
-                'framework': str,
+                'framework': str,        # 显示名称
+                'framework_key': str,    # 注册表 key
                 'method': str,
                 'backbone': str,
                 'backbone_key': str,
@@ -152,9 +161,12 @@ class ModelSelectionWidget(QWidget):
         """
         backbone_name = self.combo_backbone.currentText()
         method_name = self.combo_method.currentText()
+        display_name = self.combo_framework.currentText()
         return {
-            'framework': self.combo_framework.currentText(),
+            'framework': display_name,
+            'framework_key': get_key_by_display_name(display_name) or '',
             'method': method_name,
             'backbone': backbone_name,
             'backbone_key': BACKBONE_CHOICES.get(backbone_name, ''),
         }
+

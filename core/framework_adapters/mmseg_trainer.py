@@ -335,9 +335,20 @@ class MMSegTrainer(BaseTrainer):
         self._config_path = save_path
         return os.path.abspath(save_path)
 
-    def start_training(self, config_path: str, work_dir: str) -> None:
+    def start_training(
+        self,
+        config_path: str,
+        work_dir: str,
+        python_path: Optional[str] = None,
+    ) -> None:
         """
         使用 subprocess.Popen 启动 MMSeg 训练。
+
+        Args:
+            config_path:  训练配置文件路径
+            work_dir:     训练工作目录
+            python_path:  指定 Python 解释器（conda 环境）。
+                          为 None 时回退到 sys.executable。
         """
         if self.is_running():
             raise RuntimeError("训练进程已在运行，请先停止当前训练")
@@ -349,29 +360,28 @@ class MMSegTrainer(BaseTrainer):
         self._config_path = config_path
         self._work_dir = work_dir
 
+        # 确定使用的 Python 解释器
+        interpreter = python_path if (python_path and os.path.isfile(python_path)) else sys.executable
+        if python_path and not os.path.isfile(python_path):
+            print(f"[Warning] 指定的 python_path 不存在: {python_path}，回退到 sys.executable")
+
         # 动态寻找 mmsegmentation 的 train.py 文件
-        import mmseg
-        mmseg_dir = os.path.dirname(mmseg.__file__)
-        
-        # 常见安装方式: 通过 mim 安装会在 .mim/tools 下
-        train_script = os.path.join(mmseg_dir, '.mim', 'tools', 'train.py')
-        
-        if not os.path.isfile(train_script):
-            # 常见安装方式: 源码安装 (pip install -e .)
-            train_script = os.path.join(os.path.dirname(mmseg_dir), 'tools', 'train.py')
-            
-        if not os.path.isfile(train_script):
-            raise FileNotFoundError(f"找不到 MMSeg 训练脚本(train.py)。请确保已正确安装 mmsegmentation。尝试的位置: {train_script}")
+        # 使用目标解释器探测 mmseg 安装位置，而非当前进程的 mmseg
+        train_script = self._find_train_script(interpreter)
 
         cmd = [
-            sys.executable, '-u', train_script,
+            interpreter, '-u', train_script,
             config_path,
             '--work-dir', work_dir,
         ]
-        
+
         env = os.environ.copy()
         current_pythonpath = env.get('PYTHONPATH', '')
-        env['PYTHONPATH'] = f"{os.path.abspath(work_dir)}{os.pathsep}{current_pythonpath}" if current_pythonpath else os.path.abspath(work_dir)
+        env['PYTHONPATH'] = (
+            f"{os.path.abspath(work_dir)}{os.pathsep}{current_pythonpath}"
+            if current_pythonpath
+            else os.path.abspath(work_dir)
+        )
 
         self._process = subprocess.Popen(
             cmd,
@@ -383,6 +393,51 @@ class MMSegTrainer(BaseTrainer):
             encoding='utf-8',
             errors='replace',
             creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == 'win32' else 0,
+        )
+
+    def _find_train_script(self, interpreter: str) -> str:
+        """
+        在目标解释器的环境中查找 mmseg train.py。
+
+        优先顺序：
+        1. 通过目标解释器探测 mmseg 安装路径（支持 conda 环境）
+        2. 当前进程的 mmseg 安装路径（回退）
+        """
+        # 方式1：用目标解释器探测（适用于 conda 环境与当前进程不同的情况）
+        try:
+            probe = subprocess.check_output(
+                [interpreter, '-c',
+                 'import mmseg, os; print(os.path.dirname(mmseg.__file__))'],
+                text=True, timeout=10, stderr=subprocess.DEVNULL,
+            ).strip()
+            if probe:
+                # mim 安装方式
+                candidate = os.path.join(probe, '.mim', 'tools', 'train.py')
+                if os.path.isfile(candidate):
+                    return candidate
+                # 源码安装方式
+                candidate = os.path.join(os.path.dirname(probe), 'tools', 'train.py')
+                if os.path.isfile(candidate):
+                    return candidate
+        except Exception:
+            pass
+
+        # 方式2：当前进程的 mmseg（回退）
+        try:
+            import mmseg
+            mmseg_dir = os.path.dirname(mmseg.__file__)
+            candidate = os.path.join(mmseg_dir, '.mim', 'tools', 'train.py')
+            if os.path.isfile(candidate):
+                return candidate
+            candidate = os.path.join(os.path.dirname(mmseg_dir), 'tools', 'train.py')
+            if os.path.isfile(candidate):
+                return candidate
+        except ImportError:
+            pass
+
+        raise FileNotFoundError(
+            "找不到 MMSeg 训练脚本(train.py)。"
+            "请确保已在目标 conda 环境中正确安装 mmsegmentation。"
         )
 
     def stop_training(self) -> None:

@@ -539,12 +539,15 @@ class MainWindow(QMainWindow):
         )
         # 初始化调用一次以填充默认的预训练列表
         self.ui.widget_weightSelection.update_backbone(self.ui.widget_modelSelection.combo_backbone.currentText())
-        self.ui.widget_modelSelection.combo_framework.currentTextChanged.connect(
+        # 联动：框架切换时通知 EnvConfigWidget 更新探针包列表
+        self.ui.widget_modelSelection.framework_changed.connect(
             self.ui.widget_envConfig.set_framework
         )
-        self.ui.widget_envConfig.set_framework(
-            self.ui.widget_modelSelection.combo_framework.currentText()
-        )
+        # 初始化：用当前框架的显示名称和包列表初始化 EnvConfigWidget
+        from core.framework_registry import get_required_packages
+        initial_framework = self.ui.widget_modelSelection.combo_framework.currentText()
+        initial_packages = get_required_packages(initial_framework)
+        self.ui.widget_envConfig.set_framework(initial_framework, initial_packages)
         
         # ========== 核心：主 Tab 与侧边栏联动 ==========
         # 右侧 Tab 切换时，自动切换左侧侧边栏
@@ -1016,15 +1019,29 @@ class MainWindow(QMainWindow):
             
             self._last_work_dir = work_dir
             self.btn_send_to_inference.setVisible(False)
-            
+
             # ====== Step 4: 创建并启动训练线程 ======
             from core.training_dispatcher import TrainingThread
-            
+
+            # 从 EnvStateManager 获取已验证的 Python 解释器路径（解耦）
+            # 回退：若 EnvStateManager 无缓存，则直接从 widget 读取
+            from core.env_state_manager import EnvStateManager
+            env_mgr = EnvStateManager.instance()
+            if env_mgr.python_path:
+                python_path = env_mgr.python_path
+            elif hasattr(self.ui, 'widget_envConfig'):
+                python_path = self.ui.widget_envConfig.get_selected_python_path() or None
+            else:
+                python_path = None
+
             self._training_thread = TrainingThread(
                 trainer=trainer,
                 config_path=config_path,
                 work_dir=work_dir,
+                python_path=python_path,
             )
+            if python_path:
+                self._log_to_bottom(f"🐍 使用解释器: {python_path}")
             
             # 连接信号
             self._training_thread.log_raw.connect(self._on_training_log_raw)

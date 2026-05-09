@@ -8,15 +8,13 @@
 Training Roadmap Phase 4, Task X
 """
 
-import copy
 import json
 from typing import Any, Dict
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QFrame, QLabel, QPlainTextEdit,
-    QHBoxLayout, QSizePolicy, QPushButton, QDialog, QDialogButtonBox,
-    QScrollArea
+    QPushButton, QDialog, QDialogButtonBox, QScrollArea
 )
-from PySide6.QtCore import Signal, Qt
+from PySide6.QtCore import Signal, Slot
 
 from ui.widgets.custom_widgets import CollapsibleBox, ParamRow
 
@@ -48,19 +46,24 @@ class AdvancedConfigWidget(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(6)
 
-        # 任务配置面板中仅保留入口，高级专家配置内容改为独立弹出卡片
         self._expert_dialog = None
         self.button_open_expert_card = QPushButton("🛠️ 开启高级专家配置 (Enable Expert Settings)")
-        self.button_open_expert_card.setStyleSheet("font-weight: bold; color: #424242; text-align: left; padding: 6px;")
+        self.button_open_expert_card.setStyleSheet(
+            "font-weight: bold; color: #424242; text-align: left; padding: 6px;"
+        )
         self.button_open_expert_card.setToolTip("打开独立卡片，调整 MMSegmentation 的底层或较不常用的超参数")
         self.button_open_expert_card.clicked.connect(self._show_expert_card)
         main_layout.addWidget(self.button_open_expert_card)
 
-        # 独立弹出卡片内容：直接展示高级专家配置
-        self.card_advanced = QFrame(self)
-        self.card_advanced.setFrameShape(QFrame.Shape.StyledPanel)
-        self.card_advanced.setStyleSheet("QFrame { background: #FFFFFF; border-radius: 8px; }")
-        card_layout = QVBoxLayout(self.card_advanced)
+        self.card_advanced = self._create_advanced_card()
+
+    def _create_advanced_card(self) -> QFrame:
+        """创建高级专家配置卡片内容。"""
+        card = QFrame(self)
+        card.setFrameShape(QFrame.Shape.StyledPanel)
+        card.setStyleSheet("QFrame { background: #FFFFFF; border-radius: 8px; }")
+
+        card_layout = QVBoxLayout(card)
         card_layout.setContentsMargins(0, 0, 0, 0)
         card_layout.setSpacing(6)
 
@@ -68,21 +71,17 @@ class AdvancedConfigWidget(QWidget):
         title_label.setStyleSheet("font-weight: bold; color: #424242; padding: 4px 4px 0 4px;")
         card_layout.addWidget(title_label)
 
-        # 高级配置内容
         self.container_advanced = QWidget()
         container_layout = QVBoxLayout(self.container_advanced)
         container_layout.setContentsMargins(0, 0, 0, 0)
         container_layout.setSpacing(8)
 
-        # 构建动态配置树
         self._build_config_tree(container_layout)
-
-        # 构建 JSON 覆写区
         self._build_override_area(container_layout)
-
         card_layout.addWidget(self.container_advanced)
+        return card
 
-
+    @Slot()
     def _show_expert_card(self):
         """以独立弹出卡片展示高级专家配置内容。"""
         if self._expert_dialog is None:
@@ -203,12 +202,11 @@ class AdvancedConfigWidget(QWidget):
             return "int"
         return "lineedit"
 
-    def _on_expert_mode_toggled(self, checked: bool):
-        self.container_advanced.setVisible(checked)
-
+    @Slot(object)
     def _on_param_changed(self, row_widget):
         self.config_changed.emit()
 
+    @Slot()
     def _validate_override_json(self):
         """验证覆写区的内容是否为合法的 JSON 字典"""
         text = self.text_override.toPlainText().strip()

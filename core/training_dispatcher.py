@@ -38,12 +38,14 @@ class TrainingThread(QThread):
         trainer: BaseTrainer,
         config_path: str,
         work_dir: str,
-        parent=None
+        python_path: Optional[str] = None,
+        parent=None,
     ):
         super().__init__(parent)
         self._trainer = trainer
         self._config_path = config_path
         self._work_dir = work_dir
+        self._python_path = python_path   # 目标 conda 环境解释器路径
         self._should_stop = False
 
     def run(self):
@@ -51,8 +53,12 @@ class TrainingThread(QThread):
         线程主函数：启动训练并持续读取日志。
         """
         try:
-            # 启动训练子进程
-            self._trainer.start_training(self._config_path, self._work_dir)
+            # 启动训练子进程（传递 python_path 以使用目标 conda 环境）
+            self._trainer.start_training(
+                self._config_path,
+                self._work_dir,
+                python_path=self._python_path,
+            )
 
             process = self._trainer.get_process()
             if process is None:

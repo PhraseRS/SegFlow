@@ -69,7 +69,12 @@ class BaseTrainer(ABC):
         ...
 
     @abstractmethod
-    def start_training(self, config_path: str, work_dir: str) -> None:
+    def start_training(
+        self,
+        config_path: str,
+        work_dir: str,
+        python_path: Optional[str] = None,
+    ) -> None:
         """
         启动训练子进程。
 
@@ -77,8 +82,10 @@ class BaseTrainer(ABC):
         调用后可通过 is_running / get_process 与子进程交互。
 
         Args:
-            config_path: 训练配置文件路径（由 generate_config 生成）
-            work_dir: 训练工作目录（存放日志、检查点等）
+            config_path:  训练配置文件路径（由 generate_config 生成）
+            work_dir:     训练工作目录（存放日志、检查点等）
+            python_path:  指定 Python 解释器路径（conda 环境）。
+                          为 None 时回退到 sys.executable（向后兼容）。
 
         Raises:
             FileNotFoundError: config_path 不存在时
