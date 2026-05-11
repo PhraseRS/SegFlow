@@ -1054,9 +1054,7 @@ class MainWindow(QMainWindow):
             # 更新按钮状态
             self.ui.pushButton_run.setEnabled(False)
             self.ui.pushButton_stop.setEnabled(True)
-            self.ui.label_trainInfo.setText("🚀 训练进行中...")
-            self.ui.label_trainInfo.setStyleSheet("color: #1565C0; font-weight: bold; padding: 2px;")
-            self.statusBar().showMessage("训练已启动")
+            self.statusBar().showMessage("🚀 训练进行中...")
             
             # 启动前清理旧的曲线残留并自动切换到指标 Tab
             if getattr(self, 'metrics_plot', None):
@@ -1091,8 +1089,7 @@ class MainWindow(QMainWindow):
         if self._training_thread is not None and self._training_thread.isRunning():
             self._log_to_bottom("⏹ 正在停止训练...")
             self._training_thread.stop()
-            self.ui.label_trainInfo.setText("⏹ 正在停止训练...")
-            self.statusBar().showMessage("正在停止训练...")
+            self.statusBar().showMessage("⏹ 正在停止训练...")
             self.ui.pushButton_stop.setEnabled(False)
         else:
             self._log_to_bottom("⚠️ 没有正在运行的训练任务")
@@ -1158,7 +1155,7 @@ class MainWindow(QMainWindow):
     def _on_training_progress(self, current: int, total: int):
         """训练进度更新"""
         pct = (current / total * 100) if total > 0 else 0
-        self.ui.label_trainInfo.setText(
+        self.statusBar().showMessage(
             f"🚀 训练进行中: {current}/{total}  ({pct:.1f}%)"
         )
     
@@ -1166,17 +1163,13 @@ class MainWindow(QMainWindow):
         """训练完成回调"""
         if exit_code == 0:
             self._log_to_bottom("✅ 训练顺利完成！")
-            self.statusBar().showMessage("训练完成")
-            self.ui.label_trainInfo.setText("✅ 训练完成")
-            self.ui.label_trainInfo.setStyleSheet("color: #2E7D32; font-weight: bold; padding: 2px;")
-            
+            self.statusBar().showMessage("✅ 训练完成")
+
             if hasattr(self, '_last_work_dir') and self._last_work_dir:
                 self.btn_send_to_inference.setVisible(True)
         else:
             self._log_to_bottom(f"⚠️ 训练退出 (exit code: {exit_code})")
-            self.statusBar().showMessage(f"训练退出 (code: {exit_code})")
-            self.ui.label_trainInfo.setText(f"⚠️ 训练退出 (code: {exit_code})")
-            self.ui.label_trainInfo.setStyleSheet("color: #E65100; font-weight: bold; padding: 2px;")
+            self.statusBar().showMessage(f"⚠️ 训练退出 (code: {exit_code})")
         self._reset_training_ui()
     
     def _on_training_error(self, error_msg: str):

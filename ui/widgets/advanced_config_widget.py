@@ -56,6 +56,7 @@ class AdvancedConfigWidget(QWidget):
         main_layout.addWidget(self.button_open_expert_card)
 
         self.card_advanced = self._create_advanced_card()
+        self.card_advanced.setVisible(False)  # 仅在弹出对话框时显示
 
     def _create_advanced_card(self) -> QFrame:
         """创建高级专家配置卡片内容。"""
@@ -98,6 +99,7 @@ class AdvancedConfigWidget(QWidget):
             scroll_area.setWidgetResizable(True)
             scroll_area.setFrameShape(QFrame.Shape.NoFrame)
             scroll_area.setWidget(self.card_advanced)
+            self.card_advanced.setVisible(True)
             dialog_layout.addWidget(scroll_area)
 
             button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Close, self._expert_dialog)

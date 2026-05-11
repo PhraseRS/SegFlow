@@ -12,7 +12,7 @@
 | 框架注册表 | `core/framework_registry.py` | 数据驱动的框架元数据注册，提供包列表/Trainer 类路径 |
 | 异步环境探针 | `utils/env_check_worker.py` | QThread Worker，后台执行 subprocess 探针 |
 | 环境状态管理器 | `core/env_state_manager.py` | QObject 单例，持有并广播环境就绪状态 |
-| 环境配置 UI | `ui/widgets/env_config_widget.py` | 异步触发检测、展示结果、发射 Signal |
+| 环境配置 UI | `ui/widgets/env_config_widget.py` | 防抖自动验证、展示结果、发射 Signal |
 | 模型选择 UI | `ui/widgets/model_selection_widget.py` | 从注册表动态读取框架列表，发射 `framework_changed` |
 | 训练器基类 | `core/framework_adapters/base_trainer.py` | 抽象接口，含 `python_path` 参数 |
 | MMSeg 训练器 | `core/framework_adapters/mmseg_trainer.py` | 使用目标解释器启动训练子进程 |
@@ -26,15 +26,25 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                  任务配置 Tab (右侧面板)                      │
-│  ┌──────────────────────┐  ┌──────────────────────────────┐ │
-│  │  ModelSelectionWidget│  │     EnvConfigWidget          │ │
-│  │  - 从 Registry 读取  │  │  - 启动 EnvCheckWorker       │ │
-│  │    框架列表           │  │  - 显示 Loading / 结果       │ │
-│  └──────────┬───────────┘  └───────────┬──────────────────┘ │
-│             │ framework_changed         │ env_ready/not_ready│
-│             │ (display_name, packages)  │                    │
-└─────────────┼───────────────────────────┼────────────────────┘
+│              任务配置 Tab (右侧面板，自上而下)                  │
+│                                                             │
+│  ┌──────────────────────┐  配置区                           │
+│  │  ModelSelectionWidget │  ← 框架/模型选择                  │
+│  │  WeightSelection      │  ← 权重选择                      │
+│  │  Advisor / Hyperparams│  ← 参数配置                      │
+│  │  AdvancedConfig       │  ← 高级参数                      │
+│  └──────────┬────────────┘                                  │
+│             │ framework_changed(display_name, packages)      │
+│  ┌──────────▼────────────┐  运行前检查区 (Preflight Check)   │
+│  │  EnvConfigWidget      │  ← 环境准备状态                   │
+│  │  - 启动 EnvCheckWorker│                                  │
+│  │  - 显示 Loading / 结果│                                  │
+│  └──────────┬────────────┘                                  │
+│             │ env_ready / not_ready                          │
+│  ┌──────────▼────────────┐  动作区                           │
+│  │  Run / Stop / Export  │  ← 操作按钮                      │
+│  └───────────────────────┘                                  │
+└─────────────────────────────────────────────────────────────┘
               ↓                           ↓
 ┌─────────────────────────────────────────────────────────────┐
 │                  EnvStateManager (QObject 单例)              │
@@ -61,14 +71,20 @@
 
 ## 3. 核心流程
 
-### 3.1 环境检测流程
+### 3.1 环境检测流程（防抖自动验证）
 
 ```
-用户点击 "Validate"
+用户切换下拉 / 编辑路径
+    ↓ _on_env_changed() / _on_custom_path_edited()
+    ↓ 路径同步到输入框 + 失效缓存
+    ↓ _schedule_auto_validate(800ms / 1200ms)
+    ↓ [防抖定时器 QTimer.singleShot]
+    ↓ 到期 → _auto_validate()
+    ↓ 检查路径是否变化 & 是否已有缓存 → 跳过或继续
     ↓
-EnvConfigWidget.validate_env()
-    ↓ 禁用按钮，显示 Loading 状态
-创建 EnvCheckWorker(python_path, required_packages)
+validate_env():
+    ↓ 禁用 Re-check 按钮，显示 Loading 状态
+    ↓ 创建 EnvCheckWorker(python_path, required_packages)
     ↓ worker.start()
 [后台线程] _probe():
     ↓ subprocess.check_output(python_path, "-c", probe_code)
@@ -77,7 +93,7 @@ EnvConfigWidget.validate_env()
     ↓ check_finished.emit(result)
 [主线程] _on_check_finished(result):
     ↓ _parse_check_result → (is_valid, message)
-    ↓ 更新 UI 状态标签
+    ↓ 更新 status_label（绿/红/蓝）
     ↓ EnvStateManager.instance().update(...)  → state_changed Signal
     ↓ env_ready / env_not_ready Signal
 _on_check_worker_done():
@@ -85,13 +101,24 @@ _on_check_worker_done():
     ↓ self._check_worker = None
 ```
 
+**触发条件与防抖时间**：
+
+| 触发 | 防抖延迟 | 说明 |
+|------|----------|------|
+| 切换下拉列表 | 800ms | 快速切换时只验证最后一个 |
+| 手动编辑输入框 | 1200ms | 等用户输入完毕 |
+| 点击 "Re-check" | 0ms（立即） | 手动强制重新验证 |
+| 验证进行中再次触发 | 取消旧 Worker | 启动新 Worker |
+
 ### 3.2 训练启动流程（python_path 传递链）
 
 ```
 用户点击 "运行"
     ↓
 主控制器._on_start_training()
-    ↓ ensure_ready_for_training() → 只读缓存，不发子进程
+    ↓ ensure_ready_for_training():
+    │   ├─ 有缓存 → 直接返回缓存结果
+    │   └─ 无缓存 → 自动执行同步验证（兜底，1-2s 可接受）
     ↓ 从 EnvStateManager.instance().python_path 获取解释器
     ↓ 回退：widget_envConfig.get_selected_python_path()
     ↓
@@ -157,13 +184,51 @@ spec.load_trainer_class() → Type[BaseTrainer]  # 延迟 importlib 导入
 - `ConfigHealthBar` 在构造时订阅，实时更新 env pill
 - 主控制器训练启动时从 `EnvStateManager.python_path` 读取
 
-### 4.4 EnvConfigWidget 异步模式
+### 4.4 EnvConfigWidget 交互模式
 
+**面板位置**：位于任务配置 Tab 底部、操作按钮（Run/Stop/Export）正上方，作为"运行前检查区（Preflight Check）"。设计意图：用户从上到下完成配置后，自然下滑确认环境就绪，再点击运行。
+
+**UI 布局**（精简后）：
+
+```
+┌─────────────────────────────────────────────────┐
+│ Conda environments                    [Refresh] │
+│ ┌─────────────────────────────────────────────┐ │
+│ │ py38mm1x - D:\anaconda3\envs\...  ▼        │ │
+│ └─────────────────────────────────────────────┘ │
+│                                                 │
+│ Python executable                  [Re-check ↻] │
+│ ┌─────────────────────────────────────────────┐ │
+│ │ D:\anaconda3\envs\py38mm1x\python.exe       │ │
+│ └─────────────────────────────────────────────┘ │
+│                                                 │
+│ ┌─────────────────────────────────────────────┐ │
+│ │ ✅ Ready: Python 3.8 | Torch 2.4 | CUDA ✓  │ │
+│ └─────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────┘
+```
+
+**已移除**：`Use Selected` 按钮、`summary_label`（冗余信息）
+
+**核心行为**：
+
+- 切换下拉 → 路径自动填入输入框 → 防抖 800ms → 自动验证
+- 手动编辑输入框 → 防抖 1200ms → 自动验证
+- "Re-check" 按钮 → 立即强制重新验证（安装新包后手动重试）
 - `refresh_envs()`：内部创建轻量 `_RefreshWorker(QThread)` 执行 `conda env list`
 - `validate_env()`：创建 `EnvCheckWorker`，连接 `check_finished` → `_on_check_finished`
-- Worker 完成后通过 `_on_check_worker_done()` 调用 `deleteLater()` 并置 `self._check_worker = None`，防止访问已删除 C++ 对象
-- `ensure_ready_for_training()`：**只读缓存**，无缓存时提示用户先点 Validate
-- `_schedule_refresh()`：构造时用 `QTimer.singleShot(0, ...)` 延迟刷新，不阻塞父组件初始化
+- Worker 完成后通过 `_on_check_worker_done()` 调用 `deleteLater()` 并置 `self._check_worker = None`
+- `ensure_ready_for_training()`：有缓存直接返回；无缓存自动执行同步验证（兜底）
+- `_schedule_refresh()`：构造时用 `QTimer.singleShot(0, ...)` 延迟刷新
+
+**状态标签颜色**：
+
+| 状态 | 样式 |
+|------|------|
+| 未选择 | 灰底 |
+| 验证中 | 蓝底 + "🔍 正在检测..." |
+| 通过 | 绿底 + "✅ Ready: ..." |
+| 失败 | 红底 + "❌ ..." / "⚠️ Incomplete: ..." |
 
 ### 4.5 ConfigHealthBar 5 维度评分
 
@@ -209,7 +274,7 @@ spec.load_trainer_class() → Type[BaseTrainer]  # 延迟 importlib 导入
 | Python 解释器探针 | 后台 EnvCheckWorker | QThread + Signal |
 | UI 更新 | 主线程 | Signal/Slot 自动 marshal |
 | 训练启动 | TrainingThread（已有） | 现有机制 |
-| ensure_ready_for_training | 主线程 | 只读缓存，不发子进程 |
+| ensure_ready_for_training | 主线程 | 读缓存；无缓存时同步兜底验证 |
 
 ---
 

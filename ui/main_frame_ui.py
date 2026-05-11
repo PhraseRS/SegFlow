@@ -283,18 +283,6 @@ class Ui_MainWindow(object):
         self.verticalLayout_model.addWidget(self.widget_modelSelection)
         self.verticalLayout_taskConfigContent.addWidget(self.groupBox_modelSelection)
 
-        self.groupBox_environment = QGroupBox(self.scrollAreaWidget_taskConfig)
-        self.groupBox_environment.setObjectName(u"groupBox_environment")
-        self.verticalLayout_environment = QVBoxLayout(self.groupBox_environment)
-        self.verticalLayout_environment.setObjectName(u"verticalLayout_environment")
-        self.verticalLayout_environment.setContentsMargins(6, 6, 6, 6)
-
-        self.widget_envConfig = EnvConfigWidget(self.groupBox_environment)
-        self.widget_envConfig.setObjectName(u"widget_envConfig")
-        self.verticalLayout_environment.addWidget(self.widget_envConfig)
-
-        self.verticalLayout_taskConfigContent.addWidget(self.groupBox_environment)
-        
         # 2. 权重选择组
         self.groupBox_weightSelection = QGroupBox(self.scrollAreaWidget_taskConfig)
         self.groupBox_weightSelection.setObjectName(u"groupBox_weightSelection")
@@ -328,12 +316,6 @@ class Ui_MainWindow(object):
         self.verticalLayout_hyperparams.addWidget(self.widget_hyperparamTabs)
         self.verticalLayout_taskConfigContent.addWidget(self.groupBox_hyperparams)
         
-        # 训练状态提示标签
-        self.label_trainInfo = QLabel(self.scrollAreaWidget_taskConfig)
-        self.label_trainInfo.setObjectName(u"label_trainInfo")
-        self.label_trainInfo.setStyleSheet("color: #888; font-style: italic; padding: 2px;")
-        self.verticalLayout_taskConfigContent.addWidget(self.label_trainInfo)
-        
         # 参数配置 - 嵌入高级配置组件
         self.groupBox_paramConfig = QGroupBox(self.scrollAreaWidget_taskConfig)
         self.groupBox_paramConfig.setObjectName(u"groupBox_paramConfig")
@@ -346,7 +328,20 @@ class Ui_MainWindow(object):
         self.verticalLayout_paramConfig.addWidget(self.widget_advancedConfig)
         
         self.verticalLayout_taskConfigContent.addWidget(self.groupBox_paramConfig)
-        
+
+        # 运行前检查：环境准备状态（Preflight Check）
+        self.groupBox_environment = QGroupBox(self.scrollAreaWidget_taskConfig)
+        self.groupBox_environment.setObjectName(u"groupBox_environment")
+        self.verticalLayout_environment = QVBoxLayout(self.groupBox_environment)
+        self.verticalLayout_environment.setObjectName(u"verticalLayout_environment")
+        self.verticalLayout_environment.setContentsMargins(6, 6, 6, 6)
+
+        self.widget_envConfig = EnvConfigWidget(self.groupBox_environment)
+        self.widget_envConfig.setObjectName(u"widget_envConfig")
+        self.verticalLayout_environment.addWidget(self.widget_envConfig)
+
+        self.verticalLayout_taskConfigContent.addWidget(self.groupBox_environment)
+
         # 操作按钮
         self.groupBox_actions = QGroupBox(self.scrollAreaWidget_taskConfig)
         self.groupBox_actions.setObjectName(u"groupBox_actions")
@@ -571,8 +566,7 @@ class Ui_MainWindow(object):
         
         # Tab 2: 任务配置
         self.tabWidget_contextControl.setTabText(self.tabWidget_contextControl.indexOf(self.tab_taskConfig), QCoreApplication.translate("MainWindow", u"\u4efb\u52a1\u914d\u7f6e (Task Config)", None))
-        self.label_trainInfo.setText(QCoreApplication.translate("MainWindow", u"\u2139\ufe0f \u914d\u7f6e\u53c2\u6570\u540e\uff0c\u70b9\u51fb\u4e0b\u65b9\u300c\u8fd0\u884c\u300d\u6309\u94ae\u5f00\u59cb\u8bad\u7ec3", None))
-        
+
         self.groupBox_modelSelection.setTitle(QCoreApplication.translate("MainWindow", u"\u6a21\u578b\u9009\u62e9 (Model Selection)", None))
         self.groupBox_weightSelection.setTitle(QCoreApplication.translate("MainWindow", u"\u6743\u91cd\u9009\u62e9 (Weight Selection)", None))
         self.groupBox_advisorConfig.setTitle(QCoreApplication.translate("MainWindow", u"\u6570\u636e\u9a71\u52a8\u63a8\u8350 (Data-Driven Advisor)", None))

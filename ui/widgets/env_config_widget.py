@@ -8,7 +8,7 @@ EnvConfigWidget - 环境配置与检测组件
 
 from typing import Optional
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QTimer
 from PySide6.QtWidgets import (
     QComboBox,
     QHBoxLayout,
@@ -49,6 +49,7 @@ class EnvConfigWidget(QWidget):
         self._last_validation_result = None
         self._check_worker = None   # type: Optional[EnvCheckWorker]
         self._refresh_worker = None  # type: Optional[EnvCheckWorker]
+        self._debounce_timer = None  # type: Optional[QTimer]
         self._init_ui()
         # 延迟刷新，避免构造时阻塞
         self._schedule_refresh()
@@ -76,32 +77,24 @@ class EnvConfigWidget(QWidget):
 
         layout.addLayout(select_row)
 
+        # Python executable 行：标签 + Re-check 按钮
+        path_row = QHBoxLayout()
+        path_row.setSpacing(8)
         path_label = QLabel("Python executable")
         path_label.setStyleSheet("font-weight: bold; color: #495057;")
-        layout.addWidget(path_label)
+        path_row.addWidget(path_label)
+        path_row.addStretch()
+
+        self.validate_button = QPushButton("Re-check")
+        self.validate_button.setToolTip("手动重新验证当前环境（安装新包后使用）")
+        self.validate_button.clicked.connect(self.validate_env)
+        path_row.addWidget(self.validate_button)
+        layout.addLayout(path_row)
 
         self.custom_path = QLineEdit()
         self.custom_path.setPlaceholderText("e.g. D:\\anaconda3\\envs\\mmseg\\python.exe")
         self.custom_path.textEdited.connect(self._on_custom_path_edited)
         layout.addWidget(self.custom_path)
-
-        button_row = QHBoxLayout()
-        button_row.setSpacing(8)
-
-        self.use_selected_button = QPushButton("Use Selected")
-        self.use_selected_button.clicked.connect(self._fill_selected_env_path)
-        button_row.addWidget(self.use_selected_button)
-
-        self.validate_button = QPushButton("Validate")
-        self.validate_button.clicked.connect(self.validate_env)
-        button_row.addWidget(self.validate_button)
-
-        layout.addLayout(button_row)
-
-        self.summary_label = QLabel("Select an environment or enter a Python path.")
-        self.summary_label.setWordWrap(True)
-        self.summary_label.setStyleSheet("color: #6C757D;")
-        layout.addWidget(self.summary_label)
 
         self.framework_hint_label = QLabel("")
         self.framework_hint_label.setWordWrap(True)
@@ -112,7 +105,7 @@ class EnvConfigWidget(QWidget):
         self.framework_hint_label.setVisible(False)
         layout.addWidget(self.framework_hint_label)
 
-        self.status_label = QLabel("Status: waiting for environment selection")
+        self.status_label = QLabel("请选择 Python 环境")
         self.status_label.setWordWrap(True)
         self.status_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         self.status_label.setStyleSheet(
@@ -121,10 +114,35 @@ class EnvConfigWidget(QWidget):
         )
         layout.addWidget(self.status_label)
 
+        # 防抖定时器（切换环境/编辑路径后延迟自动验证）
+        self._debounce_timer = QTimer(self)
+        self._debounce_timer.setSingleShot(True)
+        self._debounce_timer.timeout.connect(self._auto_validate)
+
     def _schedule_refresh(self):
         """延迟一个事件循环周期后再刷新，避免构造时阻塞父组件初始化。"""
-        from PySide6.QtCore import QTimer
         QTimer.singleShot(0, self.refresh_envs)
+
+    # ------------------------------------------------------------------
+    # 防抖自动验证
+    # ------------------------------------------------------------------
+
+    def _schedule_auto_validate(self, delay_ms: int = 800):
+        """启动防抖定时器，延迟后自动触发验证。"""
+        self._debounce_timer.stop()
+        self._debounce_timer.setInterval(delay_ms)
+        self._debounce_timer.start()
+
+    def _auto_validate(self):
+        """防抖定时器到期，自动触发验证。"""
+        python_path = self.get_selected_python_path()
+        if not python_path:
+            return
+        # 如果路径没变且已有缓存结果，跳过
+        if (self._last_validated_path == python_path
+                and self._last_validation_result is not None):
+            return
+        self.validate_env()
 
     # ------------------------------------------------------------------
     # 环境列表刷新（异步）
@@ -133,7 +151,6 @@ class EnvConfigWidget(QWidget):
     def refresh_envs(self):
         """异步刷新 conda 环境列表，不阻塞主线程。"""
         self.refresh_button.setEnabled(False)
-        self.summary_label.setText("🔍 正在扫描 conda 环境...")
         self._set_status_loading("正在扫描 conda 环境，请稍候...")
 
         from PySide6.QtCore import QThread
@@ -171,20 +188,12 @@ class EnvConfigWidget(QWidget):
         if not self._envs:
             self.env_select.addItem("No conda environments detected", "")
             self.env_select.setEnabled(False)
-            self.use_selected_button.setEnabled(False)
-            self.summary_label.setText(
-                "Conda environment auto-discovery is unavailable. "
-                "You can still validate a Python interpreter manually."
-            )
         else:
             self.env_select.setEnabled(True)
-            self.use_selected_button.setEnabled(True)
-            self.summary_label.setText(f"Detected {len(self._envs)} environment(s).")
 
         self.env_select.blockSignals(False)
         self._invalidate_validation_cache()
         self._fill_selected_env_path()
-        self._sync_status_preview()
 
     def _fill_selected_env_path(self):
         """将当前下拉选中的环境路径填入输入框（强制覆盖）。"""
@@ -192,52 +201,22 @@ class EnvConfigWidget(QWidget):
         if path:
             self.custom_path.setText(path)
             self._invalidate_validation_cache()
+            # 切换环境后自动触发验证（防抖 800ms）
+            self._schedule_auto_validate(800)
         elif not self.custom_path.text().strip():
             self.custom_path.clear()
-        self._update_selection_summary()
-        self._sync_status_preview()
 
     def _selected_env_path(self) -> str:
         return (self.env_select.currentData() or "").strip()
 
     def _on_env_changed(self, _index: int):
-        """下拉切换环境时，自动同步路径到输入框。"""
+        """下拉切换环境时，自动同步路径到输入框并触发验证。"""
         self._fill_selected_env_path()
 
     def _on_custom_path_edited(self, _text: str):
+        """用户手动编辑路径时，防抖 1200ms 后自动验证。"""
         self._invalidate_validation_cache()
-        self._update_selection_summary()
-        self._sync_status_preview()
-
-    def _update_selection_summary(self):
-        manual_path = self.custom_path.text().strip()
-        selected_path = self._selected_env_path()
-
-        if manual_path:
-            self.summary_label.setText(f"Using manual path: {manual_path}")
-        elif selected_path:
-            self.summary_label.setText(f"Using selected environment: {selected_path}")
-        else:
-            self.summary_label.setText(
-                "Select an environment or enter a Python path."
-            )
-
-    def _sync_status_preview(self):
-        python_path = self.custom_path.text().strip() or self._selected_env_path()
-        if python_path:
-            self.status_label.setStyleSheet(
-                "background-color: #F8F9FA; border: 1px solid #DEE2E6; "
-                "border-radius: 6px; padding: 8px; color: #495057;"
-            )
-            self.status_label.setText(f"Selected interpreter: {python_path}")
-        else:
-            self.status_label.setStyleSheet(
-                "background-color: #FFF8E1; border: 1px solid #FFE082; "
-                "border-radius: 6px; padding: 8px; color: #8D6E63;"
-            )
-            self.status_label.setText(
-                "No interpreter selected yet. Pick a detected environment or enter a Python path."
-            )
+        self._schedule_auto_validate(1200)
 
     def set_framework(self, framework_name: str, required_packages=None):
         """
@@ -414,20 +393,34 @@ class EnvConfigWidget(QWidget):
         return is_valid, message
 
     def ensure_ready_for_training(self):
-        """训练前同步检查：只读缓存，不发起新的子进程。"""
+        """
+        训练前检查环境就绪状态。
+
+        优先使用缓存结果；无缓存时自动执行一次同步验证
+        （用户已点"运行"，此时阻塞 1-2 秒可接受）。
+        """
         if not self.requires_environment_check():
             return True, ""
 
+        python_path = self.get_selected_python_path()
+        if not python_path:
+            msg = "未选择 Python 环境，请在环境面板中选择或输入路径。"
+            self._set_status(False, msg)
+            return False, msg
+
         # 优先使用缓存结果
-        if self._last_validation_result is not None and self._last_validated_path == self.get_selected_python_path():
+        if (self._last_validation_result is not None
+                and self._last_validated_path == python_path):
             is_valid, message = self._last_validation_result
             self._set_status(is_valid, message)
             return is_valid, message
 
-        # 无缓存时提示用户先验证
-        msg = "请先点击「Validate」按钮验证当前 Python 环境。"
-        self._set_status(False, msg)
-        return False, msg
+        # 无缓存：自动执行同步验证（兜底，正常流程中自动验证已覆盖）
+        is_valid, message = self.env_manager.validate_environment(python_path)
+        self._last_validated_path = python_path
+        self._last_validation_result = (is_valid, message)
+        self._set_status(is_valid, message)
+        return is_valid, message
 
     def _set_status_loading(self, message: str):
         """显示加载中状态。"""
