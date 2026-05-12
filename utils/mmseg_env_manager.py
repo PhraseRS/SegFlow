@@ -148,10 +148,21 @@ class MMSegEnvManager:
         except Exception as exc:
             return {"status": "error", "msg": f"Interpreter probe failed: {exc}"}
 
-    def validate_environment(self, python_path: str):
-        """Validate the selected Python environment."""
+    def validate_environment(self, python_path: str, version_constraints: dict = None):
+        """Validate the selected Python environment with optional version constraints."""
         result = self.check_env_health(python_path)
         details = result.get("details", {})
+
+        # 版本约束校验
+        if version_constraints and result.get("status") == "ready":
+            mismatches = self._check_constraints(details, version_constraints)
+            if mismatches:
+                install_parts = [f"{pkg}{c}" for pkg, c in version_constraints.items()]
+                return (
+                    False,
+                    f"版本不兼容: {'; '.join(mismatches)}\n"
+                    f"请运行: pip install {' '.join(install_parts)}",
+                )
 
         if result.get("status") == "ready":
             return (
@@ -174,3 +185,45 @@ class MMSegEnvManager:
             )
 
         return False, f"Validation failed: {result.get('msg', 'Unknown error')}"
+
+    @staticmethod
+    def _check_constraints(details: dict, constraints: dict) -> list:
+        """检查版本约束，返回不满足的描述列表。"""
+        import re
+
+        def parse_version(v: str):
+            clean = re.split(r'[^0-9.]', v)[0]
+            parts = []
+            for p in clean.split('.'):
+                try:
+                    parts.append(int(p))
+                except ValueError:
+                    break
+            while len(parts) < 3:
+                parts.append(0)
+            return tuple(parts)
+
+        def check_single(ver_tuple, op, bound_tuple):
+            if op == '>=': return ver_tuple >= bound_tuple
+            if op == '>':  return ver_tuple > bound_tuple
+            if op == '<=': return ver_tuple <= bound_tuple
+            if op == '<':  return ver_tuple < bound_tuple
+            if op == '==': return ver_tuple == bound_tuple
+            return True
+
+        mismatches = []
+        for pkg, constraint_str in constraints.items():
+            detected = details.get(pkg)
+            if not detected or detected == "unknown":
+                continue
+            ver = parse_version(detected)
+            for c in [x.strip() for x in constraint_str.split(',') if x.strip()]:
+                match = re.match(r'(>=|<=|>|<|==)\s*([\d.]+)', c)
+                if not match:
+                    continue
+                op, bound_str = match.group(1), match.group(2)
+                bound = parse_version(bound_str)
+                if not check_single(ver, op, bound):
+                    mismatches.append(f"{pkg} {detected} (需要 {constraint_str})")
+                    break
+        return mismatches

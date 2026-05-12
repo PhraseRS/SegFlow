@@ -431,26 +431,37 @@ class TaskConfigBlueprintWidget(QWidget):
     """任务配置视图中心总控面板"""
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._last_params: dict = {}
+        self._last_dataset_ready: bool = False
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(24)
-        
+
         # 标题区
         header = QLabel("任务配置蓝图 (Task Configuration Dashboard)")
         header.setStyleSheet("font-size: 18px; font-weight: bold; color: #212529;")
         layout.addWidget(header)
-        
+
         # 三大核心区块
         self.blueprint = PipelineBlueprintWidget()
         self.preview_strip = AugmentationPreviewStrip()
         self.health_bar = ConfigHealthBar()
-        
+
         layout.addWidget(self.blueprint, stretch=1)
         layout.addWidget(self.preview_strip, stretch=2)
         layout.addWidget(self.health_bar, stretch=1)
-        
+
+        # 订阅环境状态变化，实时同步健康度评分
+        from core.env_state_manager import EnvStateManager
+        EnvStateManager.instance().state_changed.connect(self._on_env_state_changed)
+
         # 默认更新初始状态
         self.update_blueprint({})
+
+    def _on_env_state_changed(self, _state: dict):
+        """环境状态变化时，用缓存的参数重新计算健康度评分。"""
+        self._update_health_score(self._last_params, self._last_dataset_ready)
 
     def update_blueprint(self, params: dict):
         """
@@ -531,6 +542,10 @@ class TaskConfigBlueprintWidget(QWidget):
           关键增强     20分
           环境就绪     20分  ← 由 EnvStateManager 实时更新
         """
+        # 缓存参数，供环境状态变化时重新评分
+        self._last_params = params
+        self._last_dataset_ready = dataset_ready
+
         raw_score = 0
         MAX_RAW = 100  # 每维度20分，共5维度
 

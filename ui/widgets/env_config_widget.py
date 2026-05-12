@@ -45,6 +45,7 @@ class EnvConfigWidget(QWidget):
         self._envs: list = []
         self._current_framework: str = ""
         self._required_packages: list = list(_MMSEG_PACKAGES)
+        self._version_constraints: dict = {}
         self._last_validated_path: str = ""
         self._last_validation_result = None
         self._check_worker = None   # type: Optional[EnvCheckWorker]
@@ -239,6 +240,10 @@ class EnvConfigWidget(QWidget):
             if pkgs:
                 self._required_packages = pkgs
 
+        # 更新版本约束
+        from core.framework_registry import get_version_constraints
+        self._version_constraints = get_version_constraints(self._current_framework)
+
         # 切换框架后缓存失效
         self._invalidate_validation_cache()
 
@@ -295,6 +300,7 @@ class EnvConfigWidget(QWidget):
         self._check_worker = EnvCheckWorker(
             python_path=python_path,
             required_packages=self._required_packages,
+            version_constraints=self._version_constraints,
             parent=self,
         )
         self._check_worker.check_finished.connect(self._on_check_finished)
@@ -356,6 +362,19 @@ class EnvConfigWidget(QWidget):
                 parts.append("CUDA " + ("Available" if details["cuda"] else "Not Available"))
             return True, "✅ Ready: " + " | ".join(parts)
 
+        if status == "version_mismatch":
+            msg = result.get("msg", "")
+            # 构建安装提示
+            install_parts = []
+            for pkg, constraint in self._version_constraints.items():
+                install_parts.append(f"{pkg}{constraint}")
+            install_cmd = "pip install " + " ".join(install_parts)
+            return False, (
+                f"❌ 版本不兼容: {msg}\n"
+                f"此 GUI 需要 MMSeg 1.x 配置格式，与 0.x 不兼容。\n"
+                f"请运行: {install_cmd}"
+            )
+
         if status == "incomplete":
             parts = [f"Python {details.get('python', '?')}"]
             for pkg in self._required_packages:
@@ -387,7 +406,9 @@ class EnvConfigWidget(QWidget):
             return self._last_validation_result
 
         # force_refresh=True 时回退到同步探针（仅用于训练前最终检查）
-        is_valid, message = self.env_manager.validate_environment(python_path)
+        is_valid, message = self.env_manager.validate_environment(
+            python_path, version_constraints=self._version_constraints
+        )
         self._last_validated_path = python_path
         self._last_validation_result = (is_valid, message)
         return is_valid, message
@@ -416,7 +437,9 @@ class EnvConfigWidget(QWidget):
             return is_valid, message
 
         # 无缓存：自动执行同步验证（兜底，正常流程中自动验证已覆盖）
-        is_valid, message = self.env_manager.validate_environment(python_path)
+        is_valid, message = self.env_manager.validate_environment(
+            python_path, version_constraints=self._version_constraints
+        )
         self._last_validated_path = python_path
         self._last_validation_result = (is_valid, message)
         self._set_status(is_valid, message)

@@ -30,12 +30,14 @@ class FrameworkSpec:
         required_packages: 环境探针需要检测的包列表
         trainer_class_path: 训练器类的完整导入路径（字符串，延迟导入避免循环依赖）
         description:       简短说明（用于 tooltip 等）
+        version_constraints: 包版本约束，如 {"mmseg": ">=1.0.0,<2.0.0"}
     """
     key: str
     display_name: str
     required_packages: List[str]
     trainer_class_path: str
     description: str = ""
+    version_constraints: Dict[str, str] = field(default_factory=dict)
 
     def load_trainer_class(self) -> Type:
         """
@@ -65,6 +67,11 @@ FRAMEWORK_REGISTRY: Dict[str, FrameworkSpec] = {
         required_packages=["torch", "mmcv", "mmseg"],
         trainer_class_path="core.framework_adapters.mmseg_trainer.MMSegTrainer",
         description="OpenMMLab 语义分割框架，支持 SegFormer、UperNet 等主流算法",
+        version_constraints={
+            "mmseg": ">=1.0.0,<2.0.0",
+            "mmcv": ">=2.0.0",
+            "mmengine": ">=0.7.0",
+        },
     ),
     # 未来扩展示例（注释保留，方便后续接入）：
     # "paddleseg": FrameworkSpec(
@@ -105,3 +112,12 @@ def get_required_packages(display_name: str) -> List[str]:
     if key is None:
         return []
     return FRAMEWORK_REGISTRY[key].required_packages
+
+
+
+def get_version_constraints(display_name: str) -> Dict[str, str]:
+    """根据显示名称获取版本约束字典，未找到时返回空字典。"""
+    key = get_key_by_display_name(display_name)
+    if key is None:
+        return {}
+    return FRAMEWORK_REGISTRY[key].version_constraints
