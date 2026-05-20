@@ -125,8 +125,8 @@ class DatasetOverviewWidget(QWidget):
         lo.addWidget(label)
         return widget
 
-    def update_data(self, train_count, val_count, test_count):
-        total = train_count + val_count + test_count
+    def update_data(self, train_count, val_count, test_count, unique_total=None):
+        total = unique_total if unique_total is not None else (train_count + val_count + test_count)
         self.label_total.setText(f"{total:,}")
         self.stacked_bar.set_data(train_count, val_count, test_count)
         if total > 0:

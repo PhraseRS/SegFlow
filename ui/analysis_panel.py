@@ -40,7 +40,8 @@ class AnalysisControlWidget(QWidget):
     
     # 信号
     start_clicked = Signal()
-    
+    cancel_clicked = Signal()
+
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
         self._sample_count = 0
@@ -133,7 +134,26 @@ class AnalysisControlWidget(QWidget):
             }
         """)
         progress_layout.addWidget(self.progress_bar)
-        
+
+        # 取消按钮
+        self.cancel_button = QPushButton("✕ 取消分析")
+        self.cancel_button.setMaximumHeight(28)
+        self.cancel_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.cancel_button.setStyleSheet("""
+            QPushButton {
+                background-color: #f44336;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                font-size: 11px;
+                padding: 4px 12px;
+            }
+            QPushButton:hover { background-color: #d32f2f; }
+            QPushButton:pressed { background-color: #b71c1c; }
+        """)
+        self.cancel_button.clicked.connect(self.cancel_clicked.emit)
+        progress_layout.addWidget(self.cancel_button)
+
         self.stacked.addWidget(self.progress_page)
         
         # === 页面2: 完成状态视图 ===
@@ -322,6 +342,8 @@ class AnalysisPanel(QWidget):
         """连接信号"""
         # 控制器的开始按钮
         self.control_widget.start_clicked.connect(self._on_manual_start)
+        # 控制器的取消按钮
+        self.control_widget.cancel_clicked.connect(self.stop_analysis)
         
         # 元数据管理器信号
         self.metadata_manager.signals.progress.connect(self._on_progress)

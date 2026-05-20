@@ -209,6 +209,7 @@ class InferencePanel(QWidget):
         
         self.pushButton_refreshRegistry = QPushButton("🔄 刷新")
         self.pushButton_refreshRegistry.setMaximumWidth(60)
+        self.pushButton_refreshRegistry.setToolTip("需要先在 Tab1 加载数据集才能扫描 work_dirs 中的训练记录")
         
         registry_layout.addWidget(self.comboBox_modelRegistry)
         registry_layout.addWidget(self.pushButton_refreshRegistry)
@@ -290,6 +291,7 @@ class InferencePanel(QWidget):
         self.radioButton_singleImage = QRadioButton("单图推理")
         self.radioButton_singleImage.setChecked(True)
         self.radioButton_batchInference = QRadioButton("批量推理")
+        self.radioButton_batchInference.setVisible(False)  # P0-3: 隐藏批量推理
         mode_layout.addWidget(self.radioButton_singleImage)
         mode_layout.addWidget(self.radioButton_batchInference)
         mode_layout.addStretch()
@@ -347,9 +349,9 @@ class InferencePanel(QWidget):
         
         # 策略说明
         self.label_strategyNote = QLabel(
-            "• 滑窗推理: 适用于中等大小图像\n"
-            "• 全图缩放: 仅用于小尺寸图像快速预览\n"
-            "• 大图分块: 适用于超大遥感影像（需要GDAL）"
+            "• 全图缩放：图像 ≤ 2000×2000 像素，快速预览\n"
+            "• 滑窗推理：图像 2000–20000 像素范围，标准推理\n"
+            "• 大图分块：图像 > 20000 像素超大影像（需 GDAL）"
         )
         self.label_strategyNote.setWordWrap(True)
         self.label_strategyNote.setStyleSheet("color: #666; font-size: 10px; font-style: italic;")
@@ -433,6 +435,7 @@ class InferencePanel(QWidget):
         self.doubleSpinBox_confThreshold.setMaximum(1.0)
         self.doubleSpinBox_confThreshold.setSingleStep(0.05)
         self.doubleSpinBox_confThreshold.setValue(0.5)
+        self.doubleSpinBox_confThreshold.setToolTip("置信度阈值，仅对支持置信度输出的模型有效")
         form_layout.addRow(self.label_confThreshold, self.doubleSpinBox_confThreshold)
         
         parent_layout.addWidget(self.groupBox_inferenceStrategy)
@@ -450,6 +453,7 @@ class InferencePanel(QWidget):
         
         # 批量推理按钮
         self.pushButton_batchInference = QPushButton("批量推理 (Batch Inference)")
+        self.pushButton_batchInference.setVisible(False)  # P0-3: 隐藏批量推理
         form_layout.addRow(self.pushButton_batchInference)
         
         # 进度条
@@ -531,7 +535,7 @@ class InferencePanel(QWidget):
         self.label_inferenceResult.setMinimumHeight(100)
         layout.addWidget(self.label_inferenceResult)
 
-        # 可视化设置组件
+        # 可视化设置组件（保留实例供内部逻辑引用，但不再显示在此处）
         self.visualization_settings = VisualizationSettingsWidget()
         self.visualization_settings.setVisible(False)
         layout.addWidget(self.visualization_settings)
@@ -542,6 +546,8 @@ class InferencePanel(QWidget):
         layout.addWidget(self.visualization_widget)
 
         parent_layout.addWidget(self.groupBox_inferenceResult)
+        # Phase 4: 隐藏右侧预览图区域，推理结果通过 GIS 画布展示
+        self.groupBox_inferenceResult.setVisible(False)
 
     def _connect_signals(self):
         """连接信号"""
@@ -623,19 +629,23 @@ class InferencePanel(QWidget):
             self._emit_log(f"⚠️  扫描模型库失败: {e}")
             
         self.comboBox_modelRegistry.blockSignals(False)
-        
+
+        # P1-1: 扫描结束后若只有默认项，更新提示文字
+        if self.comboBox_modelRegistry.count() == 1:
+            self.comboBox_modelRegistry.setItemText(0, "（未找到训练记录，请先在 Tab1 加载数据集，或手动指定下方配置文件）")
+
         if current_data:
             index = self.comboBox_modelRegistry.findData(current_data)
             if index >= 0:
                 self.comboBox_modelRegistry.setCurrentIndex(index)
-                
+
     def _manual_refresh_registry(self):
         """手动刷新模型库"""
         if hasattr(self, '_current_data_root') and self._current_data_root:
             self.scan_trained_models(self._current_data_root)
             self._emit_log("🔄 已刷新已训练模型库")
         else:
-            self._emit_log("⚠️  无法刷新：尚未挂载数据集目录")
+            self._emit_log("⚠️ 请先在 Tab1 加载数据集，才能扫描已训练模型")
             
     def _on_model_registry_changed(self, index):
         """模型下拉框选择改变时触发"""
@@ -925,6 +935,14 @@ class InferencePanel(QWidget):
             )
             if file_path:
                 self.lineEdit_inputPath.setText(file_path)
+                # P1-2: 选图后自动推荐推理策略
+                try:
+                    from PIL import Image as _PIL_Image
+                    with _PIL_Image.open(file_path) as _img:
+                        _w, _h = _img.size
+                    self._auto_recommend_strategy(_w, _h)
+                except Exception:
+                    pass  # 读取失败时静默跳过
                 # 发出同步信号
                 if not self._suppress_sync:
                     self.input_path_selected.emit(file_path)
@@ -938,6 +956,25 @@ class InferencePanel(QWidget):
             )
             if dir_path:
                 self.lineEdit_inputPath.setText(dir_path)
+
+    def _auto_recommend_strategy(self, w: int, h: int):
+        """根据图像尺寸自动推荐推理策略并更新说明文字"""
+        if w * h <= 2000 * 2000:
+            self.radioButton_resize.setChecked(True)
+            tag = ("【推荐】", "", "")
+        elif w * h <= 20000 * 20000:
+            self.radioButton_slidingWindow.setChecked(True)
+            tag = ("", "【推荐】", "")
+        else:
+            self.radioButton_largeImageBlock.setChecked(True)
+            tag = ("", "", "【推荐】")
+
+        self.label_strategyNote.setText(
+            f"• 全图缩放 {tag[0]}：图像 ≤ 2000×2000 像素，快速预览\n"
+            f"• 滑窗推理 {tag[1]}：图像 2000–20000 像素范围，标准推理\n"
+            f"• 大图分块 {tag[2]}：图像 > 20000 像素超大影像（需 GDAL）"
+        )
+        self._emit_log(f"💡 已根据图像尺寸（{w}×{h}）自动推荐推理策略")
     
     def _browse_output_path(self):
         """浏览选择输出路径（自动保存预览PNG）"""
@@ -1563,19 +1600,10 @@ class InferencePanel(QWidget):
             # 发送推理完成信号
             self.inference_finished.emit(result)
 
-            # 提示用户可以导出结果
-            message = f"推理已成功完成！\n\n图像: {os.path.basename(image_path)}\n策略: {strategy}\n"
+            # P1-3: 改为非侵入式日志提示（去掉弹窗）
+            self._emit_log(f"✅ 推理完成：{os.path.basename(image_path)}，策略：{strategy}")
             if saved_path:
-                message += f"\n✅ 预览PNG已自动保存至:\n{saved_path}\n"
-                message += "\n💡 提示：如需其他格式（NumPy/JSON）或正式存档，\n请使用下方的'导出结果'功能。"
-            else:
-                message += "\n您可以在下方查看详细结果，或点击'导出结果'保存推理结果。"
-
-            QMessageBox.information(
-                self,
-                "推理完成",
-                message
-            )
+                self._emit_log(f"   预览已保存至：{saved_path}")
             
         except Exception as e:
             self._emit_log(f"⚠️  结果处理警告: {e}")

@@ -372,3 +372,9 @@ class HyperparamTabsWidget(QWidget):
             'aug_random_rotate': self.check_random_rotate.isChecked(),
             'aug_multi_scale': self.check_random_scale.isChecked(),
         }
+
+    def set_class_weights(self, weights: list):
+        """接收类别权重并启用类别权重补偿（由 Tab1 计算权重联动调用）"""
+        self.chk_use_class_weight.setChecked(True)
+        # 存储权重值供后续配置生成使用
+        self._class_weights = weights

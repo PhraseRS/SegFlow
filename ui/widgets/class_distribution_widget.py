@@ -8,7 +8,7 @@ from typing import Optional, Dict, List, Any
 import numpy as np
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QRadioButton, QCheckBox,
-    QPushButton, QButtonGroup, QSizePolicy, QToolButton
+    QPushButton, QButtonGroup, QSizePolicy, QToolButton, QLabel
 )
 from PySide6.QtCore import Qt, Signal
 
@@ -283,27 +283,35 @@ class ClassDistributionWidget(QWidget):
         self.radio_pixel.setChecked(True)
         self.radio_pixel.setStyleSheet("font-size: 10px; padding: 0;")
         self.radio_image.setStyleSheet("font-size: 10px; padding: 0;")
-        
+        self.radio_pixel.setToolTip("按像素总数统计各类别分布")
+        self.radio_image.setToolTip("按包含该类别的图像数量统计")
+
         self.radio_group = QButtonGroup(self)
         self.radio_group.addButton(self.radio_pixel, 0)
         self.radio_group.addButton(self.radio_image, 1)
-        
+
         control_layout.addWidget(self.radio_pixel)
         control_layout.addWidget(self.radio_image)
         control_layout.addSpacing(8)
-        
+
         # CheckBox
         self.check_log = QCheckBox("Log")
         self.check_log.setStyleSheet("font-size: 10px; padding: 0;")
+        self.check_log.setToolTip("使用对数坐标，适合类别间差异极大的情况")
         control_layout.addWidget(self.check_log)
         
         self.check_hide_bg = QCheckBox("NoBG")
         self.check_hide_bg.setStyleSheet("font-size: 10px; padding: 0;")
         self.check_hide_bg.setToolTip("隐藏背景类 (Class 0)")
         control_layout.addWidget(self.check_hide_bg)
-        
+
         control_layout.addStretch()
         layout.addLayout(control_layout)
+
+        # P2-3: 常驻说明文字（替代不可见的 Tooltip）
+        self.label_control_hint = QLabel("Px=像素统计 | Img=图像数 | Log=对数坐标 | NoBG=隐藏背景")
+        self.label_control_hint.setStyleSheet("font-size: 9px; color: gray; padding-left: 2px;")
+        layout.addWidget(self.label_control_hint)
         
         # === 图表区域 ===
         self.chart = ClassDistributionChart(self)

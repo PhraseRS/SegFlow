@@ -416,7 +416,8 @@ class DynamicImageReader:
         path: str,
         level: int,
         viewport_rect: Optional[QRectF] = None,
-        is_label: bool = False
+        is_label: bool = False,
+        band_indices: Optional[list] = None
     ) -> Tuple[Optional[np.ndarray], float, Tuple[int, int]]:
         if not os.path.exists(path):
             return None, 1.0, (0, 0)
@@ -432,11 +433,11 @@ class DynamicImageReader:
             with rasterio.open(path) as src:
                 actual_level = DynamicImageReader._get_best_level(src, level)
                 if viewport_rect:
-                    return DynamicImageReader._read_viewport(src, actual_level, viewport_rect, is_label)
+                    return DynamicImageReader._read_viewport(src, actual_level, viewport_rect, is_label, band_indices)
 
                 out_h = max(1, src.height // actual_level)
                 out_w = max(1, src.width // actual_level)
-                data = DynamicImageReader._read_full(src, out_h, out_w, is_label)
+                data = DynamicImageReader._read_full(src, out_h, out_w, is_label, band_indices)
                 return data, 1.0 / actual_level, (0, 0)
         except Exception as e:
             print(f"⚠️ rasterio 图像读取失败: {path} | {e}")
@@ -467,7 +468,7 @@ class DynamicImageReader:
         return os.path.splitext(path)[1].lower() in DynamicImageReader.TIFF_EXTS
 
     @staticmethod
-    def _read_raster_display_data(src, out_h: int, out_w: int, resample, window=None) -> np.ndarray:
+    def _read_raster_display_data(src, out_h: int, out_w: int, resample, window=None, band_indices=None) -> np.ndarray:
         if src.count <= 0:
             raise ValueError("影像不包含可读取波段")
 
@@ -487,6 +488,16 @@ class DynamicImageReader:
                     color[band == value] = rgb[:3]
                 return color
             return band
+
+        # D-01: 使用用户指定的波段组合
+        if band_indices and src.count >= 3:
+            r_idx = min(band_indices[0], src.count)
+            g_idx = min(band_indices[1], src.count)
+            b_idx = min(band_indices[2], src.count)
+            red = src.read(r_idx, **read_kwargs)
+            green = src.read(g_idx, **read_kwargs)
+            blue = src.read(b_idx, **read_kwargs)
+            return cv2.merge([blue, green, red])
 
         if src.count >= 3:
             red = src.read(1, **read_kwargs)
@@ -512,7 +523,7 @@ class DynamicImageReader:
 
     @staticmethod
     def _read_viewport(
-        src, level: int, viewport_rect: QRectF, is_label: bool = False
+        src, level: int, viewport_rect: QRectF, is_label: bool = False, band_indices=None
     ) -> Tuple[Optional[np.ndarray], float, Tuple[int, int]]:
         """读取视口区域（切片渲染）"""
         try:
@@ -536,7 +547,7 @@ class DynamicImageReader:
             from rasterio.windows import Window
             window = Window(x, y, w, h)
 
-            data = DynamicImageReader._read_raster_display_data(src, out_h, out_w, resample, window=window)
+            data = DynamicImageReader._read_raster_display_data(src, out_h, out_w, resample, window=window, band_indices=band_indices)
             return data, 1.0 / level, (x, y)
 
         except Exception as e:
@@ -544,7 +555,7 @@ class DynamicImageReader:
             return None, 1.0, (0, 0)
 
     @staticmethod
-    def _read_full(src, out_h: int, out_w: int, is_label: bool = False) -> np.ndarray:
+    def _read_full(src, out_h: int, out_w: int, is_label: bool = False, band_indices=None) -> np.ndarray:
         # 对于标签图像，必须使用 nearest 重采样以保留类别索引
         if is_label:
             resample = Resampling.nearest
@@ -552,7 +563,7 @@ class DynamicImageReader:
             # 对于普通图像，大尺寸用 nearest（性能），小尺寸用 bilinear（质量）
             resample = Resampling.nearest if out_h * out_w > 2000 * 2000 else Resampling.bilinear
 
-        return DynamicImageReader._read_raster_display_data(src, out_h, out_w, resample)
+        return DynamicImageReader._read_raster_display_data(src, out_h, out_w, resample, band_indices=band_indices)
 
     @staticmethod
     def _read_with_opencv(path: str, level: int, is_label: bool = False) -> Tuple[Optional[np.ndarray], float, Tuple[int, int]]:
@@ -680,6 +691,9 @@ class SmartCanvas(QGraphicsView):
         self._swipe_position = 50
         self._swipe_line_item: Optional[QGraphicsLineItem] = None
         self._swipe_line_shadow_item: Optional[QGraphicsLineItem] = None
+
+        # D-01: 波段映射 [R, G, B] (1-based band indices)
+        self._band_mapping: Optional[list] = None
 
         # 右键菜单
         self._setup_context_menu()
@@ -1023,6 +1037,21 @@ class SmartCanvas(QGraphicsView):
             self._layers[1].item.setOpacity(opacity / 100.0)
             self._layers[1].opacity = opacity / 100.0
 
+    def get_band_count(self) -> int:
+        """D-01: 获取底图（z_value=0）的波段数量"""
+        if 0 in self._layers:
+            return self._layers[0].count
+        return 0
+
+    def set_band_mapping(self, mapping: list) -> None:
+        """D-01: 设置波段映射并重新渲染底图"""
+        self._band_mapping = mapping
+        if 0 in self._layers:
+            layer_info = self._layers[0]
+            layer_info.cache.clear()
+            level = layer_info.current_level or self._calculate_initial_level(layer_info)
+            self._load_layer_sync(layer_info, level)
+
     def set_layer_palette(self, z_value: int, palette: Optional[Any]) -> bool:
         layer_info = self._layers.get(z_value)
         if layer_info is None or not layer_info.apply_colormap:
@@ -1305,9 +1334,14 @@ class SmartCanvas(QGraphicsView):
         print(f"      🔄 _load_layer_sync: 开始读取 level={level}...")
         QApplication.processEvents()  # 让 UI 有机会更新
 
+        # D-01: 底图(z_value=0)且非标签图层时传递波段映射
+        band_indices = None
+        if layer_info.z_value == 0 and not layer_info.apply_colormap and self._band_mapping:
+            band_indices = self._band_mapping
+
         # 对于标签图像 (apply_colormap=True)，使用 nearest 重采样以保留类别索引
         data, scale, offset = DynamicImageReader.read_at_level(
-            layer_info.path, level, is_label=layer_info.apply_colormap
+            layer_info.path, level, is_label=layer_info.apply_colormap, band_indices=band_indices
         )
 
         QApplication.processEvents()  # 读取完成后更新 UI

@@ -86,6 +86,10 @@ class InferenceEngine:
     def _init_model(self):
         """初始化模型"""
         try:
+            # === 添加下面这两行即可精准打印源码绝对路径 ===
+            import mmseg
+            print(f"\n[推理排查] 🚨 当前正在使用此目录下的 MMSeg 代码: {mmseg.__file__}\n")
+            
             # 尝试使用 MMSegmentation API 加载真实模型
             from mmseg.apis import init_model
             
@@ -107,6 +111,10 @@ class InferenceEngine:
             self.use_real_model = True
             
         except ImportError as e:
+
+            import mmseg
+            print(f"\n[推理排查] 🚨 当前正在使用此目录下的 MMSeg 代码: {mmseg.__file__}\n")
+            
             # MMSegmentation 未安装，使用模拟模式
             print(f"[推理引擎] ⚠️  MMSegmentation 未安装，使用模拟模式")
             print(f"[推理引擎] 错误: {e}")

@@ -270,6 +270,12 @@ class CoverageAnalysisCard(QWidget):
         layout.setSpacing(2)
         layout.setAlignment(Qt.AlignmentFlag.AlignTop)  # 顶部对齐
         
+        # 说明文字
+        self.desc_label = QLabel("展示每个类别在单张图像中的像素占比分布，帮助发现稀疏样本或全图充满的异常样本")
+        self.desc_label.setWordWrap(True)
+        self.desc_label.setStyleSheet("font-size: 10px; color: gray;")
+        layout.addWidget(self.desc_label)
+
         # 图例（与控制栏字号一致）
         legend_layout = QHBoxLayout()
         legend_layout.setSpacing(6)

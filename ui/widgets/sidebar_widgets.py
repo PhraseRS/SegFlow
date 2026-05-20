@@ -6,7 +6,7 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QGroupBox, QTreeWidget, QTreeWidgetItem,
     QPushButton, QCheckBox, QHBoxLayout, QLabel, QSlider, QFrame,
-    QSizePolicy, QToolButton
+    QSizePolicy, QToolButton, QComboBox, QSpinBox
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor
@@ -26,6 +26,7 @@ class SampleManagementSidebar(QWidget):
     opacity_changed = Signal(int)
     swipe_toggled = Signal(bool)
     swipe_position_changed = Signal(int)
+    band_mapping_changed = Signal(list)  # D-01: [R_band, G_band, B_band]
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -50,7 +51,8 @@ class SampleManagementSidebar(QWidget):
         dataSource_layout.addWidget(self.treeWidget_dataSources)
         
         # 添加样本按钮
-        self.pushButton_addSample = QPushButton("添加样本")
+        self.pushButton_addSample = QPushButton("📂 加载数据集")
+        self.pushButton_addSample.setToolTip("选择 VOC 格式数据集根目录（需包含 JPEGImages、SegmentationClass、ImageSets 目录）")
         dataSource_layout.addWidget(self.pushButton_addSample)
         
         layout.addWidget(self.groupBox_dataSource, stretch=3)
@@ -99,7 +101,50 @@ class SampleManagementSidebar(QWidget):
         self.label_swipeValue = QLabel("50%")
         swipe_layout.addWidget(self.label_swipeValue)
         layerControl_layout.addLayout(swipe_layout)
-        
+
+        # ========== D-01: 波段映射控件 ==========
+        self.frame_bandMapping = QFrame()
+        self.frame_bandMapping.setFrameShape(QFrame.Shape.StyledPanel)
+        self.frame_bandMapping.setStyleSheet("QFrame { border: 1px solid palette(mid); border-radius: 3px; padding: 2px; }")
+        band_layout = QVBoxLayout(self.frame_bandMapping)
+        band_layout.setContentsMargins(4, 4, 4, 4)
+        band_layout.setSpacing(2)
+
+        self.label_bandInfo = QLabel("波段: -")
+        self.label_bandInfo.setStyleSheet("font-size: 10px; color: gray;")
+        band_layout.addWidget(self.label_bandInfo)
+
+        # 预设下拉（去掉"预设:"标签，节省空间）
+        preset_layout = QHBoxLayout()
+        preset_layout.setSpacing(4)
+        self.combo_bandPreset = QComboBox()
+        self.combo_bandPreset.addItems(["RGB (1,2,3)", "NIR假彩色 (4,3,2)", "SWIR (5,4,3)", "自定义"])
+        self.combo_bandPreset.setToolTip("波段映射预设")
+        self.combo_bandPreset.setStyleSheet("font-size: 10px;")
+        preset_layout.addWidget(self.combo_bandPreset)
+        band_layout.addLayout(preset_layout)
+
+        # R/G/B 通道选择
+        rgb_layout = QHBoxLayout()
+        rgb_layout.setSpacing(4)
+        for label_text, attr_name in [("R:", "spin_bandR"), ("G:", "spin_bandG"), ("B:", "spin_bandB")]:
+            rgb_layout.addWidget(QLabel(label_text))
+            spin = QSpinBox()
+            spin.setRange(1, 99)
+            spin.setStyleSheet("font-size: 10px;")
+            spin.setFixedWidth(50)
+            spin.setToolTip(f"{label_text[0]} 通道对应的波段序号")
+            setattr(self, attr_name, spin)
+            rgb_layout.addWidget(spin)
+        self.spin_bandR.setValue(1)
+        self.spin_bandG.setValue(2)
+        self.spin_bandB.setValue(3)
+        band_layout.addLayout(rgb_layout)
+
+        layerControl_layout.addWidget(self.frame_bandMapping)
+        # 默认隐藏（当图像波段 ≤ 3 时不显示）
+        self.frame_bandMapping.setVisible(False)
+
         layout.addWidget(self.groupBox_layerControl, stretch=1)
     
     def _connect_signals(self):
@@ -111,18 +156,56 @@ class SampleManagementSidebar(QWidget):
         self.slider_opacity.valueChanged.connect(self._on_opacity_changed)
         self.checkBox_swipeCompare.toggled.connect(self._on_swipe_toggled)
         self.slider_swipe.valueChanged.connect(self._on_swipe_position_changed)
-    
+        # D-01: 波段映射
+        self.combo_bandPreset.currentIndexChanged.connect(self._on_band_preset_changed)
+        self.spin_bandR.valueChanged.connect(self._on_band_spin_changed)
+        self.spin_bandG.valueChanged.connect(self._on_band_spin_changed)
+        self.spin_bandB.valueChanged.connect(self._on_band_spin_changed)
+
     def _on_opacity_changed(self, value: int):
         self.label_opacityValue.setText(f"{value}%")
         self.opacity_changed.emit(value)
-    
+
     def _on_swipe_toggled(self, checked: bool):
         self.slider_swipe.setEnabled(checked)
         self.swipe_toggled.emit(checked)
-    
+
     def _on_swipe_position_changed(self, value: int):
         self.label_swipeValue.setText(f"{value}%")
         self.swipe_position_changed.emit(value)
+
+    def _on_band_preset_changed(self, index: int):
+        """波段预设切换"""
+        presets = [(1, 2, 3), (4, 3, 2), (5, 4, 3)]
+        if index < len(presets):
+            r, g, b = presets[index]
+            self.spin_bandR.blockSignals(True)
+            self.spin_bandG.blockSignals(True)
+            self.spin_bandB.blockSignals(True)
+            self.spin_bandR.setValue(r)
+            self.spin_bandG.setValue(g)
+            self.spin_bandB.setValue(b)
+            self.spin_bandR.blockSignals(False)
+            self.spin_bandG.blockSignals(False)
+            self.spin_bandB.blockSignals(False)
+            self.band_mapping_changed.emit([r, g, b])
+
+    def _on_band_spin_changed(self):
+        """自定义波段值改变"""
+        self.combo_bandPreset.blockSignals(True)
+        self.combo_bandPreset.setCurrentIndex(3)  # "自定义"
+        self.combo_bandPreset.blockSignals(False)
+        self.band_mapping_changed.emit([self.spin_bandR.value(), self.spin_bandG.value(), self.spin_bandB.value()])
+
+    def update_band_info(self, band_count: int):
+        """D-01: 更新波段信息显示，当波段 > 3 时显示波段映射控件"""
+        if band_count <= 3:
+            self.frame_bandMapping.setVisible(False)
+            self.label_bandInfo.setText(f"波段: {band_count} (RGB)")
+        else:
+            self.frame_bandMapping.setVisible(True)
+            r, g, b = self.spin_bandR.value(), self.spin_bandG.value(), self.spin_bandB.value()
+            self.label_bandInfo.setText(f"波段: {band_count} (当前显示: R={r}, G={g}, B={b})")
 
 
 class GISLayerControlSidebar(QWidget):
@@ -147,30 +230,30 @@ class GISLayerControlSidebar(QWidget):
     def _init_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        
+
         # 标题栏 - 使用系统主题色
         header = QFrame()
         header.setFrameShape(QFrame.Shape.StyledPanel)
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(8, 4, 8, 4)
-        
+
         title_label = QLabel("图层 (Layers)")
         title_label.setStyleSheet("font-weight: bold;")
         header_layout.addWidget(title_label)
         header_layout.addStretch()
-        
+
         # 添加图层按钮 (使用 QToolButton 支持菜单)
         self.btn_add_layer = QToolButton()
         self.btn_add_layer.setText("+")
         self.btn_add_layer.setFixedSize(24, 24)
         self.btn_add_layer.setToolTip("添加图层")
         header_layout.addWidget(self.btn_add_layer)
-        
+
         # 初始化默认菜单
         self._setup_default_menu()
-        
+
         layout.addWidget(header)
-        
+
         # 图层树 - 单列分组样式 (类似 QGIS)
         self.layer_tree = QTreeWidget()
         self.layer_tree.setHeaderHidden(True)
@@ -180,7 +263,13 @@ class GISLayerControlSidebar(QWidget):
         self.layer_tree.setDragDropMode(QTreeWidget.DragDropMode.InternalMove)
         self.layer_tree.setSelectionMode(QTreeWidget.SelectionMode.SingleSelection)
         layout.addWidget(self.layer_tree)
-        
+
+        # Phase 4: 可视化设置控件（从推理面板迁移到此处）
+        from ui.widgets.visualization_settings_widget import VisualizationSettingsWidget
+        self.visualization_settings = VisualizationSettingsWidget()
+        self.visualization_settings.setVisible(False)
+        layout.addWidget(self.visualization_settings)
+
         # 初始提示
         self._show_empty_hint()
     

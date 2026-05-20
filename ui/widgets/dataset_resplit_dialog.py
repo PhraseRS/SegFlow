@@ -21,13 +21,21 @@ class DatasetResplitDialog(QDialog):
     # 信号：划分完成 (mode, params)
     resplit_confirmed = Signal(str, dict)
     
-    def __init__(self, current_train=0, current_val=0, current_test=0, parent=None):
+    def __init__(self, current_train=0, current_val=0, current_test=0,
+                 train_samples=None, val_samples=None, test_samples=None, parent=None):
         super().__init__(parent)
         self.current_train = current_train
         self.current_val = current_val
         self.current_test = current_test
         self.total_samples = current_train + current_val + current_test
-        
+
+        # P2-6: 在 _setup_ui 之前设置样本数据，确保 _init_available_samples 可用
+        self.real_sample_data = {
+            'train': train_samples or [],
+            'val': val_samples or [],
+            'test': test_samples or []
+        }
+
         self._setup_ui()
         self.setWindowTitle("数据集重新划分 (Dataset Resplit)")
         self.resize(800, 600)

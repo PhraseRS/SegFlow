@@ -502,6 +502,7 @@ class MainWindow(QMainWindow):
         # 健康检查卡片过滤信号
         self.ui.widget_healthCheck.filterRequested.connect(self._on_health_filter_requested)
         self.ui.widget_healthCheck.clearFilterRequested.connect(self.clear_tree_filter)
+        self.ui.widget_healthCheck.rescanRequested.connect(self._on_health_rescan)
         
         # 推理面板信号连接
         self.ui.inference_panel.log_message.connect(self._log_to_bottom)
@@ -511,10 +512,11 @@ class MainWindow(QMainWindow):
         self.ui.inference_panel.inference_error.connect(self._on_inference_error)
         # 连接预测初始化信号
         self.ui.inference_panel.prediction_initializing.connect(self._on_prediction_initializing)
-        self.ui.inference_panel.visualization_settings.alpha_changed.connect(
+        # Phase 4: 可视化设置信号从左侧 GIS 图层侧边栏连接
+        self.ui.sidebar_gisLayerControl.visualization_settings.alpha_changed.connect(
             lambda alpha: self.ui.gisCanvas.set_prediction_opacity(alpha)
         )
-        self.ui.inference_panel.visualization_settings.palette_changed.connect(
+        self.ui.sidebar_gisLayerControl.visualization_settings.palette_changed.connect(
             lambda palette: self.ui.gisCanvas.set_prediction_palette(palette)
         )
         
@@ -558,6 +560,12 @@ class MainWindow(QMainWindow):
         self.ui.widget_hyperparamTabs.config_changed.connect(self._on_config_params_changed)
         self.ui.widget_modelSelection.config_changed.connect(self._on_config_params_changed)
 
+        # ========== P1-6: 类别权重联动 Tab2 ==========
+        self.ui.widget_classDistribution.weightsCalculated.connect(self._on_weights_calculated)
+
+        # ========== D-01: 波段映射联动画布 ==========
+        self.ui.sidebar_sampleManagement.band_mapping_changed.connect(self.image_viewer.set_band_mapping)
+
     def _on_config_params_changed(self):
         """当任何训练参数改变时，如果任务配置面板当前可见，则刷新蓝图"""
         if self.ui.tabWidget_contextControl.currentIndex() == 1:
@@ -599,7 +607,9 @@ class MainWindow(QMainWindow):
                 f"    └── Segmentation/\n"
                 f"        ├── train.txt\n"
                 f"        ├── val.txt\n"
-                f"        └── test.txt (可选)"
+                f"        └── test.txt (可选)\n\n"
+                f"💡 提示：如果您的数据不是 VOC 格式，请先将其转换为以上结构再加载。\n"
+                f"详细说明请参考项目文档。"
             )
             return
         
@@ -626,18 +636,24 @@ class MainWindow(QMainWindow):
         for dataset_type in ['train', 'val', 'test']:
             for sample_id in self.data_manager.get_samples(dataset_type):
                 samples_info.append((sample_id, dataset_type))
-        
-        # 连接 AnalysisPanel 信号
+
+        # P1-8: 防止信号重复连接，先断开再连接
+        try:
+            self.ui.analysis_panel.analysis_started.disconnect(self._on_analysis_started)
+            self.ui.analysis_panel.analysis_finished.disconnect(self._on_analysis_finished)
+            self.ui.analysis_panel.analysis_error.disconnect(self._on_analysis_error)
+        except RuntimeError:
+            pass
         self.ui.analysis_panel.analysis_started.connect(self._on_analysis_started)
         self.ui.analysis_panel.analysis_finished.connect(self._on_analysis_finished)
         self.ui.analysis_panel.analysis_error.connect(self._on_analysis_error)
-        
+
         # 启动智能分析流程
         images_dir = self.data_manager.images_dir
         labels_dir = self.data_manager.labels_dir
         self.ui.analysis_panel.initialize_statistics_flow(
-            data_root, 
-            samples_info, 
+            data_root,
+            samples_info,
             images_dir,
             labels_dir
         )
@@ -655,7 +671,17 @@ class MainWindow(QMainWindow):
         """分析错误回调"""
         self.statusBar().showMessage(f"分析错误: {error_msg}")
         print(f"⚠️ 分析错误: {error_msg}")
-    
+
+    def _on_weights_calculated(self, weights):
+        """P1-6: 类别权重计算完成回调，联动到 Tab2 任务配置"""
+        weights_str = ", ".join(f"{w:.2f}" for w in weights)
+        msg = f"已计算类别权重（Median Frequency Balancing）:\n[{weights_str}]\n\n是否应用到任务配置？"
+        reply = QMessageBox.question(self, "类别权重", msg,
+                                      QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply == QMessageBox.StandardButton.Yes:
+            self.ui.widget_hyperparamTabs.set_class_weights(weights)
+            self._log_to_bottom("✅ 类别权重已应用到任务配置")
+
     def _load_or_calculate_metadata(self, data_root):
         """加载缓存的元数据，或启动后台进程计算（保留用于兼容）"""
         # 初始化数据库
@@ -1425,7 +1451,15 @@ class MainWindow(QMainWindow):
                 })
         
         self.statusBar().showMessage(f"已过滤显示 {len(problem_samples)} 个 {issue_type} 问题文件")
-    
+
+    def _on_health_rescan(self):
+        """健康检查 Re-scan 回调：重新触发分析"""
+        if self._current_data_root:
+            self._initialize_analysis_panel(self._current_data_root)
+            self.statusBar().showMessage("正在重新扫描健康检查...")
+        else:
+            self.statusBar().showMessage("⚠️ 请先加载数据集")
+
     def _filter_tree_by_samples(self, sample_ids: list, issue_type: str):
         """
         过滤树形控件，只显示指定的样本
@@ -1509,11 +1543,16 @@ class MainWindow(QMainWindow):
     
     def _update_dataset_overview(self):
         """更新数据集概览面板"""
-        train_count = len(self.data_manager.get_samples('train'))
-        val_count = len(self.data_manager.get_samples('val'))
-        test_count = len(self.data_manager.get_samples('test'))
-        
-        self.ui.widget_datasetOverview.update_data(train_count, val_count, test_count)
+        train_samples = self.data_manager.get_samples('train')
+        val_samples = self.data_manager.get_samples('val')
+        test_samples = self.data_manager.get_samples('test')
+        train_count = len(train_samples)
+        val_count = len(val_samples)
+        test_count = len(test_samples)
+        # 去重计算唯一样本总数
+        unique_total = len(set(train_samples) | set(val_samples) | set(test_samples))
+
+        self.ui.widget_datasetOverview.update_data(train_count, val_count, test_count, unique_total=unique_total)
         # 有数据时启用 Resplit 按钮
         total = train_count + val_count + test_count
         self.ui.btn_resplit.setEnabled(total > 0)
@@ -1776,7 +1815,16 @@ class MainWindow(QMainWindow):
         if image_path:
             # 加载影像和标签
             self.image_viewer.load_sample(image_path, label_path)
-            
+
+            # D-02 修复：加载后同步 UI 控件当前状态到渲染层
+            self.image_viewer.set_image_visible(self.ui.checkBox_baseImage.isChecked())
+            self.image_viewer.set_label_visible(self.ui.checkBox_overlayPrediction.isChecked())
+            self.image_viewer.set_label_opacity(self.ui.slider_opacity.value())
+
+            # D-01: 更新波段信息
+            band_count = self.image_viewer.get_band_count()
+            self.ui.sidebar_sampleManagement.update_band_info(band_count)
+
             # 更新状态栏
             status_msg = f"当前样本: {sample_id} | 数据集: {dataset.upper()}"
             if label_path:
@@ -2095,12 +2143,7 @@ class MainWindow(QMainWindow):
     def _on_inference_started(self):
         """推理开始回调"""
         self.statusBar().showMessage("正在执行推理...")
-    
-    def _on_inference_finished(self, result: dict):
-        """推理完成回调"""
-        self.statusBar().showMessage("推理完成")
-        self._log_to_bottom("✅ 推理完成")
-    
+
     def _on_inference_error(self, error_msg: str):
         """推理错误回调"""
         self.statusBar().showMessage(f"推理错误: {error_msg}")
@@ -2168,27 +2211,28 @@ class MainWindow(QMainWindow):
     def on_resplit_dataset(self):
         """重新划分数据集"""
         # 获取当前数据集统计
-        train_count = len(self.data_manager.get_samples('train'))
-        val_count = len(self.data_manager.get_samples('val'))
-        test_count = len(self.data_manager.get_samples('test'))
-        
-        if train_count + val_count + test_count == 0:
-            QMessageBox.information(self, "提示", "当前没有加载任何数据集，请先加载数据。")
-            return
-        
-        # 导入重新划分对话框
-        from ui.widgets.dataset_resplit_dialog import DatasetResplitDialog
-        
-        # 创建并显示重新划分对话框
-        dialog = DatasetResplitDialog(train_count, val_count, test_count, self)
-        dialog.resplit_confirmed.connect(self._perform_resplit)
-        
-        # 设置真实样本数据
         train_samples = self.data_manager.get_samples('train')
         val_samples = self.data_manager.get_samples('val')
         test_samples = self.data_manager.get_samples('test')
-        dialog.set_sample_data(train_samples, val_samples, test_samples)
-        
+        train_count = len(train_samples)
+        val_count = len(val_samples)
+        test_count = len(test_samples)
+
+        if train_count + val_count + test_count == 0:
+            QMessageBox.information(self, "提示", "当前没有加载任何数据集，请先加载数据。")
+            return
+
+        # 导入重新划分对话框
+        from ui.widgets.dataset_resplit_dialog import DatasetResplitDialog
+
+        # P2-6: 将样本数据直接传入构造函数，确保 _init_available_samples 可用
+        dialog = DatasetResplitDialog(
+            train_count, val_count, test_count,
+            train_samples=train_samples, val_samples=val_samples, test_samples=test_samples,
+            parent=self
+        )
+        dialog.resplit_confirmed.connect(self._perform_resplit)
+
         dialog.exec()
     
     def _perform_resplit(self, mode, params):
@@ -2287,6 +2331,11 @@ class MainWindow(QMainWindow):
             f"Val: {len(val_samples)} 样本\n"
             f"Test: {len(test_samples)} 样本"
         )
+
+        # P1-8: Resplit 后重置分析状态并重新触发
+        if self._current_data_root:
+            self.ui.analysis_panel.stop_analysis()
+            self._initialize_analysis_panel(self._current_data_root)
     
     def _on_prediction_initializing(self, input_path, expected_output_filename):
         """
@@ -2311,7 +2360,17 @@ class MainWindow(QMainWindow):
         """推理完成回调"""
         print(f"🔵 _on_inference_finished 被调用")
         print(f"   result keys: {result.keys() if result else 'None'}")
-        
+
+        # Phase 4: 同步可视化设置到左侧侧边栏并显示
+        if hasattr(self.ui.inference_panel, 'visualization_settings'):
+            src_vs = self.ui.inference_panel.visualization_settings
+            dst_vs = self.ui.sidebar_gisLayerControl.visualization_settings
+            if hasattr(src_vs, 'class_names') and src_vs.class_names:
+                # 将 current_palette dict 转为 list 格式
+                palette_list = [src_vs.current_palette.get(i, [128, 128, 128]) for i in range(len(src_vs.class_names))]
+                dst_vs.set_classes_and_palette(src_vs.class_names, palette_list)
+            dst_vs.setVisible(True)
+
         # 显示结果
         mask = result.get('mask')
         output_path = result.get('output_path')

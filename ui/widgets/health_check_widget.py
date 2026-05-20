@@ -371,7 +371,7 @@ class HealthCheckCard(QWidget):
         )
         toolbar_layout.addWidget(self.btn_rescan)
         
-        # Auto-Fix 按钮
+        # Auto-Fix 按钮（暂时隐藏，功能未实现）
         self.btn_autofix = create_flat_button(
             text="Auto-Fix",
             icon_name='fa5s.magic',
@@ -380,6 +380,7 @@ class HealthCheckCard(QWidget):
             enabled=False,
             on_clicked=self.autoFixRequested.emit
         )
+        self.btn_autofix.setVisible(False)
         toolbar_layout.addWidget(self.btn_autofix)
         
         # 分隔线
