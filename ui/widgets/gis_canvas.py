@@ -70,6 +70,9 @@ class GISCanvasWidget(QWidget):
         
         # LayerManager (需要外部设置 tree widget)
         self._layer_manager: Optional[LayerManager] = None
+
+        # 缓存预测图层的 palette，确保图层就绪后可应用
+        self._prediction_palette = None
         
     # ==================== LayerManager 集成 ====================
     
@@ -308,32 +311,36 @@ class GISCanvasWidget(QWidget):
     
     def inject_prediction(self, result_path: str, palette=None) -> bool:
         """
-        注入预测结果 (显示为灰度图)
-        
+        注入预测结果 (显示为伪彩色)
+
         Args:
             result_path: 预测结果文件路径
-        
+            palette: 调色板，若为 None 则使用缓存的 palette
+
         Returns:
             bool: 是否成功
         """
         print(f"🔄 inject_prediction 被调用: {result_path}")
-        
+
+        # 使用传入的 palette，若为 None 则使用缓存
+        effective_palette = palette if palette is not None else self._prediction_palette
+
         if not self._layer_manager:
             print("⚠️ inject_prediction: _layer_manager 未设置")
             return False
-            
+
         success = self._layer_manager.inject_layer_data(
-            SlotType.TYPE_PRED, 
-            result_path, 
-            apply_colormap=True,  # 使用调色板显示
-            palette=palette
+            SlotType.TYPE_PRED,
+            result_path,
+            apply_colormap=True,
+            palette=effective_palette
         )
-        
+
         if success:
             print(f"✅ inject_prediction: 成功注入预测结果")
         else:
             print(f"❌ inject_prediction: 注入失败")
-            
+
         return success
         
     def set_prediction_loading(self, expected_filename: str) -> bool:
@@ -369,16 +376,30 @@ class GISCanvasWidget(QWidget):
 
     def set_prediction_palette(self, palette) -> bool:
         """Apply a custom palette to the prediction layer in the central canvas."""
+        # 始终缓存 palette，即使图层尚未就绪
+        self._prediction_palette = palette
+
         if not self._layer_manager:
+            print("⚠️ set_prediction_palette: _layer_manager 未初始化，palette 已缓存")
             return False
 
         slot = self._layer_manager.get_slot(SlotType.TYPE_PRED)
         if not slot or not slot.graphics_item:
-            return False
+            print("⚠️ set_prediction_palette: prediction slot 未就绪，palette 已缓存")
+            # 直接尝试通过 z_value 更新（兼容 LayerManager 未完全初始化的情况）
+            from ui.widgets.layer_manager import ZOrder
+            updated = self.canvas.set_layer_palette(ZOrder.PRED, palette)
+            if updated:
+                self.canvas.viewport().update()
+                print("✅ set_prediction_palette: 通过 z_value 直接更新成功")
+            return updated
 
         updated = self.canvas.set_layer_palette(slot.default_z_value, palette)
         if updated:
             self.canvas.viewport().update()
+            print("✅ set_prediction_palette: palette 已应用到预测图层")
+        else:
+            print("⚠️ set_prediction_palette: set_layer_palette 返回 False")
         return updated
         
     def inject_ground_truth(self, gt_path: str) -> bool:

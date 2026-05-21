@@ -487,19 +487,19 @@ class InferencePanel(QWidget):
         self.label_exportNote.setStyleSheet("color: #0066cc; font-size: 10px; padding: 5px; background-color: #e6f2ff; border-radius: 3px;")
         form_layout.addRow("", self.label_exportNote)
         
-        # 导出格式
+        # 导出格式（语义分割常用格式）
         self.label_exportFormat = QLabel("导出格式:")
         export_format_layout = QHBoxLayout()
+        self.checkBox_exportTIF = QCheckBox("GeoTIFF (.tif)")
+        self.checkBox_exportTIF.setChecked(True)
+        self.checkBox_exportTIF.setToolTip("导出GeoTIFF格式，保留地理坐标信息（语义分割标准格式）")
         self.checkBox_exportPNG = QCheckBox("PNG")
-        self.checkBox_exportPNG.setChecked(True)
-        self.checkBox_exportPNG.setToolTip("导出PNG格式的可视化结果")
+        self.checkBox_exportPNG.setToolTip("导出PNG格式的分类结果（无地理信息）")
         self.checkBox_exportNumpy = QCheckBox("NumPy (.npy)")
         self.checkBox_exportNumpy.setToolTip("导出NumPy数组格式，便于后续处理")
-        self.checkBox_exportJSON = QCheckBox("JSON")
-        self.checkBox_exportJSON.setToolTip("导出包含推理参数和统计信息的元数据")
+        export_format_layout.addWidget(self.checkBox_exportTIF)
         export_format_layout.addWidget(self.checkBox_exportPNG)
         export_format_layout.addWidget(self.checkBox_exportNumpy)
-        export_format_layout.addWidget(self.checkBox_exportJSON)
         export_format_layout.addStretch()
         form_layout.addRow(self.label_exportFormat, export_format_layout)
         
@@ -535,19 +535,16 @@ class InferencePanel(QWidget):
         self.label_inferenceResult.setMinimumHeight(100)
         layout.addWidget(self.label_inferenceResult)
 
-        # 可视化设置组件（保留实例供内部逻辑引用，但不再显示在此处）
+        # 类别颜色配置组件（推理完成后显示）
         self.visualization_settings = VisualizationSettingsWidget()
         self.visualization_settings.setVisible(False)
         layout.addWidget(self.visualization_settings)
 
-        # 可视化渲染组件
+        # 可视化渲染预览组件（已废弃，永久隐藏）
         self.visualization_widget = InferenceVisualizationWidget()
         self.visualization_widget.setVisible(False)
-        layout.addWidget(self.visualization_widget)
 
         parent_layout.addWidget(self.groupBox_inferenceResult)
-        # Phase 4: 隐藏右侧预览图区域，推理结果通过 GIS 画布展示
-        self.groupBox_inferenceResult.setVisible(False)
 
     def _connect_signals(self):
         """连接信号"""
@@ -586,11 +583,8 @@ class InferencePanel(QWidget):
         # 导出结果
         self.pushButton_exportResults.clicked.connect(self._export_results)
 
-        # 可视化设置信号
-        self.visualization_settings.palette_changed.connect(self._on_palette_changed)
-        self.visualization_settings.alpha_changed.connect(self._on_alpha_changed)
-        self.visualization_settings.apply_requested.connect(self._apply_visualization_settings)
-        
+        # 可视化设置信号（由 MainWindow 外部连接到 GIS 画布，此处不再内部连接预览渲染）
+
     def scan_trained_models(self, data_root=None):
         """扫描已训练模型库"""
         if data_root:
@@ -1492,9 +1486,6 @@ class InferencePanel(QWidget):
                 # 初始化可视化设置（允许使用回退 classes/palette）
                 self._ensure_visualization_controls(mask=mask, result=result)
 
-                # 渲染可视化结果
-                self._render_inference_result()
-
                 # 发送推理完成信号
                 self.inference_finished.emit(result)
 
@@ -1595,7 +1586,6 @@ class InferencePanel(QWidget):
 
             # 先准备可视化元数据，再通知外部使用当前 palette 注入主画布。
             self._ensure_visualization_controls(mask=mask, result=result)
-            self._render_inference_result()
 
             # 发送推理完成信号
             self.inference_finished.emit(result)
@@ -1690,15 +1680,15 @@ class InferencePanel(QWidget):
                 return
         
         # 3. 获取导出格式
+        export_tif = self.checkBox_exportTIF.isChecked()
         export_png = self.checkBox_exportPNG.isChecked()
         export_numpy = self.checkBox_exportNumpy.isChecked()
-        export_json = self.checkBox_exportJSON.isChecked()
-        
-        if not (export_png or export_numpy or export_json):
+
+        if not (export_tif or export_png or export_numpy):
             QMessageBox.warning(
-                self, 
-                "未选择导出格式", 
-                "请至少选择一种导出格式（PNG、NumPy 或 JSON）。"
+                self,
+                "未选择导出格式",
+                "请至少选择一种导出格式（GeoTIFF、PNG 或 NumPy）。"
             )
             return
         
@@ -1711,45 +1701,59 @@ class InferencePanel(QWidget):
             mask = self.last_inference_result.get('mask')
             
             exported_files = []
-            
+
+            # 导出 GeoTIFF 格式（语义分割标准格式）
+            if export_tif and mask is not None:
+                tif_path = os.path.join(export_dir, f"{base_name}_pred.tif")
+                try:
+                    import rasterio
+                    from rasterio.transform import from_bounds
+                    # 尝试从原始图像复制地理信息
+                    src_path = self.last_inference_result.get('image_path', '')
+                    h, w = mask.shape[:2]
+                    profile = {
+                        'driver': 'GTiff',
+                        'dtype': 'uint8',
+                        'width': w,
+                        'height': h,
+                        'count': 1,
+                        'compress': 'lzw',
+                    }
+                    if src_path and os.path.exists(src_path):
+                        try:
+                            with rasterio.open(src_path) as src:
+                                profile['crs'] = src.crs
+                                profile['transform'] = src.transform
+                        except Exception:
+                            pass
+                    with rasterio.open(tif_path, 'w', **profile) as dst:
+                        dst.write(mask.astype(np.uint8), 1)
+                    exported_files.append(tif_path)
+                    self._emit_log(f"✅ GeoTIFF 已导出: {os.path.basename(tif_path)}")
+                except ImportError:
+                    # rasterio 不可用时回退到 PIL
+                    from PIL import Image
+                    result_image = Image.fromarray(mask.astype(np.uint8))
+                    tif_path = os.path.join(export_dir, f"{base_name}_pred.tif")
+                    result_image.save(tif_path)
+                    exported_files.append(tif_path)
+                    self._emit_log(f"✅ TIFF 已导出（无地理信息）: {os.path.basename(tif_path)}")
+
             # 导出 PNG 格式
             if export_png and mask is not None:
-                png_path = os.path.join(export_dir, f"{base_name}_Result.png")
+                png_path = os.path.join(export_dir, f"{base_name}_pred.png")
                 from PIL import Image
                 result_image = Image.fromarray(mask.astype(np.uint8))
                 result_image.save(png_path)
                 exported_files.append(png_path)
                 self._emit_log(f"✅ PNG 已导出: {os.path.basename(png_path)}")
-            
+
             # 导出 NumPy 格式
             if export_numpy and mask is not None:
-                npy_path = os.path.join(export_dir, f"{base_name}_Result.npy")
+                npy_path = os.path.join(export_dir, f"{base_name}_pred.npy")
                 np.save(npy_path, mask)
                 exported_files.append(npy_path)
                 self._emit_log(f"✅ NumPy 已导出: {os.path.basename(npy_path)}")
-            
-            # 导出 JSON 格式（包含元数据）
-            if export_json:
-                import json
-                json_path = os.path.join(export_dir, f"{base_name}_Result.json")
-                
-                # 构建元数据
-                metadata = {
-                    'image_path': image_path,
-                    'image_shape': self.last_inference_result.get('image_shape', []),
-                    'strategy': self.last_inference_result.get('strategy', 'unknown'),
-                    'params': self.last_inference_result.get('params', {}),
-                    'unique_classes': self.last_inference_result.get('unique_classes', []),
-                    'class_counts': self.last_inference_result.get('class_counts', {}),
-                    'model_name': self.inference_model.get('model_name', 'Unknown') if self.inference_model else 'Unknown',
-                    'export_time': __import__('datetime').datetime.now().isoformat()
-                }
-                
-                with open(json_path, 'w', encoding='utf-8') as f:
-                    json.dump(metadata, f, indent=2, ensure_ascii=False)
-                
-                exported_files.append(json_path)
-                self._emit_log(f"✅ JSON 已导出: {os.path.basename(json_path)}")
             
             # 5. 显示导出成功消息
             if exported_files:
@@ -1798,9 +1802,9 @@ class InferencePanel(QWidget):
             'enable_tta': self.checkBox_enableTTA.isChecked(),
             'conf_threshold': self.doubleSpinBox_confThreshold.value(),
             'export_formats': {
+                'tif': self.checkBox_exportTIF.isChecked(),
                 'png': self.checkBox_exportPNG.isChecked(),
-                'numpy': self.checkBox_exportNumpy.isChecked(),
-                'json': self.checkBox_exportJSON.isChecked()
+                'numpy': self.checkBox_exportNumpy.isChecked()
             },
             'export_dir': self.lineEdit_exportDir.text()
         }

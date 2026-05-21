@@ -264,12 +264,6 @@ class GISLayerControlSidebar(QWidget):
         self.layer_tree.setSelectionMode(QTreeWidget.SelectionMode.SingleSelection)
         layout.addWidget(self.layer_tree)
 
-        # Phase 4: 可视化设置控件（从推理面板迁移到此处）
-        from ui.widgets.visualization_settings_widget import VisualizationSettingsWidget
-        self.visualization_settings = VisualizationSettingsWidget()
-        self.visualization_settings.setVisible(False)
-        layout.addWidget(self.visualization_settings)
-
         # 初始提示
         self._show_empty_hint()
     

@@ -512,12 +512,15 @@ class MainWindow(QMainWindow):
         self.ui.inference_panel.inference_error.connect(self._on_inference_error)
         # 连接预测初始化信号
         self.ui.inference_panel.prediction_initializing.connect(self._on_prediction_initializing)
-        # Phase 4: 可视化设置信号从左侧 GIS 图层侧边栏连接
-        self.ui.sidebar_gisLayerControl.visualization_settings.alpha_changed.connect(
-            lambda alpha: self.ui.gisCanvas.set_prediction_opacity(alpha)
+        # 可视化设置信号：右侧推理面板的类别颜色配置 → GIS 画布
+        self.ui.inference_panel.visualization_settings.alpha_changed.connect(
+            self._on_prediction_alpha_changed
         )
-        self.ui.sidebar_gisLayerControl.visualization_settings.palette_changed.connect(
-            lambda palette: self.ui.gisCanvas.set_prediction_palette(palette)
+        self.ui.inference_panel.visualization_settings.palette_changed.connect(
+            self._on_prediction_palette_changed
+        )
+        self.ui.inference_panel.visualization_settings.apply_requested.connect(
+            self._on_prediction_visualization_apply
         )
         
         # 双向同步：GIS 图层控制 <-> 推理面板
@@ -2337,6 +2340,25 @@ class MainWindow(QMainWindow):
             self.ui.analysis_panel.stop_analysis()
             self._initialize_analysis_panel(self._current_data_root)
     
+    def _on_prediction_palette_changed(self, palette: dict):
+        """右侧可视化设置：调色板变化 → 更新 GIS 主图预测图层"""
+        ok = self.ui.gisCanvas.set_prediction_palette(palette)
+        if ok:
+            self._log_to_bottom("🎨 已应用预测类别颜色到主图")
+        else:
+            self._log_to_bottom("🎨 预测类别颜色已记录，图层就绪后自动应用")
+
+    def _on_prediction_alpha_changed(self, alpha: float):
+        """右侧可视化设置：透明度变化 → 更新 GIS 主图预测图层"""
+        self.ui.gisCanvas.set_prediction_opacity(alpha)
+
+    def _on_prediction_visualization_apply(self):
+        """右侧可视化设置：点击应用按钮 → 强制刷新 GIS 主图"""
+        vs = self.ui.inference_panel.visualization_settings
+        self.ui.gisCanvas.set_prediction_palette(vs.get_current_palette())
+        self.ui.gisCanvas.set_prediction_opacity(vs.get_current_alpha())
+        self._log_to_bottom("🎨 已应用可视化设置到主图")
+
     def _on_prediction_initializing(self, input_path, expected_output_filename):
         """
         预测初始化回调：设置图层为加载状态
@@ -2361,15 +2383,9 @@ class MainWindow(QMainWindow):
         print(f"🔵 _on_inference_finished 被调用")
         print(f"   result keys: {result.keys() if result else 'None'}")
 
-        # Phase 4: 同步可视化设置到左侧侧边栏并显示
+        # 推理完成后显示右侧类别颜色配置控件
         if hasattr(self.ui.inference_panel, 'visualization_settings'):
-            src_vs = self.ui.inference_panel.visualization_settings
-            dst_vs = self.ui.sidebar_gisLayerControl.visualization_settings
-            if hasattr(src_vs, 'class_names') and src_vs.class_names:
-                # 将 current_palette dict 转为 list 格式
-                palette_list = [src_vs.current_palette.get(i, [128, 128, 128]) for i in range(len(src_vs.class_names))]
-                dst_vs.set_classes_and_palette(src_vs.class_names, palette_list)
-            dst_vs.setVisible(True)
+            self.ui.inference_panel.visualization_settings.setVisible(True)
 
         # 显示结果
         mask = result.get('mask')

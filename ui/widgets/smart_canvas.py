@@ -633,11 +633,16 @@ def apply_label_colormap(label_np: np.ndarray, palette: Optional[Any] = None) ->
             palette_bgr.append((128, 128, 128))
     h, w = label_np.shape
     bgra = np.zeros((h, w, 4), dtype=np.uint8)
+    # 当用户提供了自定义 palette 时，class_id=0 也应用颜色（不强制透明）
+    has_custom_bg = len(custom_palette) > 0 and custom_palette[0] != (0, 0, 0)
     for class_id, color in enumerate(palette_bgr):
         mask = label_np == class_id
         if np.any(mask):
             bgra[mask, :3] = color
-            bgra[mask, 3] = 0 if class_id == 0 else 255
+            if class_id == 0 and not has_custom_bg:
+                bgra[mask, 3] = 0  # 默认背景透明
+            else:
+                bgra[mask, 3] = 255
     return bgra
 
 
