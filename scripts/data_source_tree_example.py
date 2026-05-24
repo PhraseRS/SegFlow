@@ -537,6 +537,7 @@ class MainWindow(QMainWindow):
         self.ui.pushButton_run.clicked.connect(self._on_start_training)
         self.ui.pushButton_stop.clicked.connect(self._on_stop_training)
         self.ui.pushButton_stop.setEnabled(False)
+        self.ui.pushButton_export.clicked.connect(self._on_export_config)
         
         # 联动：当 ModelSelection 的 Backbone 改变时，通知 WeightSelection 更新预训练模型下拉列表
         self.ui.widget_modelSelection.combo_backbone.currentTextChanged.connect(
@@ -871,6 +872,11 @@ class MainWindow(QMainWindow):
                     'value': rs_params['in_channels'],
                     'reason': "根据数据集波段自动分配"
                 }
+
+            # 推送 num_classes 到控件（直接设值，不走推荐系统）
+            if 'num_classes' in rs_params and rs_params['num_classes']:
+                self.ui.widget_hyperparamTabs.set_num_classes(rs_params['num_classes'])
+                self._log_to_bottom(f"💡 类别数量已自动设置为: {rs_params['num_classes']}")
             
             if 'crop_size' in rs_params:
                 crop = rs_params['crop_size']
@@ -1028,6 +1034,12 @@ class MainWindow(QMainWindow):
             ui_params.update(final_ui_params)  # 先放入所有高级配置
             ui_params['base_config'] = base_config
             ui_params['data_root'] = self._current_data_root  # 强制覆盖为真正的绝对路径
+
+            # ====== 预训练权重路径映射（修复断链）======
+            if weight_params.get('use_custom_weight') and weight_params.get('custom_weight_path'):
+                ui_params['pretrained'] = weight_params['custom_weight_path']
+            elif weight_params.get('use_pretrained') and weight_params.get('pretrained_model'):
+                ui_params['pretrained'] = weight_params['pretrained_model']
             # ====== Step 3: 生成训练配置文件 ======
             import os
             import tempfile
@@ -1042,14 +1054,20 @@ class MainWindow(QMainWindow):
             
             trainer = MMSegTrainer()
             config_path = trainer.generate_config(ui_params, advisor_params, config_save_path)
-            
+            self._last_config_path = config_path  # 缓存供导出功能使用
+
             self._log_to_bottom(f"📄 配置文件已生成: {config_path}")
             self._log_to_bottom(f"📂 工作目录: {work_dir}")
-            
+
             self._last_work_dir = work_dir
             self.btn_send_to_inference.setVisible(False)
 
-            # ====== Step 4: 创建并启动训练线程 ======
+            # ====== Step 4: 训练前确认弹窗 ======
+            if not self._show_pretrain_confirm_dialog(ui_params, model_params, config_path):
+                self._log_to_bottom("⏸ 用户取消了训练")
+                return
+
+            # ====== Step 5: 创建并启动训练线程 ======
             from core.training_dispatcher import TrainingThread
 
             # 从 EnvStateManager 获取已验证的 Python 解释器路径（解耦）
@@ -1210,6 +1228,87 @@ class MainWindow(QMainWindow):
         """重置训练相关 UI 状态"""
         self.ui.pushButton_run.setEnabled(True)
         self.ui.pushButton_stop.setEnabled(False)
+
+    def _show_pretrain_confirm_dialog(self, ui_params: dict, model_params: dict, config_path: str) -> bool:
+        """
+        训练前配置汇总确认弹窗。
+        返回 True 表示用户确认开始训练，False 表示取消。
+        """
+        from PySide6.QtWidgets import QDialog, QDialogButtonBox, QFormLayout, QVBoxLayout, QPushButton, QLabel
+        import subprocess as _sp
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("▶ 训练配置确认")
+        dlg.setMinimumWidth(480)
+
+        layout = QVBoxLayout(dlg)
+        layout.setSpacing(8)
+
+        hint = QLabel("请核查以下配置无误后再点击「开始训练」：")
+        hint.setStyleSheet("font-weight: bold; color: #1565C0;")
+        layout.addWidget(hint)
+
+        form = QFormLayout()
+        form.setSpacing(4)
+
+        def _row(label, value):
+            lbl = QLabel(str(value) if value else "—")
+            lbl.setWordWrap(True)
+            form.addRow(label, lbl)
+
+        _row("算法 / Backbone:", f"{model_params.get('method', '—')} / {model_params.get('backbone', '—')}")
+        _row("类别数量:", ui_params.get('num_classes', '—'))
+        _row("数据根目录:", ui_params.get('data_root', '—'))
+        _row("影像后缀 / 掩膜后缀:", f"{ui_params.get('img_suffix', '自动')} / {ui_params.get('seg_map_suffix', '自动')}")
+        _row("Batch Size / Max Iters:", f"{ui_params.get('batch_size', '—')} / {ui_params.get('max_iters', '—')}")
+        _row("验证间隔:", ui_params.get('val_interval', '—'))
+        _row("学习率 / 优化器:", f"{ui_params.get('lr', '—')} / {ui_params.get('optimizer', '—')}")
+        _row("保存最佳模型:", "✅ 是" if ui_params.get('save_best', True) else "否")
+        _row("配置文件:", config_path)
+        layout.addLayout(form)
+
+        btn_view = QPushButton("📄 查看完整配置")
+        btn_view.setFlat(True)
+        btn_view.setStyleSheet("color: #1565C0; text-decoration: underline;")
+
+        def _open_config():
+            try:
+                if sys.platform == 'win32':
+                    os.startfile(config_path)
+                else:
+                    _sp.Popen(['xdg-open', config_path])
+            except Exception:
+                pass
+
+        btn_view.clicked.connect(_open_config)
+        layout.addWidget(btn_view)
+
+        buttons = QDialogButtonBox()
+        btn_cancel = buttons.addButton("取消", QDialogButtonBox.ButtonRole.RejectRole)
+        btn_start = buttons.addButton("▶ 开始训练", QDialogButtonBox.ButtonRole.AcceptRole)
+        btn_start.setStyleSheet("background-color: #1976D2; color: white; font-weight: bold; padding: 4px 12px;")
+        buttons.accepted.connect(dlg.accept)
+        buttons.rejected.connect(dlg.reject)
+        layout.addWidget(buttons)
+
+        return dlg.exec() == QDialog.DialogCode.Accepted
+
+    def _on_export_config(self):
+        """导出当前训练配置文件到用户指定路径（UI-03）"""
+        import shutil
+        config_path = getattr(self, '_last_config_path', None)
+        if not config_path or not os.path.isfile(config_path):
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.information(self, "导出配置",
+                "尚未生成训练配置文件。\n请先点击「运行」生成配置。")
+            return
+        from PySide6.QtWidgets import QFileDialog
+        save_path, _ = QFileDialog.getSaveFileName(
+            self, "导出训练配置", config_path,
+            "Python 配置文件 (*.py);;所有文件 (*)")
+        if save_path:
+            shutil.copy2(config_path, save_path)
+            self.statusBar().showMessage(f"✅ 配置已导出到: {save_path}")
         
     def _on_send_to_inference_clicked(self):
         """一键打包流转至推理分析面板"""
@@ -1254,17 +1353,30 @@ class MainWindow(QMainWindow):
             ('DeepLabV3+', 'resnet50'): ('deeplabv3plus', 'deeplabv3plus_r50*d8*512x512.py'),
             ('DeepLabV3+', 'resnet101'): ('deeplabv3plus', 'deeplabv3plus_r101*d8*512x512.py'),
             ('DeepLabV3+', 'mobilenet_v2'): ('mobilenet_v2', 'deeplabv3plus_m-v2*d8*512x512.py'),
+            ('DeepLabV3+', 'mobilenet_v3_large'): ('mobilenet_v3', 'deeplabv3plus_m-v3*512x512*.py'),
             ('SegFormer', 'mit_b0'): ('segformer', 'segformer_mit-b0*512x512.py'),
             ('SegFormer', 'mit_b1'): ('segformer', 'segformer_mit-b1*512x512.py'),
             ('SegFormer', 'mit_b2'): ('segformer', 'segformer_mit-b2*512x512.py'),
+            ('SegFormer', 'mit_b3'): ('segformer', 'segformer_mit-b3*512x512.py'),
+            ('SegFormer', 'mit_b4'): ('segformer', 'segformer_mit-b4*512x512.py'),
             ('SegFormer', 'mit_b5'): ('segformer', 'segformer_mit-b5*512x512.py'),
             ('UperNet', 'swin_tiny'): ('swin', 'upernet_swin-tiny*512x512.py'),
             ('UperNet', 'swin_base'): ('swin', 'upernet_swin-base*512x512.py'),
             ('UperNet', 'resnet50'): ('upernet', 'upernet_r50*512x512.py'),
+            ('UperNet', 'convnext_tiny'): ('convnext', 'upernet_convnext-tiny*512x512*.py'),
+            ('FCN', 'resnet18'): ('fcn', 'fcn_r18*d8*512x512*.py'),
             ('FCN', 'resnet50'): ('fcn', 'fcn_r50*d8*512x512.py'),
             ('FCN', 'resnet101'): ('fcn', 'fcn_r101*d8*512x512.py'),
             ('FCN', 'hrnet_w48'): ('hrnet', 'fcn_hr48*512x512.py'),
             ('UNet', 'resnet50'): ('unet', 'unet_s5*d16_fcn*r50*d8*512x512.py'),
+            ('UNet++', 'resnet50'): ('unet', 'unet-s5-d16_fcn*512x512*.py'),
+            ('UNet++', 'resnet101'): ('unet', 'unet-s5-d16_fcn*512x512*.py'),
+            ('Mask2Former', 'swin_tiny'): ('mask2former', 'mask2former_swin-t*512x512*.py'),
+            ('Mask2Former', 'swin_base'): ('mask2former', 'mask2former_swin-b*512x512*.py'),
+            ('Mask2Former', 'swin_large'): ('mask2former', 'mask2former_swin-l*512x512*.py'),
+            ('Mask2Former', 'resnet50'): ('mask2former', 'mask2former_r50*512x512*.py'),
+            ('HRNet+OCR', 'hrnet_w32'): ('ocrnet', 'ocrnet_hr32*512x512*.py'),
+            ('HRNet+OCR', 'hrnet_w48'): ('ocrnet', 'ocrnet_hr48*512x512*.py'),
             ('Swin-Transformer', 'swin_tiny'): ('swin', 'swin-tiny*upernet*512x512.py'),
             ('Swin-Transformer', 'swin_small'): ('swin', 'swin-small*upernet*512x512.py'),
             ('Swin-Transformer', 'swin_base'): ('swin', 'swin-base*upernet*512x512.py'),

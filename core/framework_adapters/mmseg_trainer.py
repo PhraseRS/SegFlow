@@ -84,6 +84,17 @@ class LivePredictionHook(Hook):
 """
 
 
+def _detect_suffix(dir_path: str, default: str = '.jpg') -> str:
+    """扫描目录下第一个文件的扩展名，无文件时返回 default。"""
+    if not os.path.isdir(dir_path):
+        return default
+    for f in os.listdir(dir_path):
+        _, ext = os.path.splitext(f)
+        if ext:
+            return ext.lower()
+    return default
+
+
 class MMSegTrainer(BaseTrainer):
     """
     MMSegmentation 框架训练适配器
@@ -155,8 +166,8 @@ class MMSegTrainer(BaseTrainer):
                 cfg.train_cfg.max_iters = int(max_iters)
                 cfg.train_cfg.type = 'IterBasedTrainLoop'
                 
-                # 智能计算验证间隔: 保证整个训练周期内至少采点 10 次，形成动态平滑验证曲线
-                val_interval = max(50, int(max_iters) // 10)
+                # 优先读取用户在 UI 中设置的 val_interval，无设置时用保底公式
+                val_interval = int(ui_params.get('val_interval') or 0) or max(50, int(max_iters) // 10)
                 cfg.train_cfg.val_interval = val_interval
 
         # ====== 优化器 ======
@@ -227,6 +238,11 @@ class MMSegTrainer(BaseTrainer):
                             obj['type'] = 'PascalVOCDataset'
                             # 统一背景 0 的减除行为，防止与 ADE20K 自带 pipeline 里的设定相斥
                             obj['reduce_zero_label'] = False
+                            # 覆写文件后缀，防止遥感 .tif 数据被默认 .jpg 找不到
+                            obj['img_suffix'] = ui_params.get('img_suffix') or _detect_suffix(
+                                os.path.join(data_root, 'JPEGImages'))
+                            obj['seg_map_suffix'] = ui_params.get('seg_map_suffix') or _detect_suffix(
+                                os.path.join(data_root, 'SegmentationClass'), default='.png')
                         
                         # 兼容强转 Dataset 类型后带来的必填项缺失问题
                         if 'ann_file' not in obj or not obj['ann_file']:
@@ -254,12 +270,26 @@ class MMSegTrainer(BaseTrainer):
             if hasattr(cfg, 'test_dataloader'):
                 process_segmentation_split(cfg.test_dataloader, 'ImageSets/Segmentation/test.txt')
 
+        # ====== num_classes 注入 ======
+        num_classes = ui_params.get('num_classes')
+        if num_classes:
+            num_classes = int(num_classes)
+            if hasattr(cfg, 'model'):
+                if hasattr(cfg.model, 'decode_head'):
+                    cfg.model.decode_head.num_classes = num_classes
+                if hasattr(cfg.model, 'auxiliary_head'):
+                    cfg.model.auxiliary_head.num_classes = num_classes
+
         # ====== 检查点 ======
         save_interval = ui_params.get('save_interval', 4000)
         max_keep_ckpts = ui_params.get('max_keep_ckpts', 3)
         if hasattr(cfg, 'default_hooks') and hasattr(cfg.default_hooks, 'checkpoint'):
             cfg.default_hooks.checkpoint.interval = int(save_interval)
             cfg.default_hooks.checkpoint.max_keep_ckpts = int(max_keep_ckpts)
+            # save_best 注入
+            if ui_params.get('save_best', True):
+                cfg.default_hooks.checkpoint.save_best = 'mIoU'
+                cfg.default_hooks.checkpoint.rule = 'greater'
 
         # ====== 预训练权重 ======
         pretrained = ui_params.get('pretrained')

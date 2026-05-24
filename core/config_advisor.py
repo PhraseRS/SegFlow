@@ -127,6 +127,10 @@ class ConfigAdvisor:
         # 类别分布
         insights.pixel_distribution = stats.get('class_distribution', {})
         insights.image_counts = stats.get('image_counts', {})
+        # 从 pixel_distribution 的 key 数量推断类别名（class_0, class_1, ...）
+        insights.class_names = [
+            f"class_{i}" for i in range(len(insights.pixel_distribution))
+        ]
         
         # 计算像素比例
         total_pixels = sum(insights.pixel_distribution.values())
@@ -395,6 +399,7 @@ class ConfigAdvisor:
         
         return {
             'in_channels': ins.num_channels,
+            'num_classes': ins.num_classes,
             'crop_size': self._recommend_crop_size(),
             'class_weight': class_weight,
             'loss_config': self.recommend_loss_config(),

@@ -11,7 +11,7 @@ Training Roadmap Phase 3, Task 3.3
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QFormLayout, QTabWidget,
     QSpinBox, QDoubleSpinBox, QComboBox, QCheckBox,
-    QLabel, QFrame, QHBoxLayout, QToolButton
+    QLabel, QFrame, QHBoxLayout, QToolButton, QSizePolicy
 )
 from PySide6.QtCore import Signal, Qt
 
@@ -91,6 +91,12 @@ class HyperparamTabsWidget(QWidget):
         form.setSpacing(4)
         form.setContentsMargins(6, 6, 6, 6)
 
+        self.spin_num_classes = QSpinBox()
+        self.spin_num_classes.setRange(2, 256)
+        self.spin_num_classes.setValue(2)
+        self.spin_num_classes.setToolTip("数据集类别总数（含背景类），必须与标注掩膜中的实际类别数一致")
+        self._add_rec_row(form, "类别数量:", self.spin_num_classes, "num_classes")
+
         self.spin_in_channels = QSpinBox()
         self.spin_in_channels.setRange(1, 256)
         self.spin_in_channels.setValue(3)
@@ -129,6 +135,18 @@ class HyperparamTabsWidget(QWidget):
         self.spin_val_interval.setValue(4000)
         self.spin_val_interval.setToolTip("每 N 次迭代运行一次验证")
         self._add_rec_row(form, "验证间隔:", self.spin_val_interval, "val_interval")
+
+        self.combo_img_suffix = QComboBox()
+        self.combo_img_suffix.setEditable(True)
+        self.combo_img_suffix.addItems(['.jpg', '.jpeg', '.png', '.tif', '.tiff', '.bmp'])
+        self.combo_img_suffix.setToolTip("影像文件后缀（程序会自动探测，也可手动指定）")
+        self._add_rec_row(form, "影像后缀:", self.combo_img_suffix, "img_suffix")
+
+        self.combo_seg_map_suffix = QComboBox()
+        self.combo_seg_map_suffix.setEditable(True)
+        self.combo_seg_map_suffix.addItems(['.png', '.tif', '.tiff'])
+        self.combo_seg_map_suffix.setToolTip("掩膜标注文件后缀（程序会自动探测，也可手动指定）")
+        self._add_rec_row(form, "掩膜后缀:", self.combo_seg_map_suffix, "seg_map_suffix")
 
         self.tabs.addTab(tab, "常规参数")
 
@@ -352,12 +370,15 @@ class HyperparamTabsWidget(QWidget):
 
     def get_params(self) -> dict:
         return {
+            'num_classes': self.spin_num_classes.value(),
             'in_channels': self.spin_in_channels.value(),
             'crop_size': self.spin_crop_size.value(),
             'batch_size': self.spin_batch_size.value(),
             'max_iters': self.spin_max_iters.value(),
             'num_workers': self.spin_num_workers.value(),
             'val_interval': self.spin_val_interval.value(),
+            'img_suffix': self.combo_img_suffix.currentText(),
+            'seg_map_suffix': self.combo_seg_map_suffix.currentText(),
             'loss_type': self.combo_loss_type.currentText(),
             'class_weight': self.chk_use_class_weight.isChecked(),
             'optimizer': self.combo_optimizer.currentText(),
@@ -372,6 +393,26 @@ class HyperparamTabsWidget(QWidget):
             'aug_random_rotate': self.check_random_rotate.isChecked(),
             'aug_multi_scale': self.check_random_scale.isChecked(),
         }
+
+    def set_num_classes(self, num_classes: int):
+        """由外部（推荐系统或 Tab1 联动）设置类别数量。"""
+        if num_classes and num_classes >= 2:
+            self.spin_num_classes.setValue(int(num_classes))
+
+    def set_suffixes(self, img_suffix: str, seg_suffix: str):
+        """由外部（Tab1 加载数据集后）设置探测到的文件后缀。"""
+        if img_suffix:
+            idx = self.combo_img_suffix.findText(img_suffix)
+            if idx >= 0:
+                self.combo_img_suffix.setCurrentIndex(idx)
+            else:
+                self.combo_img_suffix.setCurrentText(img_suffix)
+        if seg_suffix:
+            idx = self.combo_seg_map_suffix.findText(seg_suffix)
+            if idx >= 0:
+                self.combo_seg_map_suffix.setCurrentIndex(idx)
+            else:
+                self.combo_seg_map_suffix.setCurrentText(seg_suffix)
 
     def set_class_weights(self, weights: list):
         """接收类别权重并启用类别权重补偿（由 Tab1 计算权重联动调用）"""

@@ -25,27 +25,36 @@ from core.framework_registry import (
 # 算法-Backbone映射关系
 METHOD_BACKBONE_MAP = {
     'PSPNet': ['ResNet-50', 'ResNet-101'],
-    'DeepLabV3+': ['ResNet-50', 'ResNet-101', 'MobileNetV2'],
-    'SegFormer': ['MiT-B0', 'MiT-B1', 'MiT-B2', 'MiT-B5'],
-    'UperNet': ['Swin-Tiny', 'Swin-Base', 'ResNet-50'],
-    'FCN': ['ResNet-50', 'ResNet-101'],
+    'DeepLabV3+': ['ResNet-50', 'ResNet-101', 'MobileNetV2', 'MobileNetV3'],
+    'SegFormer': ['MiT-B0', 'MiT-B1', 'MiT-B2', 'MiT-B3', 'MiT-B4', 'MiT-B5'],
+    'UperNet': ['Swin-Tiny', 'Swin-Base', 'ResNet-50', 'ConvNeXt-Tiny'],
+    'FCN': ['ResNet-18', 'ResNet-50', 'ResNet-101'],
     'UNet': ['ResNet-50'],
+    'UNet++': ['ResNet-50', 'ResNet-101'],
+    'Mask2Former': ['Swin-Tiny', 'Swin-Base', 'Swin-Large', 'ResNet-50'],
+    'HRNet+OCR': ['HRNet-W32', 'HRNet-W48'],
     'Swin-Transformer': ['Swin-Tiny', 'Swin-Small', 'Swin-Base', 'Swin-Large'],
 }
 
 # Backbone内部标识映射
 BACKBONE_CHOICES = {
+    'ResNet-18': 'resnet18',
     'ResNet-50': 'resnet50',
     'ResNet-101': 'resnet101',
     'MobileNetV2': 'mobilenet_v2',
+    'MobileNetV3': 'mobilenet_v3_large',
+    'HRNet-W32': 'hrnet_w32',
     'HRNet-W48': 'hrnet_w48',
     'Swin-Tiny': 'swin_tiny',
     'Swin-Small': 'swin_small',
     'Swin-Base': 'swin_base',
     'Swin-Large': 'swin_large',
+    'ConvNeXt-Tiny': 'convnext_tiny',
     'MiT-B0': 'mit_b0',
     'MiT-B1': 'mit_b1',
     'MiT-B2': 'mit_b2',
+    'MiT-B3': 'mit_b3',
+    'MiT-B4': 'mit_b4',
     'MiT-B5': 'mit_b5',
 }
 
