@@ -235,7 +235,9 @@ class MMSegTrainer(BaseTrainer):
                         )
                         # 核心修复：把源配置如 `ADE20KDataset` 强行变成 VOC 格式读取器，免得它看不懂 train.txt
                         if 'type' in obj:
-                            obj['type'] = 'PascalVOCDataset'
+                            # 使用自定义 Dataset 类而非 PascalVOCDataset，
+                            # 避免 BaseSegDataset.get_label_map() 的 subset 校验冲突
+                            obj['type'] = 'RSFreeVOCDataset'
                             # 统一背景 0 的减除行为，防止与 ADE20K 自带 pipeline 里的设定相斥
                             obj['reduce_zero_label'] = False
                             # 覆写文件后缀，防止遥感 .tif 数据被默认 .jpg 找不到
@@ -243,6 +245,9 @@ class MMSegTrainer(BaseTrainer):
                                 os.path.join(data_root, 'JPEGImages'))
                             obj['seg_map_suffix'] = ui_params.get('seg_map_suffix') or _detect_suffix(
                                 os.path.join(data_root, 'SegmentationClass'), default='.png')
+                            # 清除基底 config 可能残留的 metainfo 字段，
+                            # 类别定义已写入 RSFreeVOCDataset.METAINFO，无需再传参数
+                            obj.pop('metainfo', None)
                         
                         # 兼容强转 Dataset 类型后带来的必填项缺失问题
                         if 'ann_file' not in obj or not obj['ann_file']:
@@ -325,14 +330,41 @@ class MMSegTrainer(BaseTrainer):
                 if hasattr(cfg.model, 'decode_head'):
                     cfg.model.decode_head.loss_decode = clean_loss
 
-        # ====== Live Prediction Custom Hook ======
+        # ====== Live Prediction Custom Hook + RSFreeVOCDataset ======
         work_dir = os.path.dirname(save_path)
         os.makedirs(work_dir, exist_ok=True)
         hook_file = os.path.join(work_dir, 'custom_live_pred_hook.py')
+        custom_imports_list = []
         try:
             with open(hook_file, 'w', encoding='utf-8') as f:
                 f.write(HOOK_CODE)
-            cfg.custom_imports = dict(imports=['custom_live_pred_hook'], allow_failed_imports=True)
+            custom_imports_list.append('custom_live_pred_hook')
+        except Exception as e:
+            print(f"Warning: Failed to write live prediction hook: {e}")
+
+        # 生成自定义 Dataset 文件（支持任意类别，读取 VOC 文件树）
+        class_names = ui_params.get('class_names') or []
+        palette = ui_params.get('palette') or []
+        if not class_names:
+            num_cls = int(ui_params.get('num_classes') or 2)
+            class_names = [f'class_{i}' for i in range(num_cls)]
+        if len(palette) != len(class_names):
+            _default_pal = [
+                (0,0,0),(128,0,0),(0,128,0),(128,128,0),(0,0,128),
+                (128,0,128),(0,128,128),(128,128,128),(64,0,0),(192,0,0),
+            ]
+            palette = [_default_pal[i % len(_default_pal)] for i in range(len(class_names))]
+        try:
+            self._write_custom_dataset_file(work_dir, class_names, palette)
+            custom_imports_list.append('custom_rs_dataset')
+        except Exception as e:
+            print(f"Warning: Failed to write custom dataset file: {e}")
+
+        if custom_imports_list:
+            cfg.custom_imports = dict(imports=custom_imports_list, allow_failed_imports=False)
+
+        # 追加 LivePredictionHook（仅当 hook 文件写入成功时）
+        if 'custom_live_pred_hook' in custom_imports_list:
             new_hook = dict(type='LivePredictionHook', num_val_samples=25)
             if hasattr(cfg, 'custom_hooks'):
                 if isinstance(cfg.custom_hooks, list):
@@ -341,8 +373,6 @@ class MMSegTrainer(BaseTrainer):
                     cfg.custom_hooks = [cfg.custom_hooks, new_hook]
             else:
                 cfg.custom_hooks = [new_hook]
-        except Exception as e:
-            print(f"Warning: Failed to setup live prediction hook: {e}")
 
         # ====== 保存 ======
         cfg.dump(save_path)
@@ -424,6 +454,33 @@ class MMSegTrainer(BaseTrainer):
             errors='replace',
             creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == 'win32' else 0,
         )
+
+    def _write_custom_dataset_file(self, work_dir: str, class_names: list, palette: list) -> None:
+        """
+        在 work_dir 下生成 custom_rs_dataset.py。
+        定义 RSFreeVOCDataset：继承 BaseSegDataset（非 PascalVOCDataset），
+        类级 METAINFO 写入用户类别，彻底绕开 get_label_map() 的 subset 校验。
+        支持 VOC 文件树（JPEGImages/ + SegmentationClass/ + ImageSets/）。
+        """
+        classes_repr = repr(tuple(class_names))
+        palette_repr = repr([list(c) for c in palette])
+        code = (
+            "# 自动生成 — 由 RS-Seg-GUI 生成，请勿手动修改\n"
+            "from mmseg.datasets.basesegdataset import BaseSegDataset\n"
+            "from mmseg.registry import DATASETS\n\n"
+            "@DATASETS.register_module()\n"
+            "class RSFreeVOCDataset(BaseSegDataset):\n"
+            f"    METAINFO = dict(classes={classes_repr}, palette={palette_repr})\n\n"
+            "    def __init__(self, img_suffix='.jpg', seg_map_suffix='.png',\n"
+            "                 reduce_zero_label=False, **kwargs):\n"
+            "        super().__init__(img_suffix=img_suffix,\n"
+            "                         seg_map_suffix=seg_map_suffix,\n"
+            "                         reduce_zero_label=reduce_zero_label,\n"
+            "                         **kwargs)\n"
+        )
+        out_path = os.path.join(work_dir, 'custom_rs_dataset.py')
+        with open(out_path, 'w', encoding='utf-8') as f:
+            f.write(code)
 
     def _find_train_script(self, interpreter: str) -> str:
         """

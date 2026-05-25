@@ -40,6 +40,7 @@ from ui.widgets.hyperparam_tabs_widget import HyperparamTabsWidget
 from ui.widgets.advanced_config_widget import AdvancedConfigWidget
 from ui.widgets.task_config_dashboard import TaskConfigDashboard
 from ui.widgets.env_config_widget import EnvConfigWidget
+from ui.widgets.class_config_widget import ClassConfigWidget
 
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
@@ -299,11 +300,23 @@ class Ui_MainWindow(object):
         self.groupBox_advisorConfig.setObjectName(u"groupBox_advisorConfig")
         self.verticalLayout_advisor = QVBoxLayout(self.groupBox_advisorConfig)
         self.verticalLayout_advisor.setContentsMargins(6, 6, 6, 6)
-        
+
         self.widget_advisorConfig = AdvisorConfigWidget(self.groupBox_advisorConfig)
         self.widget_advisorConfig.setObjectName(u"widget_advisorConfig")
         self.verticalLayout_advisor.addWidget(self.widget_advisorConfig)
         self.verticalLayout_taskConfigContent.addWidget(self.groupBox_advisorConfig)
+
+        # 3.5 类别配置组
+        self.groupBox_classConfig = QGroupBox(self.scrollAreaWidget_taskConfig)
+        self.groupBox_classConfig.setObjectName(u"groupBox_classConfig")
+        self.groupBox_classConfig.setTitle("类别配置 (Class Configuration)")
+        self.verticalLayout_classConfig = QVBoxLayout(self.groupBox_classConfig)
+        self.verticalLayout_classConfig.setContentsMargins(6, 6, 6, 6)
+
+        self.widget_classConfig = ClassConfigWidget(self.groupBox_classConfig)
+        self.widget_classConfig.setObjectName(u"widget_classConfig")
+        self.verticalLayout_classConfig.addWidget(self.widget_classConfig)
+        self.verticalLayout_taskConfigContent.addWidget(self.groupBox_classConfig)
 
         # 4. 详细参数设置组
         self.groupBox_hyperparams = QGroupBox(self.scrollAreaWidget_taskConfig)

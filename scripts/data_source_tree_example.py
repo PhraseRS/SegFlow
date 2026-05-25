@@ -538,6 +538,12 @@ class MainWindow(QMainWindow):
         self.ui.pushButton_stop.clicked.connect(self._on_stop_training)
         self.ui.pushButton_stop.setEnabled(False)
         self.ui.pushButton_export.clicked.connect(self._on_export_config)
+
+        # 联动：spin_num_classes ↔ ClassConfigWidget 行数同步
+        self.ui.widget_hyperparamTabs.spin_num_classes.valueChanged.connect(
+            self.ui.widget_classConfig.set_num_classes
+        )
+        self.ui.widget_classConfig.config_changed.connect(self._on_config_params_changed)
         
         # 联动：当 ModelSelection 的 Backbone 改变时，通知 WeightSelection 更新预训练模型下拉列表
         self.ui.widget_modelSelection.combo_backbone.currentTextChanged.connect(
@@ -877,6 +883,11 @@ class MainWindow(QMainWindow):
             if 'num_classes' in rs_params and rs_params['num_classes']:
                 self.ui.widget_hyperparamTabs.set_num_classes(rs_params['num_classes'])
                 self._log_to_bottom(f"💡 类别数量已自动设置为: {rs_params['num_classes']}")
+
+            # 推送 class_names 到类别配置控件
+            class_names = rs_params.get('class_names') or []
+            if class_names:
+                self.ui.widget_classConfig.load_from_advisor(class_names)
             
             if 'crop_size' in rs_params:
                 crop = rs_params['crop_size']
@@ -1040,6 +1051,12 @@ class MainWindow(QMainWindow):
                 ui_params['pretrained'] = weight_params['custom_weight_path']
             elif weight_params.get('use_pretrained') and weight_params.get('pretrained_model'):
                 ui_params['pretrained'] = weight_params['pretrained_model']
+
+            # ====== 类别配置（class_names + palette）======
+            if hasattr(self.ui, 'widget_classConfig'):
+                class_cfg = self.ui.widget_classConfig.get_class_config()
+                ui_params['class_names'] = class_cfg.get('class_names', [])
+                ui_params['palette'] = class_cfg.get('palette', [])
             # ====== Step 3: 生成训练配置文件 ======
             import os
             import tempfile
