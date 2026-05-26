@@ -453,10 +453,12 @@ class MainWindow(QMainWindow):
     
     def _init_view_switcher(self):
         """初始化视图切换器"""
-        # 默认显示详情视图
+        # 默认显示详情视图，数据集加载前禁用视图切换按钮
         self.ui.stackedWidget_views.setCurrentIndex(VIEW_MODE_DETAIL)
         self.ui.action_detailView.setChecked(True)
         self.ui.action_gridView.setChecked(False)
+        self.ui.action_detailView.setEnabled(False)
+        self.ui.action_gridView.setEnabled(False)
     
     def _connect_signals(self):
         """连接所有信号"""
@@ -629,6 +631,11 @@ class MainWindow(QMainWindow):
         # 加载数据
         self.data_manager.load_from_txt_files(data_root)
         self.statusBar().showMessage(f"已从 {data_root} 加载VOC数据集")
+
+        # 数据集加载后激活视图切换按钮，默认切换到详细视图
+        self.ui.action_detailView.setEnabled(True)
+        self.ui.action_gridView.setEnabled(True)
+        self.on_switch_to_detail_view()
         
         # Phase 1.4: 设置缩略图磁盘缓存目录
         self.thumbnail_manager.set_cache_dir(data_root)
@@ -2089,6 +2096,12 @@ class MainWindow(QMainWindow):
         else:
             # 数据洞察模式，恢复到之前的视图模式（Detail 或 Grid）
             self.ui.stackedWidget_views.setCurrentIndex(self.current_view_mode)
+
+        # 详细视图/网格视图按钮仅在数据洞察面板（Tab 0）且数据集已加载时启用
+        dataset_loaded = hasattr(self, '_current_data_root') and bool(self._current_data_root)
+        is_data_insight = (index == 0)
+        self.ui.action_detailView.setEnabled(is_data_insight and dataset_loaded)
+        self.ui.action_gridView.setEnabled(is_data_insight and dataset_loaded)
             
         # 根据模式更新状态栏提示
         mode_names = {

@@ -295,18 +295,7 @@ class Ui_MainWindow(object):
         self.verticalLayout_weight.addWidget(self.widget_weightSelection)
         self.verticalLayout_taskConfigContent.addWidget(self.groupBox_weightSelection)
         
-        # 3. 数据驱动推荐组
-        self.groupBox_advisorConfig = QGroupBox(self.scrollAreaWidget_taskConfig)
-        self.groupBox_advisorConfig.setObjectName(u"groupBox_advisorConfig")
-        self.verticalLayout_advisor = QVBoxLayout(self.groupBox_advisorConfig)
-        self.verticalLayout_advisor.setContentsMargins(6, 6, 6, 6)
-
-        self.widget_advisorConfig = AdvisorConfigWidget(self.groupBox_advisorConfig)
-        self.widget_advisorConfig.setObjectName(u"widget_advisorConfig")
-        self.verticalLayout_advisor.addWidget(self.widget_advisorConfig)
-        self.verticalLayout_taskConfigContent.addWidget(self.groupBox_advisorConfig)
-
-        # 3.5 类别配置组
+        # 3. 类别配置组
         self.groupBox_classConfig = QGroupBox(self.scrollAreaWidget_taskConfig)
         self.groupBox_classConfig.setObjectName(u"groupBox_classConfig")
         self.groupBox_classConfig.setTitle("类别配置 (Class Configuration)")
@@ -317,6 +306,17 @@ class Ui_MainWindow(object):
         self.widget_classConfig.setObjectName(u"widget_classConfig")
         self.verticalLayout_classConfig.addWidget(self.widget_classConfig)
         self.verticalLayout_taskConfigContent.addWidget(self.groupBox_classConfig)
+
+        # 3.5 数据驱动推荐组
+        self.groupBox_advisorConfig = QGroupBox(self.scrollAreaWidget_taskConfig)
+        self.groupBox_advisorConfig.setObjectName(u"groupBox_advisorConfig")
+        self.verticalLayout_advisor = QVBoxLayout(self.groupBox_advisorConfig)
+        self.verticalLayout_advisor.setContentsMargins(6, 6, 6, 6)
+
+        self.widget_advisorConfig = AdvisorConfigWidget(self.groupBox_advisorConfig)
+        self.widget_advisorConfig.setObjectName(u"widget_advisorConfig")
+        self.verticalLayout_advisor.addWidget(self.widget_advisorConfig)
+        self.verticalLayout_taskConfigContent.addWidget(self.groupBox_advisorConfig)
 
         # 4. 详细参数设置组
         self.groupBox_hyperparams = QGroupBox(self.scrollAreaWidget_taskConfig)
@@ -517,9 +517,6 @@ class Ui_MainWindow(object):
         self.toolBar.addSeparator()
         self.toolBar.addAction(self.action_zoomIn)
         self.toolBar.addAction(self.action_zoomOut)
-        self.toolBar.addSeparator()
-        self.toolBar.addAction(self.action_train)
-        self.toolBar.addAction(self.action_inference)
         self.toolBar.addSeparator()
         self.toolBar.addAction(self.action_detailView)
         self.toolBar.addAction(self.action_gridView)
