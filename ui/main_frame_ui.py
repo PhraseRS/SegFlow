@@ -82,7 +82,13 @@ class Ui_MainWindow(object):
         self.splitter_vertical.setObjectName(u"splitter_vertical")
         self.splitter_vertical.setOrientation(Qt.Orientation.Vertical)
         self.splitter_vertical.setChildrenCollapsible(False)  # 防止子组件完全折叠
-        self.splitter_vertical.setHandleWidth(6)  # 增加手柄宽度，便于拖动
+        self.splitter_vertical.setHandleWidth(2)  # UI-10：细分界，仅 2 px
+        # UI-10：垂直分割器 handle 使用单一深灰填充，2 px 细线即可清晰区分上下区域
+        self.splitter_vertical.setStyleSheet(
+            "QSplitter::handle:vertical {"
+            "    background-color: #7a808c;"
+            "}"
+        )
         self.splitter_horizontal = QSplitter(self.splitter_vertical)
         self.splitter_horizontal.setObjectName(u"splitter_horizontal")
         self.splitter_horizontal.setOrientation(Qt.Orientation.Horizontal)
@@ -419,6 +425,7 @@ class Ui_MainWindow(object):
         self.verticalLayout_bottom = QVBoxLayout(self.bottomPanel)
         self.verticalLayout_bottom.setObjectName(u"verticalLayout_bottom")
         self.verticalLayout_bottom.setContentsMargins(0, 0, 0, 0)
+
         self.tabWidget_bottom = QTabWidget(self.bottomPanel)
         self.tabWidget_bottom.setObjectName(u"tabWidget_bottom")
         self.tab_logs = QWidget()
@@ -468,8 +475,9 @@ class Ui_MainWindow(object):
 
         self.splitter_vertical.addWidget(self.bottomPanel)
         
-        # 设置垂直分割器的初始大小比例（主内容区域 : 底部面板 = 700 : 150）
-        self.splitter_vertical.setSizes([700, 150])
+        # 设置垂直分割器的初始大小比例（主内容区域 : 底部面板 = 680 : 170）
+        # UI-10：略微下调上半占比、上调日志面板占比，让分界线区域更显眼
+        self.splitter_vertical.setSizes([680, 170])
 
         self.verticalLayout_main.addWidget(self.splitter_vertical)
 
