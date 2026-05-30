@@ -1,0 +1,33 @@
+# ============================================================
+# RS-Seg-GUI —— Layer B: 训练 / 推理专用环境
+# ============================================================
+# 这是一个独立于 GUI 宿主环境的 conda 环境，承载 PyTorch 与
+# OpenMMLab 全家桶。在 GUI 的"环境配置"面板中选择此环境的
+# python 解释器即可用于训练与真实模型推理。
+#
+# 创建：
+#   conda env create -f environment_train.yml
+#   conda activate mmseg
+#
+# 注意：
+#   - PyTorch / MMCV 的 CUDA 版本需与本机驱动匹配，
+#     下方默认按 CPU/通用方式安装；如需 GPU 加速，
+#     请参考 README 中的 CUDA 对应安装命令手动调整。
+#   - gdal 通过 conda-forge 安装以获得预编译二进制，
+#     避免源码编译的复杂依赖。
+# ------------------------------------------------------------
+name: mmseg
+channels:
+  - pytorch
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.9
+  - gdal              # 大图分块推理：GeoTIFF 读取 + 地理参考写出
+  - pip
+  - pip:
+      - torch>=2.0
+      - torchvision
+      - mmengine>=0.7.0
+      - mmcv>=2.0.0
+      - mmsegmentation>=1.0.0,<2.0.0

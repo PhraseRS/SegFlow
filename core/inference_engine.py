@@ -13,7 +13,6 @@ from typing import Dict, Tuple, Optional
 from PIL import Image
 import cv2
 import time
-from tqdm import tqdm
 
 # 针对大尺寸遥感影像，提高PIL的像素限制
 # 默认限制约为178MB像素，这里提高到10GB像素
@@ -363,7 +362,7 @@ class InferenceEngine:
             block_count = 0
             
             # 左上部分
-            for j in tqdm(range(y_num - 1), desc='预测分块(主区域)'):
+            for j in range(y_num - 1):
                 # 检查取消请求
                 if self._cancel_requested:
                     print("[推理引擎] 🛑 分块推理已取消")
@@ -399,7 +398,7 @@ class InferenceEngine:
             y_start = img_height - crop_size
             overlap_y = stride * (cur_y - 1) + crop_size - y_start if cur_y > 0 else 0
             
-            for i in tqdm(range(x_num - 1), desc='预测分块(下边缘)'):
+            for i in range(x_num - 1):
                 if self._cancel_requested:
                     return {'success': False, 'error': '用户取消'}
                     
@@ -428,7 +427,7 @@ class InferenceEngine:
             x_start = img_width - crop_size
             overlap_x = stride * (cur_x - 1) + crop_size - x_start if cur_x > 0 else 0
             
-            for j in tqdm(range(y_num - 1), desc='预测分块(右边缘)'):
+            for j in range(y_num - 1):
                 if self._cancel_requested:
                     return {'success': False, 'error': '用户取消'}
                     
@@ -578,7 +577,7 @@ class InferenceEngine:
         total_blocks = sum(1 for row in dst_blocks for block in row if block is not None)
         processed_blocks = 0
         
-        for j in tqdm(dst_blocks, desc='拼接分块'):
+        for j in dst_blocks:
             for block in j:
                 if block is None:
                     continue
