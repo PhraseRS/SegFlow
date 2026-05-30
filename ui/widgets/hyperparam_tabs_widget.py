@@ -15,6 +15,8 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Signal, Qt
 
+from ui.widgets.wheel_guard import install_wheel_guard
+
 
 class HyperparamTabsWidget(QWidget):
     """
@@ -51,6 +53,9 @@ class HyperparamTabsWidget(QWidget):
         self._create_tab_optimizer()
         self._create_tab_checkpoint()
         self._create_tab_augmentation()
+
+        # UI-09：阻止鼠标悬停时滚轮误改 SpinBox / ComboBox 的值
+        install_wheel_guard(self)
 
     def _add_rec_row(self, form, label_text: str, widget: QWidget, param_key: str):
         """为输入控件添加原生推荐按钮支持"""

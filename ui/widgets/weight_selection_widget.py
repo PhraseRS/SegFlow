@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Signal, QThread
 from ui.widgets.model_selection_widget import PRETRAINED_MODELS
+from ui.widgets.wheel_guard import install_wheel_guard
 
 # 预训练权重下载地址表 {(backbone_display_name, dataset): url}
 WEIGHT_URL_MAP = {
@@ -160,6 +161,9 @@ class WeightSelectionWidget(QWidget):
 
         self.tab_pretrained.addTab(tab_custom, "自有业务权重 (Custom)")
         layout.addWidget(self.tab_pretrained)
+
+        # UI-09：阻止鼠标悬停时滚轮误改 ComboBox 的选项
+        install_wheel_guard(self)
 
     def _connect_signals(self):
         self.check_use_pretrained.toggled.connect(self._on_pretrained_toggled)

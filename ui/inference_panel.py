@@ -16,6 +16,7 @@ import numpy as np
 
 from ui.widgets.visualization_settings_widget import VisualizationSettingsWidget
 from ui.widgets.inference_visualization_widget import InferenceVisualizationWidget
+from ui.widgets.wheel_guard import install_wheel_guard
 from core.mask_renderer import MaskRenderer
 
 
@@ -178,21 +179,24 @@ class InferencePanel(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(3, 3, 3, 3)  # 压缩边距
         layout.setSpacing(4)  # 压缩组件间距
-        
+
         # 模型加载区
         self._create_model_config_group(layout)
-        
+
         # 推理策略区
         self._create_inference_strategy_group(layout)
-        
+
         # 执行与导出区
         self._create_action_export_group(layout)
-        
+
         # 推理结果显示区
         self._create_inference_result_group(layout)
-        
+
         # 添加弹性空间
         layout.addStretch()
+
+        # UI-09：阻止鼠标悬停时滚轮误改 SpinBox / ComboBox 的值
+        install_wheel_guard(self)
     
     def _create_model_config_group(self, parent_layout):
         """创建模型加载区"""

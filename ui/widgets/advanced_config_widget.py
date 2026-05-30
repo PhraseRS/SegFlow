@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Signal, Slot
 
 from ui.widgets.custom_widgets import CollapsibleBox, ParamRow
+from ui.widgets.wheel_guard import install_wheel_guard
 
 from config.mmseg_params import mmseg_params as DEFAULT_CONFIG
 
@@ -80,6 +81,9 @@ class AdvancedConfigWidget(QWidget):
         self._build_config_tree(container_layout)
         self._build_override_area(container_layout)
         card_layout.addWidget(self.container_advanced)
+
+        # UI-09：阻止鼠标悬停时滚轮误改高级配置中的 SpinBox / ComboBox
+        install_wheel_guard(card)
         return card
 
     @Slot()

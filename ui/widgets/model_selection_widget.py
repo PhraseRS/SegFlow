@@ -20,6 +20,7 @@ from core.framework_registry import (
     get_required_packages,
     get_key_by_display_name,
 )
+from ui.widgets.wheel_guard import install_wheel_guard
 
 
 # 算法-Backbone映射关系
@@ -124,6 +125,9 @@ class ModelSelectionWidget(QWidget):
 
         # 初始化第一个算法的 Backbone 列表
         self._update_backbone_list(self.combo_method.currentText())
+
+        # UI-09：阻止鼠标悬停时滚轮误改 ComboBox 的选项
+        install_wheel_guard(self)
 
     def _connect_signals(self):
         self.combo_method.currentTextChanged.connect(self._on_method_changed)

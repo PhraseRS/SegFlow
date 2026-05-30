@@ -16,6 +16,8 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Signal, Qt
 from PySide6.QtGui import QColor
 
+from ui.widgets.wheel_guard import install_wheel_guard
+
 # 默认调色板（VOC 风格，循环使用）
 _DEFAULT_PALETTE = [
     (0, 0, 0), (128, 0, 0), (0, 128, 0), (128, 128, 0),
@@ -77,6 +79,9 @@ class ClassConfigWidget(QWidget):
         # 初始化 2 行（背景 + 目标）
         self._add_row()
         self._add_row()
+
+        # UI-09：阻止鼠标悬停时滚轮误改可能存在的输入控件
+        install_wheel_guard(self)
 
     # ── 内部辅助 ──────────────────────────────────────────────────────────────
 

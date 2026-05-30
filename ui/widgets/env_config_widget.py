@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 
 from utils.mmseg_env_manager import MMSegEnvManager
 from utils.env_check_worker import EnvCheckWorker
+from ui.widgets.wheel_guard import install_wheel_guard
 
 
 # 默认 mmseg 所需包列表，可由外部通过 set_framework() 覆盖
@@ -119,6 +120,9 @@ class EnvConfigWidget(QWidget):
         self._debounce_timer = QTimer(self)
         self._debounce_timer.setSingleShot(True)
         self._debounce_timer.timeout.connect(self._auto_validate)
+
+        # UI-09：阻止鼠标悬停时滚轮误改 env_select ComboBox 的选项
+        install_wheel_guard(self)
 
     def _schedule_refresh(self):
         """延迟一个事件循环周期后再刷新，避免构造时阻塞父组件初始化。"""
