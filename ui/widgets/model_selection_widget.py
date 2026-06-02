@@ -13,7 +13,9 @@ from PySide6.QtWidgets import (
     QGroupBox, QComboBox,
     QSizePolicy
 )
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Signal, Qt
+from PySide6.QtGui import QColor, Qt
+from PySide6.QtGui import QColor
 
 from core.framework_registry import (
     get_all_display_names,
@@ -23,18 +25,26 @@ from core.framework_registry import (
 from ui.widgets.wheel_guard import install_wheel_guard
 
 
-# 算法-Backbone映射关系
+# 算法家族分组（决定下拉框的呈现顺序与分隔符位置）
+# 注意：每组内算法按首字母排序，组与组之间用分隔标题项隔开
+METHOD_GROUPS = [
+    ('推荐', ['DeepLabV3+', 'SegFormer', 'UperNet']),
+    ('CNN', ['FCN', 'HRNet+OCR', 'PSPNet', 'UNet', 'UNet++']),
+    ('Transformer', ['Mask2Former', 'Swin-Transformer']),
+]
+
+# 算法-Backbone映射关系（每组内 backbone 也按首字母升序）
 METHOD_BACKBONE_MAP = {
     'PSPNet': ['ResNet-50', 'ResNet-101'],
-    'DeepLabV3+': ['ResNet-50', 'ResNet-101', 'MobileNetV2', 'MobileNetV3'],
+    'DeepLabV3+': ['MobileNetV2', 'MobileNetV3', 'ResNet-50', 'ResNet-101'],
     'SegFormer': ['MiT-B0', 'MiT-B1', 'MiT-B2', 'MiT-B3', 'MiT-B4', 'MiT-B5'],
-    'UperNet': ['Swin-Tiny', 'Swin-Base', 'ResNet-50', 'ConvNeXt-Tiny'],
+    'UperNet': ['ConvNeXt-Tiny', 'ResNet-50', 'Swin-Base', 'Swin-Tiny'],
     'FCN': ['ResNet-18', 'ResNet-50', 'ResNet-101'],
     'UNet': ['ResNet-50'],
     'UNet++': ['ResNet-50', 'ResNet-101'],
-    'Mask2Former': ['Swin-Tiny', 'Swin-Base', 'Swin-Large', 'ResNet-50'],
+    'Mask2Former': ['ResNet-50', 'Swin-Base', 'Swin-Large', 'Swin-Tiny'],
     'HRNet+OCR': ['HRNet-W32', 'HRNet-W48'],
-    'Swin-Transformer': ['Swin-Tiny', 'Swin-Small', 'Swin-Base', 'Swin-Large'],
+    'Swin-Transformer': ['Swin-Base', 'Swin-Large', 'Swin-Small', 'Swin-Tiny'],
 }
 
 # Backbone内部标识映射
@@ -112,8 +122,23 @@ class ModelSelectionWidget(QWidget):
         top_form.addRow("框架:", self.combo_framework)
 
         self.combo_method = QComboBox()
-        self.combo_method.addItems(list(METHOD_BACKBONE_MAP.keys()))
+        # 按分组结构填充算法下拉框，用分隔标题项区分组别
+        for group_name, methods in METHOD_GROUPS:
+            # 添加分隔标题项（不可选）
+            separator_item = f"── {group_name} ──"
+            self.combo_method.addItem(separator_item)
+            idx = self.combo_method.count() - 1
+            # 设置分隔项的样式：灰色、居中、不可选
+            self.combo_method.model().item(idx).setEnabled(False)
+            self.combo_method.model().item(idx).setForeground(QColor(128, 128, 128))
+            self.combo_method.model().item(idx).setTextAlignment(Qt.AlignCenter)
+            # 添加该组内的算法项
+            for method in methods:
+                self.combo_method.addItem(method)
         self.combo_method.setToolTip("选择分割算法/架构")
+        # 默认选中第一个推荐算法（跳过第一个分隔项，选择索引 1）
+        if self.combo_method.count() > 1:
+            self.combo_method.setCurrentIndex(1)
         top_form.addRow("算法:", self.combo_method)
 
         self.combo_backbone = QComboBox()
@@ -153,6 +178,9 @@ class ModelSelectionWidget(QWidget):
 
     def _on_method_changed(self, method_name: str):
         """算法改变时更新Backbone列表"""
+        # 防御：分隔标题项被误触发时直接忽略
+        if method_name.startswith('──'):
+            return
         self._update_backbone_list(method_name)
         self.config_changed.emit()
 
