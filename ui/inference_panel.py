@@ -161,15 +161,22 @@ class InferencePanel(QWidget):
         self.inference_model = None
         self.last_inference_result = None  # 保存最后一次推理结果
         self.last_visualization_metadata = None
-        
+
         # 同步控制标志 - 防止信号循环
         # 当从外部调用 set_image_path 时设为 True，阻止再次发出 input_path_selected 信号
         self._suppress_sync = False
-        
+
         # 推理状态追踪
         self._is_inferencing = False
         self._inference_engine = None  # 保存引用以便取消
-        
+
+        # 当前关联的数据集根目录（由 MainWindow 在 Tab1 加载数据集后注入）
+        # 设计决策（W-07）: 历史模型列表仅在软件运行时保留，
+        #   - 不写入 QSettings / 文件 / 数据库
+        #   - 软件关闭后状态丢失，重启后由用户重新加载数据集触发扫描
+        #   - 单一数据源原则: comboBox_modelRegistry 内容始终来自 work_dirs/ 即时扫描
+        self._current_data_root = None
+
         self._setup_ui()
         self._connect_signals()
         self._init_inference_config()
@@ -197,6 +204,9 @@ class InferencePanel(QWidget):
 
         # UI-09：阻止鼠标悬停时滚轮误改 SpinBox / ComboBox 的值
         install_wheel_guard(self)
+
+        # 显式触发一次策略模式变化，让参数显隐与默认 RadioButton（大图分块）对齐
+        self._on_strategy_mode_changed()
     
     def _create_model_config_group(self, parent_layout):
         """创建模型加载区"""
@@ -334,28 +344,30 @@ class InferencePanel(QWidget):
         line1.setFrameShadow(QFrame.Sunken)
         form_layout.addRow(line1)
         
-        # 推理策略模式选择（滑窗/全图缩放/大图分块）
+        # 推理策略模式选择（大图分块/滑窗/全图缩放）
         self.label_strategyMode = QLabel("策略模式:")
         strategy_layout = QHBoxLayout()
-        self.radioButton_slidingWindow = QRadioButton("滑窗推理")
-        self.radioButton_slidingWindow.setChecked(True)
-        self.radioButton_resize = QRadioButton("全图缩放")
+        # 注意：调整布局顺序，把"大图分块"放第一位并默认选中
+        # 对象名保持原命名，避免破坏 _on_strategy_mode_changed() 等已有信号槽
         self.radioButton_largeImageBlock = QRadioButton("大图分块 (GDAL)")
+        self.radioButton_largeImageBlock.setChecked(True)
+        self.radioButton_slidingWindow = QRadioButton("滑窗推理")
+        self.radioButton_resize = QRadioButton("全图缩放")
+        strategy_layout.addWidget(self.radioButton_largeImageBlock)
         strategy_layout.addWidget(self.radioButton_slidingWindow)
         strategy_layout.addWidget(self.radioButton_resize)
-        strategy_layout.addWidget(self.radioButton_largeImageBlock)
         strategy_layout.addStretch()
         self.buttonGroup_strategyMode = QButtonGroup(self)
+        self.buttonGroup_strategyMode.addButton(self.radioButton_largeImageBlock)
         self.buttonGroup_strategyMode.addButton(self.radioButton_slidingWindow)
         self.buttonGroup_strategyMode.addButton(self.radioButton_resize)
-        self.buttonGroup_strategyMode.addButton(self.radioButton_largeImageBlock)
         form_layout.addRow(self.label_strategyMode, strategy_layout)
-        
-        # 策略说明
+
+        # 策略说明（与 RadioButton 显示顺序一致）
         self.label_strategyNote = QLabel(
-            "• 全图缩放：图像 ≤ 2000×2000 像素，快速预览\n"
+            "• 大图分块：图像 > 20000 像素超大影像（需 GDAL，推荐）\n"
             "• 滑窗推理：图像 2000–20000 像素范围，标准推理\n"
-            "• 大图分块：图像 > 20000 像素超大影像（需 GDAL）"
+            "• 全图缩放：图像 ≤ 2000×2000 像素，快速预览"
         )
         self.label_strategyNote.setWordWrap(True)
         self.label_strategyNote.setStyleSheet("color: #666; font-size: 10px; font-style: italic;")
@@ -589,48 +601,68 @@ class InferencePanel(QWidget):
 
         # 可视化设置信号（由 MainWindow 外部连接到 GIS 画布，此处不再内部连接预览渲染）
 
+    def set_data_root(self, data_root: str):
+        """由 MainWindow 在 Tab1 加载数据集后调用（BUG-INFER-02 修复）。
+
+        同步 data_root 属性，并在下拉框尚处于初始占位状态时立即触发一次模型库扫描，
+        让用户切到 Tab3 时下拉框已经填好候选项。
+
+        触发条件 ``count() <= 1`` 同时满足：
+        - 初次切到 Tab3：下拉框只有占位项 → 立即扫描，解决"无可选项"
+        - 用户已选中模型后再切回 Tab1 重新加载：下拉框已含训练记录 → 不静默改写
+        """
+        if not data_root:
+            return
+        self._current_data_root = data_root
+        # 仅当下拉框尚处于初始占位状态时自动扫一次，避免覆盖用户已选的项
+        if self.comboBox_modelRegistry.count() <= 1:
+            self.scan_trained_models(data_root)
+
     def scan_trained_models(self, data_root=None):
         """扫描已训练模型库"""
         if data_root:
             self._current_data_root = data_root
-        elif not hasattr(self, '_current_data_root') or not self._current_data_root:
+        elif not self._current_data_root:
             return
-            
+
         work_dirs_path = os.path.join(self._current_data_root, 'work_dirs')
         if not os.path.exists(work_dirs_path):
+            self._emit_log(
+                f"ℹ️ 扫描路径下未发现 work_dirs/ 子目录: {self._current_data_root}"
+            )
             return
-            
+
         current_data = self.comboBox_modelRegistry.currentData()
-        
+
         self.comboBox_modelRegistry.blockSignals(True)
         self.comboBox_modelRegistry.clear()
         self.comboBox_modelRegistry.addItem("请选择历史训练模型或者手动指定下方文件...", userData=None)
-        
+
         try:
             dirs = [d for d in os.listdir(work_dirs_path) if os.path.isdir(os.path.join(work_dirs_path, d))]
             dirs.sort(key=lambda d: os.path.getmtime(os.path.join(work_dirs_path, d)), reverse=True)
-            
+
             for d in dirs:
                 dir_path = os.path.join(work_dirs_path, d)
                 config_file = os.path.join(dir_path, 'train_config.py')
-                
+
                 if not os.path.exists(config_file):
                     continue
-                    
+
                 pth_files = [f for f in os.listdir(dir_path) if f.endswith('.pth')]
                 if not pth_files:
                     continue
-                    
+
                 self.comboBox_modelRegistry.addItem(f"📦 {d}", userData=dir_path)
-                
+
         except Exception as e:
             self._emit_log(f"⚠️  扫描模型库失败: {e}")
-            
+
         self.comboBox_modelRegistry.blockSignals(False)
 
         # P1-1: 扫描结束后若只有默认项，更新提示文字
         if self.comboBox_modelRegistry.count() == 1:
-            self.comboBox_modelRegistry.setItemText(0, "（未找到训练记录，请先在 Tab1 加载数据集，或手动指定下方配置文件）")
+            self.comboBox_modelRegistry.setItemText(0, "（未找到训练记录，请先在「数据洞察」标签页加载数据集，或手动指定下方配置文件）")
 
         if current_data:
             index = self.comboBox_modelRegistry.findData(current_data)
@@ -638,12 +670,20 @@ class InferencePanel(QWidget):
                 self.comboBox_modelRegistry.setCurrentIndex(index)
 
     def _manual_refresh_registry(self):
-        """手动刷新模型库"""
-        if hasattr(self, '_current_data_root') and self._current_data_root:
-            self.scan_trained_models(self._current_data_root)
-            self._emit_log("🔄 已刷新已训练模型库")
-        else:
-            self._emit_log("⚠️ 请先在 Tab1 加载数据集，才能扫描已训练模型")
+        """手动刷新模型库（BUG-INFER-02 修复）。
+
+        优先使用 Tab1 同步过来的 data_root；缺失时回退到项目根目录扫描，
+        覆盖"未经过 Tab1 直接进入 Tab3"的独立推理工作流。
+        """
+        candidate = self._current_data_root
+        if not candidate:
+            # 回退：使用项目当前工作目录（main.py 启动目录，通常含 work_dirs/）
+            candidate = os.getcwd()
+            self._emit_log(
+                f"ℹ️ 未关联「数据洞察」数据集，回退到项目根目录扫描：{candidate}"
+            )
+        self.scan_trained_models(candidate)
+        self._emit_log("🔄 已刷新已训练模型库")
             
     def _on_model_registry_changed(self, index):
         """模型下拉框选择改变时触发"""
