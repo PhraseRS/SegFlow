@@ -88,17 +88,7 @@ class InferenceEngine:
             # === 添加下面这两行即可精准打印源码绝对路径 ===
             import mmseg
             print(f"\n[推理排查] 🚨 当前正在使用此目录下的 MMSeg 代码: {mmseg.__file__}\n")
-
-            # ====== 将配置文件所在目录加入 sys.path（修复 BUG-INFER-01） ======
-            # train_config.py 中的 custom_imports（custom_live_pred_hook、custom_rs_dataset 等）
-            # 模块文件位于 work_dir/，需要把该目录注入 sys.path 才能被 import
-            config_path = self.model_info.get('config')
-            if config_path:
-                config_dir = os.path.dirname(os.path.abspath(config_path))
-                if config_dir and config_dir not in sys.path:
-                    sys.path.insert(0, config_dir)
-                    print(f"[推理引擎] 已将 work_dir 加入 sys.path: {config_dir}")
-
+            
             # 尝试使用 MMSegmentation API 加载真实模型
             from mmseg.apis import init_model
             
