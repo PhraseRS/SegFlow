@@ -8,11 +8,9 @@ import os
 from typing import Optional, List, Tuple
 from pathlib import Path
 
-try:
-    from osgeo import gdal
-    HAS_GDAL = True
-except ImportError:
-    HAS_GDAL = False
+from skills.skill_raster_io import GDAL_AVAILABLE as HAS_GDAL
+from skills.skill_raster_io import build_pyramids as skill_build_pyramids
+from skills.skill_raster_io import get_raster_info, open_raster
 
 
 class PyramidBuilder:
@@ -36,15 +34,7 @@ class PyramidBuilder:
             return False
 
         try:
-            ds = gdal.Open(file_path, gdal.GA_ReadOnly)
-            if not ds:
-                return False
-
-            band = ds.GetRasterBand(1)
-            overview_count = band.GetOverviewCount()
-            ds = None
-
-            return overview_count > 0
+            return bool(get_raster_info(file_path).get('has_pyramids', False))
 
         except Exception as e:
             print(f"检查金字塔失败: {e}")
@@ -65,24 +55,21 @@ class PyramidBuilder:
             return {'has_pyramids': False, 'levels': []}
 
         try:
-            ds = gdal.Open(file_path, gdal.GA_ReadOnly)
-            if not ds:
-                return {'has_pyramids': False, 'levels': []}
-
-            band = ds.GetRasterBand(1)
-            overview_count = band.GetOverviewCount()
-
-            levels = []
-            for i in range(overview_count):
-                overview = band.GetOverview(i)
-                levels.append({
-                    'index': i,
-                    'width': overview.XSize,
-                    'height': overview.YSize,
-                    'scale': ds.RasterXSize / overview.XSize
-                })
-
-            ds = None
+            with open_raster(file_path) as handle:
+                levels = []
+                if handle.band_count > 0:
+                    band = handle.dataset.GetRasterBand(1)
+                    overview_count = band.GetOverviewCount()
+                    for i in range(overview_count):
+                        overview = band.GetOverview(i)
+                        levels.append({
+                            'index': i,
+                            'width': overview.XSize,
+                            'height': overview.YSize,
+                            'scale': handle.width / overview.XSize
+                        })
+                else:
+                    overview_count = 0
 
             return {
                 'has_pyramids': overview_count > 0,
@@ -120,27 +107,12 @@ class PyramidBuilder:
             levels = PyramidBuilder.DEFAULT_LEVELS
 
         try:
-            # 以更新模式打开
-            ds = gdal.Open(file_path, gdal.GA_Update)
-            if not ds:
-                if progress_callback:
-                    progress_callback(0, f"无法打开文件: {file_path}")
-                return False
-
-            width = ds.RasterXSize
-            height = ds.RasterYSize
-
-            if progress_callback:
-                progress_callback(0, f"开始构建金字塔: {width}x{height}")
-
-            # 构建金字塔
-            ds.BuildOverviews(resampling, levels)
-
-            if progress_callback:
-                progress_callback(100, "金字塔构建完成")
-
-            ds = None
-            return True
+            return skill_build_pyramids(
+                file_path,
+                levels=levels,
+                resampling=resampling,
+                callback=progress_callback,
+            )
 
         except Exception as e:
             if progress_callback:
