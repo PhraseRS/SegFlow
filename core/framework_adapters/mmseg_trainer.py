@@ -174,6 +174,7 @@ class MMSegTrainer(BaseTrainer):
         optimizer_type = ui_params.get('optimizer', 'AdamW')
         lr = ui_params.get('lr', 0.0001)
         weight_decay = ui_params.get('weight_decay', 0.01)
+        momentum = ui_params.get('momentum', 0.9)
 
         if hasattr(cfg, 'optim_wrapper'):
             cfg.optim_wrapper.optimizer = dict(
@@ -181,9 +182,9 @@ class MMSegTrainer(BaseTrainer):
                 lr=float(lr),
                 weight_decay=float(weight_decay),
             )
-            # SGD 需要 momentum
-            if optimizer_type == 'SGD':
-                cfg.optim_wrapper.optimizer['momentum'] = 0.9
+            # 条件注入 momentum：仅 SGD/RMSprop
+            if optimizer_type in ['SGD', 'RMSprop']:
+                cfg.optim_wrapper.optimizer['momentum'] = float(momentum)
 
         # ====== 学习率策略 ======
         lr_schedule = ui_params.get('lr_schedule', 'PolyLR')
@@ -197,6 +198,12 @@ class MMSegTrainer(BaseTrainer):
                 cfg.param_scheduler = [
                     dict(type='StepLR', step_size=int((max_iters or 40000) // 3),
                          gamma=0.1, by_epoch=False)
+                ]
+            elif lr_schedule == 'CosineAnnealingLR':
+                cfg.param_scheduler = [
+                    dict(type='CosineAnnealingLR', T_max=int(max_iters or 40000),
+                         eta_min=0.0, begin=0, end=int(max_iters or 40000),
+                         by_epoch=False)
                 ]
 
         # ====== 数据加载器 ======
@@ -303,6 +310,21 @@ class MMSegTrainer(BaseTrainer):
                 cfg.model.backbone.init_cfg = dict(
                     type='Pretrained', checkpoint=pretrained
                 )
+
+        # ====== 评价指标配置 ======
+        # 统一注入核心评价指标（mIoU / mDice / mFscore）
+        # mPrecision / mRecall / aAcc / mAcc 会在结果字典中自动附带
+        # 参考: docs/3 3 配置文件的基础参数设置（与模型无关的参数）.md
+        eval_metrics = dict(
+            type='IoUMetric',
+            iou_metrics=['mIoU', 'mDice', 'mFscore'],
+        )
+        cfg.val_evaluator = eval_metrics
+        cfg.test_evaluator = eval_metrics
+
+        # ====== resume ======
+        # 从 work_dir 中最新 checkpoint 续训
+        cfg.resume = bool(ui_params.get('resume', False))
 
         # ====== Advisor 推荐参数 ======
         if advisor_params:

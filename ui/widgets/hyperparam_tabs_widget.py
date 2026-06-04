@@ -27,18 +27,18 @@ class HyperparamTabsWidget(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        
+
         # 推荐支持系统
         self._rec_btns = {}
         self._rec_widgets = {}
         self._rec_values = {}
         self._rec_reasons = {}
         self._rec_applied = {}
-        
+
         self.COLOR_RECOMMENDED = "#1565C0"
         self.COLOR_OVERRIDDEN = "#E65100"
         self.COLOR_DEFAULT = ""
-        
+
         self._setup_ui()
         self._connect_signals()
 
@@ -192,6 +192,14 @@ class HyperparamTabsWidget(QWidget):
         self.dspin_weight_decay.setToolTip("权重衰减（L2 正则化）")
         self._add_rec_row(form, "Weight Decay:", self.dspin_weight_decay, "weight_decay")
 
+        self.dspin_momentum = QDoubleSpinBox()
+        self.dspin_momentum.setRange(0.0, 1.0)
+        self.dspin_momentum.setDecimals(3)
+        self.dspin_momentum.setSingleStep(0.01)
+        self.dspin_momentum.setValue(0.9)
+        self.dspin_momentum.setToolTip("SGD 动量参数（仅 SGD/RMSprop 可用）")
+        self._add_rec_row(form, "Momentum:", self.dspin_momentum, "momentum")
+
         line = QFrame()
         line.setFrameShape(QFrame.Shape.HLine)
         line.setFrameShadow(QFrame.Shadow.Sunken)
@@ -227,6 +235,11 @@ class HyperparamTabsWidget(QWidget):
         self.check_save_best = QCheckBox("保存最佳模型 (Best mIoU)")
         self.check_save_best.setChecked(True)
         self._add_rec_row(form, None, self.check_save_best, "save_best")
+
+        self.check_resume = QCheckBox("从最新检查点恢复训练")
+        self.check_resume.setChecked(False)
+        self.check_resume.setToolTip("从 work_dir 最新 checkpoint 续训")
+        self._add_rec_row(form, None, self.check_resume, "resume")
 
         self.tabs.addTab(tab, "检查点")
 
@@ -269,6 +282,19 @@ class HyperparamTabsWidget(QWidget):
                 widget.currentTextChanged.connect(lambda: self.config_changed.emit())
             elif hasattr(widget, 'toggled'):
                 widget.toggled.connect(lambda: self.config_changed.emit())
+
+        # 优化器类型变化时联动 momentum 启用状态
+        self.combo_optimizer.currentTextChanged.connect(self._on_optimizer_changed)
+        self._on_optimizer_changed(self.combo_optimizer.currentText())  # 初始化状态
+
+    def _on_optimizer_changed(self, optimizer_type: str):
+        """优化器类型变化时联动 momentum 启用状态"""
+        is_momentum_supported = optimizer_type in ['SGD', 'RMSprop']
+        self.dspin_momentum.setEnabled(is_momentum_supported)
+        if not is_momentum_supported:
+            self.dspin_momentum.setStyleSheet("color: #aaa;")
+        else:
+            self.dspin_momentum.setStyleSheet("")
 
     # ==================== 推荐系统 API ====================
 
@@ -375,6 +401,7 @@ class HyperparamTabsWidget(QWidget):
 
     def get_params(self) -> dict:
         return {
+            # 常规参数
             'num_classes': self.spin_num_classes.value(),
             'in_channels': self.spin_in_channels.value(),
             'crop_size': self.spin_crop_size.value(),
@@ -384,15 +411,20 @@ class HyperparamTabsWidget(QWidget):
             'val_interval': self.spin_val_interval.value(),
             'img_suffix': self.combo_img_suffix.currentText(),
             'seg_map_suffix': self.combo_seg_map_suffix.currentText(),
+            # 优化器参数
             'loss_type': self.combo_loss_type.currentText(),
             'class_weight': self.chk_use_class_weight.isChecked(),
             'optimizer': self.combo_optimizer.currentText(),
             'lr': self.dspin_lr.value(),
             'weight_decay': self.dspin_weight_decay.value(),
+            'momentum': self.dspin_momentum.value(),
             'lr_schedule': self.combo_lr_schedule.currentText(),
+            # 检查点参数
             'save_interval': self.spin_save_interval.value(),
             'max_keep_ckpts': self.spin_max_keep.value(),
             'save_best': self.check_save_best.isChecked(),
+            'resume': self.check_resume.isChecked(),
+            # 数据增强参数
             'aug_random_flip': self.check_random_flip.isChecked(),
             'aug_photo_distortion': self.check_photo_distortion.isChecked(),
             'aug_random_rotate': self.check_random_rotate.isChecked(),
