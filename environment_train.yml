@@ -25,9 +25,9 @@ dependencies:
   - python=3.9
   - gdal              # 大图分块推理：GeoTIFF 读取 + 地理参考写出
   - pip
-  - pip:
-      - torch>=2.0
-      - torchvision
-      - mmengine>=0.7.0
-      - mmcv>=2.0.0
-      - mmsegmentation>=1.0.0,<2.0.0
+ # - pip:
+ #     - torch>=2.0
+ #     - torchvision
+ #     - mmengine>=0.7.0
+ #     - mmcv>=2.0.0
+ #     - mmsegmentation>=1.0.0,<2.0.0

@@ -1,4 +1,5 @@
 @echo off
+chcp 65001
 REM ============================================================
 REM RS-Seg-GUI 一键安装脚本 (Windows)
 REM ------------------------------------------------------------
@@ -37,67 +38,79 @@ echo   Torch 标记: %TORCH_TAG%
 echo ============================================================
 echo.
 
-REM ---------- 步骤 1: 安装 GUI 宿主环境 ----------
-echo [1/3] 正在安装 GUI 宿主环境依赖 (requirements.txt) ...
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-if errorlevel 1 (
-    echo.
-    echo [错误] GUI 宿主环境依赖安装失败，请检查 Python / pip 配置。
-    pause
-    exit /b 1
-)
-echo [完成] GUI 宿主环境依赖安装成功。
-echo.
 
-REM ---------- 步骤 2: 创建训练/推理 conda 环境 ----------
-echo [2/3] 正在创建训练/推理 conda 环境 (environment_train.yml) ...
+
+REM ---------- 步骤 1: 创建训练/推理 conda 环境 ----------
+echo [1/2] 正在创建训练/推理 conda 环境 (environment_train.yml) ...
+echo 正在安装环境，请耐心等待...
 where conda >nul 2>nul
 if errorlevel 1 (
     echo.
-    echo [错误] 未检测到 conda，无法创建 GPU 训练环境。
-    echo        GUI 本体已可启动；如需训练/真实推理，
-    echo        请安装 conda 后重新运行本脚本。
+    echo [错误] 未检测到 conda，无法创建运行环境。
+    echo        请安装 Miniconda 或 Anaconda 后重新运行本脚本。
     pause
     exit /b 1
 )
-conda env create -f environment_train.yml
+call conda env create -f environment_train.yml
 if errorlevel 1 (
     echo.
-    echo [警告] 训练环境创建失败（可能已存在同名环境 mmseg）。
-    echo        如需更新，可执行：conda env update -f environment_train.yml
-    echo        将继续尝试在现有 mmseg 环境中安装 GPU 依赖...
+    echo [警告] 环境创建提示异常（可能是 mmseg 环境已存在）。
+    echo        将继续尝试在现有 mmseg 环境中更新依赖...
 )
 echo.
 
-REM ---------- 步骤 3: 安装 GPU 版深度学习框架 ----------
-echo [3/3] 正在安装 GPU 版 PyTorch + MMCV + MMSegmentation (%CUDA_TAG%) ...
-call conda run -n mmseg pip install torch torchvision --index-url https://download.pytorch.org/whl/%CUDA_TAG%
-if errorlevel 1 (
-    echo [错误] GPU 版 PyTorch 安装失败，请检查 CUDA 标记是否正确。
-    pause
-    exit /b 1
-)
-call conda run -n mmseg pip install mmcv==2.1.0 -f https://download.openmmlab.com/mmcv/dist/%CUDA_TAG%/%TORCH_TAG%/index.html
-if errorlevel 1 (
-    echo [错误] MMCV 安装失败，请确认 CUDA/torch 标记组合在 OpenMMLab 源中存在。
-    pause
-    exit /b 1
-)
-call conda run -n mmseg pip install mmengine "mmsegmentation>=1.0.0,<2.0.0"
-if errorlevel 1 (
-    echo [错误] MMEngine / MMSegmentation 安装失败。
-    pause
-    exit /b 1
-)
-echo [完成] GPU 训练/推理环境 'mmseg' 安装成功。
+REM ---------- 步骤 2: 安装 GPU 版深度学习框架 ----------
+echo [2/2] 正在安装 GPU 版 PyTorch + MMCV + MMSegmentation (%CUDA_TAG%) ...
+echo 正在安装学习框架，请耐心等待...
 
+call conda activate mmseg
+
+
+echo - 正在安装 GUI 界面与辅助工具...
+call python -m pip install --upgrade pip
+call python -m pip install -r requirements.txt
+call python -m pip install pyqtgraph openmim qtawesome
+if errorlevel 1 goto install_err
+
+
+echo - 正在安装 GPU 运算核心 (PyTorch)...
+call python -m pip install --force-reinstall --no-cache-dir torch==2.1.2 torchvision==0.16.2 --index-url https://download.pytorch.org/whl/%CUDA_TAG%
+if errorlevel 1 goto install_err
+
+echo - 正在安装 MMCV...
+call python -m pip install mmcv==2.1.0 -f https://download.openmmlab.com/mmcv/dist/%CUDA_TAG%/%TORCH_TAG%/index.html
+if errorlevel 1 goto install_err
+
+echo - 正在安装 MMSegmentation 算法库...
+call python -m pip install mmengine mmsegmentation==1.2.2
+if errorlevel 1 goto install_err
+
+echo - 正在预装完美兼容包 (NumPy 1.x, OpenCV 4.9.x, ftfy, regex)...
+call python -m pip install ftfy regex
+call python -m pip install "numpy<2.0.0"
+call python -m pip install "opencv-python<4.10.0"
+if errorlevel 1 goto install_err
+
+
+call conda deactivate
+echo [完成] RS-Seg-GUI 全栈环境 (mmseg) 安装成功！
+goto finish
+
+:install_err
+echo [错误] 框架安装中途失败，请检查网络或报错信息。
+call conda deactivate
+pause
+exit /b 1
+
+:finish
 echo.
 echo ============================================================
-echo  安装流程结束。
-echo  启动 GUI： python main.py
-echo  训练前请在"环境配置"面板中选择 mmseg 环境的解释器。
-echo  可在该面板验证：CUDA 应显示为 Available。
+echo 安装流程结束。
+echo 以后启动GUI请在终端运行：
+echo 1. conda activate mmseg
+echo 2. python main.py
+echo 训练前请在"环境配置"面板中选择 mmseg 环境的解释器。
+echo 可在该面板验证：CUDA 应显示为 Available。
 echo ============================================================
 echo.
 pause

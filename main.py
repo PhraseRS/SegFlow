@@ -2,7 +2,12 @@
 """
 RS-Seg-GUI 主入口
 """
+import os
 import sys
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
+os.environ['PYTHONPATH'] = current_dir + os.pathsep + os.environ.get('PYTHONPATH', '')
+
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QFont
 
