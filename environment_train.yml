@@ -16,7 +16,7 @@
 #   - gdal 通过 conda-forge 安装以获得预编译二进制，
 #     避免源码编译的复杂依赖。
 # ------------------------------------------------------------
-name: mmseg
+name: gui-mmseg
 channels:
   - pytorch
   - conda-forge
