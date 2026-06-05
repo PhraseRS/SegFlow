@@ -627,6 +627,15 @@ class MainWindow(QMainWindow):
         
         # 保存数据根目录
         self._current_data_root = data_root
+
+        # BUG-INFER-02: keep the inference panel in sync with the dataset
+        # loaded in Data Insight, so Tab3 can scan trained models immediately.
+        if (
+            hasattr(self, 'ui')
+            and hasattr(self.ui, 'inference_panel')
+            and hasattr(self.ui.inference_panel, 'set_data_root')
+        ):
+            self.ui.inference_panel.set_data_root(data_root)
         
         # 加载数据
         self.data_manager.load_from_txt_files(data_root)
