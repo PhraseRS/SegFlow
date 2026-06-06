@@ -322,10 +322,6 @@ class MMSegTrainer(BaseTrainer):
         cfg.val_evaluator = eval_metrics
         cfg.test_evaluator = eval_metrics
 
-        # ====== resume ======
-        # 从 work_dir 中最新 checkpoint 续训
-        cfg.resume = bool(ui_params.get('resume', False))
-
         # ====== Advisor 推荐参数 ======
         if advisor_params:
             # 输入通道数

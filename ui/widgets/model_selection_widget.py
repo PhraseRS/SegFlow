@@ -28,9 +28,8 @@ from ui.widgets.wheel_guard import install_wheel_guard
 # 算法家族分组（决定下拉框的呈现顺序与分隔符位置）
 # 注意：每组内算法按首字母排序，组与组之间用分隔标题项隔开
 METHOD_GROUPS = [
-    ('推荐', ['DeepLabV3+', 'SegFormer', 'UperNet']),
-    ('CNN', ['FCN', 'HRNet+OCR', 'PSPNet', 'UNet', 'UNet++']),
-    ('Transformer', ['Mask2Former', 'Swin-Transformer']),
+    ('Transformer', ['Mask2Former', 'SegFormer', 'Swin-Transformer', 'UperNet']),
+    ('CNN', ['DeepLabV3+', 'FCN', 'HRNet+OCR', 'PSPNet', 'UNet', 'UNet++']),
 ]
 
 # 算法-Backbone映射关系（每组内 backbone 也按首字母升序）
@@ -136,9 +135,8 @@ class ModelSelectionWidget(QWidget):
             for method in methods:
                 self.combo_method.addItem(method)
         self.combo_method.setToolTip("选择分割算法/架构")
-        # 默认选中第一个推荐算法（跳过第一个分隔项，选择索引 1）
-        if self.combo_method.count() > 1:
-            self.combo_method.setCurrentIndex(1)
+        # 默认选中第一个 Transformer 算法（跳过分隔项）
+        self.combo_method.setCurrentText('Mask2Former')
         top_form.addRow("算法:", self.combo_method)
 
         self.combo_backbone = QComboBox()

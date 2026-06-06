@@ -236,11 +236,6 @@ class HyperparamTabsWidget(QWidget):
         self.check_save_best.setChecked(True)
         self._add_rec_row(form, None, self.check_save_best, "save_best")
 
-        self.check_resume = QCheckBox("从最新检查点恢复训练")
-        self.check_resume.setChecked(False)
-        self.check_resume.setToolTip("从 work_dir 最新 checkpoint 续训")
-        self._add_rec_row(form, None, self.check_resume, "resume")
-
         self.tabs.addTab(tab, "检查点")
 
     def _create_tab_augmentation(self):
@@ -423,7 +418,6 @@ class HyperparamTabsWidget(QWidget):
             'save_interval': self.spin_save_interval.value(),
             'max_keep_ckpts': self.spin_max_keep.value(),
             'save_best': self.check_save_best.isChecked(),
-            'resume': self.check_resume.isChecked(),
             # 数据增强参数
             'aug_random_flip': self.check_random_flip.isChecked(),
             'aug_photo_distortion': self.check_photo_distortion.isChecked(),
