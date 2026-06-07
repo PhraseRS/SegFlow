@@ -4,14 +4,25 @@
 负责管理推理配置、模型加载、推理执行和结果导出
 """
 
+from __future__ import annotations
+
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QGroupBox,
     QLabel, QLineEdit, QPushButton, QComboBox, QSpinBox, QDoubleSpinBox,
     QRadioButton, QCheckBox, QButtonGroup, QFrame, QScrollArea,
-    QProgressBar, QFileDialog, QMessageBox, QApplication
+    QProgressBar, QFileDialog, QMessageBox, QApplication,
+    QTableWidget, QTableWidgetItem, QHeaderView
 )
 from PySide6.QtCore import Qt, Signal, QTimer, QThread
+import copy
+import json
 import os
+import subprocess
+import sys
+from dataclasses import dataclass
+from datetime import datetime
+from contextlib import contextmanager
+from typing import Any, Callable, Iterable
 import numpy as np
 
 from ui.widgets.visualization_settings_widget import VisualizationSettingsWidget
@@ -19,6 +30,344 @@ from ui.widgets.inference_visualization_widget import InferenceVisualizationWidg
 from ui.widgets.wheel_guard import install_wheel_guard
 from core.mask_renderer import MaskRenderer
 from skills.skill_raster_io import sample_band_stats
+
+
+RESULT_PREFIX = "__MMSEG_TEST_RESULT__"
+
+
+@contextmanager
+def temporary_sys_path(paths: str | Iterable[str] | None):
+    """Temporarily prepend import paths for one model test operation."""
+    if paths is None:
+        normalized_paths = []
+    elif isinstance(paths, str):
+        normalized_paths = [paths]
+    else:
+        normalized_paths = list(paths)
+
+    added_paths = []
+    for path in normalized_paths:
+        if not path:
+            continue
+        abs_path = os.path.abspath(path)
+        if os.path.isdir(abs_path) and abs_path not in sys.path:
+            sys.path.insert(0, abs_path)
+            added_paths.append(abs_path)
+
+    try:
+        yield
+    finally:
+        for path in reversed(added_paths):
+            try:
+                sys.path.remove(path)
+            except ValueError:
+                pass
+
+
+@dataclass
+class MMSegTestConfig:
+    test_config: str
+    checkpoint: str
+    split: str
+    work_dir: str
+    show_dir: str
+    out_dir: str
+    custom_module_dir: str
+    sample_count: int
+    labelled_count: int
+    samples: list[dict]
+    format_only: bool
+
+
+class MMSegTestConfigBuilder:
+    """Create a temporary test config from the selected train_config.py."""
+
+    def build(
+        self,
+        config_path: str,
+        checkpoint_path: str,
+        data_root: str,
+        splits: dict[str, list[dict]],
+        output_root: str | None = None,
+    ) -> MMSegTestConfig:
+        from mmengine.config import Config
+
+        if not os.path.isfile(config_path):
+            raise FileNotFoundError(f"Config file not found: {config_path}")
+        if not os.path.isfile(checkpoint_path):
+            raise FileNotFoundError(f"Checkpoint file not found: {checkpoint_path}")
+        if not data_root or not os.path.isdir(data_root):
+            raise FileNotFoundError(f"Dataset root not found: {data_root}")
+
+        custom_module_dir = os.path.dirname(os.path.abspath(config_path))
+        with temporary_sys_path(custom_module_dir):
+            cfg = Config.fromfile(config_path)
+
+        split = self._resolve_split(cfg, splits)
+        samples = list((splits or {}).get(split, []))
+        if not samples:
+            raise ValueError(f"{split.upper()} split has no available samples")
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        root = output_root or os.path.join(data_root, "model_test_results", timestamp)
+        work_dir = os.path.join(root, "work_dir")
+        show_dir = os.path.join(root, "show")
+        out_dir = os.path.join(root, "out")
+        os.makedirs(work_dir, exist_ok=True)
+        os.makedirs(show_dir, exist_ok=True)
+        os.makedirs(out_dir, exist_ok=True)
+
+        self._patch_test_dataloader(cfg, data_root, split)
+        self._ensure_full_iou_metrics(cfg)
+        format_only = self._is_format_only(cfg)
+
+        test_config = os.path.join(root, "test_config.py")
+        cfg.dump(test_config)
+
+        return MMSegTestConfig(
+            test_config=test_config,
+            checkpoint=checkpoint_path,
+            split=split,
+            work_dir=work_dir,
+            show_dir=show_dir,
+            out_dir=out_dir,
+            custom_module_dir=custom_module_dir,
+            sample_count=len(samples),
+            labelled_count=sum(1 for sample in samples if sample.get("label_path")),
+            samples=samples,
+            format_only=format_only,
+        )
+
+    def _resolve_split(self, cfg: Any, splits: dict[str, list[dict]]) -> str:
+        if hasattr(cfg, "val_dataloader") and (splits or {}).get("val"):
+            return "val"
+        dataloader_split = self._find_dataloader_split(getattr(cfg, "test_dataloader", None))
+        if dataloader_split == "test" and (splits or {}).get("test"):
+            return "test"
+        if (splits or {}).get("val"):
+            return "val"
+        if (splits or {}).get("test"):
+            return "test"
+        return "val"
+
+    def _patch_test_dataloader(self, cfg: Any, data_root: str, split: str) -> None:
+        if split == "val" and hasattr(cfg, "val_dataloader"):
+            cfg.test_dataloader = copy.deepcopy(cfg.val_dataloader)
+            if hasattr(cfg, "val_evaluator"):
+                cfg.test_evaluator = copy.deepcopy(cfg.val_evaluator)
+        elif not hasattr(cfg, "test_dataloader"):
+            if not hasattr(cfg, "val_dataloader"):
+                raise AttributeError("Missing test_dataloader / val_dataloader in config")
+            cfg.test_dataloader = copy.deepcopy(cfg.val_dataloader)
+            if hasattr(cfg, "val_evaluator"):
+                cfg.test_evaluator = copy.deepcopy(cfg.val_evaluator)
+
+        self._patch_dataset_node(cfg.test_dataloader, data_root, split)
+        if hasattr(cfg, "data_root"):
+            cfg.data_root = data_root.replace("\\", "/")
+
+    def _patch_dataset_node(self, node: Any, data_root: str, split: str) -> None:
+        if isinstance(node, dict):
+            if "dataset" in node:
+                self._patch_dataset_node(node["dataset"], data_root, split)
+            if "datasets" in node and isinstance(node["datasets"], list):
+                for child in node["datasets"]:
+                    self._patch_dataset_node(child, data_root, split)
+            if any(key in node for key in ("ann_file", "data_prefix", "data_root")):
+                node["data_root"] = data_root.replace("\\", "/")
+                node["ann_file"] = f"ImageSets/Segmentation/{split}.txt"
+                node["data_prefix"] = {
+                    "img_path": "JPEGImages",
+                    "seg_map_path": "SegmentationClass",
+                }
+                node["img_suffix"] = self._detect_suffix(os.path.join(data_root, "JPEGImages"), ".jpg")
+                node["seg_map_suffix"] = self._detect_suffix(os.path.join(data_root, "SegmentationClass"), ".png")
+        elif isinstance(node, list):
+            for child in node:
+                self._patch_dataset_node(child, data_root, split)
+
+    def _find_dataloader_split(self, node: Any) -> str | None:
+        if isinstance(node, dict):
+            ann_file = str(node.get("ann_file", "")).replace("\\", "/").lower()
+            ann_name = os.path.basename(ann_file)
+            if ann_name == "val.txt":
+                return "val"
+            if ann_name == "test.txt":
+                return "test"
+            found = self._find_dataloader_split(node.get("dataset"))
+            if found:
+                return found
+            datasets = node.get("datasets")
+            if isinstance(datasets, list):
+                for child in datasets:
+                    found = self._find_dataloader_split(child)
+                    if found:
+                        return found
+        elif isinstance(node, list):
+            for child in node:
+                found = self._find_dataloader_split(child)
+                if found:
+                    return found
+        return None
+
+    def _ensure_full_iou_metrics(self, cfg: Any) -> None:
+        self._patch_evaluator_metrics(getattr(cfg, "test_evaluator", None))
+
+    def _patch_evaluator_metrics(self, evaluator: Any) -> None:
+        if isinstance(evaluator, dict):
+            evaluator_type = str(evaluator.get("type", ""))
+            if evaluator_type == "IoUMetric" or "iou_metrics" in evaluator:
+                evaluator["iou_metrics"] = ["mIoU", "mDice", "mFscore"]
+            for key in ("metrics", "evaluator", "evaluators"):
+                child = evaluator.get(key)
+                if child is not None:
+                    self._patch_evaluator_metrics(child)
+        elif isinstance(evaluator, list):
+            for item in evaluator:
+                self._patch_evaluator_metrics(item)
+
+    def _detect_suffix(self, dir_path: str, default: str) -> str:
+        if not os.path.isdir(dir_path):
+            return default
+        for name in os.listdir(dir_path):
+            ext = os.path.splitext(name)[1].lower()
+            if ext:
+                return ext
+        return default
+
+    def _is_format_only(self, cfg: Any) -> bool:
+        evaluator = getattr(cfg, "test_evaluator", None)
+        text = repr(self._to_plain(evaluator)).replace(" ", "").lower()
+        return "format_only':true" in text or '"format_only":true' in text
+
+    def _to_plain(self, value: Any) -> Any:
+        try:
+            return value.to_dict()
+        except Exception:
+            return value
+
+
+class MMSegTestRunner:
+    """Run MMSeg official test flow in a project-local subprocess."""
+
+    def __init__(self, log_callback: Callable[[str], None] | None = None):
+        self._log_callback = log_callback
+        self._process: subprocess.Popen | None = None
+        self._cancel_requested = False
+
+    def cancel(self) -> None:
+        self._cancel_requested = True
+        if self._process and self._process.poll() is None:
+            self._process.terminate()
+
+    def run(
+        self,
+        test_config: str,
+        checkpoint: str,
+        work_dir: str,
+        show_dir: str | None = None,
+        out_dir: str | None = None,
+        cfg_options: dict | None = None,
+        tta: bool = False,
+        import_paths: list[str] | None = None,
+    ) -> dict:
+        command = [
+            sys.executable,
+            "-B",
+            "-m",
+            "core.mmseg_test_runner_entry",
+            "--test-config",
+            test_config,
+            "--checkpoint",
+            checkpoint,
+            "--work-dir",
+            work_dir,
+        ]
+        if show_dir:
+            command.extend(["--show-dir", show_dir])
+        if out_dir:
+            command.extend(["--out-dir", out_dir])
+        if tta:
+            command.append("--tta")
+        if cfg_options:
+            command.extend(["--cfg-options-json", json.dumps(cfg_options, ensure_ascii=False)])
+        for path in import_paths or []:
+            command.extend(["--import-path", path])
+
+        env = os.environ.copy()
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        python_paths = [project_root]
+        python_paths.extend(path for path in (import_paths or []) if path)
+        existing_pythonpath = env.get("PYTHONPATH")
+        if existing_pythonpath:
+            python_paths.append(existing_pythonpath)
+        env["PYTHONPATH"] = os.pathsep.join(python_paths)
+        env.setdefault("PYTHONIOENCODING", "utf-8")
+
+        self._log(f"Config: {test_config}")
+        self._log(f"Checkpoint: {checkpoint}")
+        self._log(f"Work dir: {work_dir}")
+        if show_dir:
+            self._log(f"Show dir: {show_dir}")
+        if out_dir:
+            self._log(f"Out dir: {out_dir}")
+
+        result = {}
+        self._cancel_requested = False
+        process = subprocess.Popen(
+            command,
+            cwd=project_root,
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            bufsize=1,
+        )
+        self._process = process
+
+        try:
+            assert process.stdout is not None
+            for raw_line in process.stdout:
+                line = raw_line.rstrip()
+                if not line:
+                    continue
+                if line.startswith(RESULT_PREFIX):
+                    result = self._parse_result_line(line)
+                else:
+                    self._log(line)
+
+            return_code = process.wait()
+            if self._cancel_requested:
+                raise RuntimeError("Model test cancelled")
+            if return_code != 0:
+                raise RuntimeError(f"Model test subprocess exited with code {return_code}")
+        finally:
+            self._process = None
+
+        return {
+            "metrics": self._normalize_metrics(result.get("metrics", {})),
+            "work_dir": result.get("work_dir", work_dir),
+            "show_dir": result.get("show_dir", show_dir or ""),
+            "out_dir": result.get("out_dir", out_dir or ""),
+        }
+
+    def _parse_result_line(self, line: str) -> dict:
+        payload = line[len(RESULT_PREFIX):]
+        try:
+            return json.loads(payload)
+        except json.JSONDecodeError as e:
+            raise RuntimeError(f"Failed to parse model test result: {e}") from e
+
+    def _normalize_metrics(self, metrics: Any) -> dict:
+        if isinstance(metrics, dict):
+            return metrics
+        return {}
+
+    def _log(self, message: str) -> None:
+        if self._log_callback:
+            self._log_callback(message)
 
 
 
@@ -138,6 +487,125 @@ class InferenceWorker(QThread):
             error_details = traceback.format_exc()
             self.log.emit(f"❌ 后台推理异常: {str(e)}")
             self.error.emit(f"{str(e)}\n\n{error_details}")
+        finally:
+            if self._engine and hasattr(self._engine, "close"):
+                self._engine.close()
+
+
+class ModelTestWorker(QThread):
+    """Run the project-local MMSeg Runner.test() flow in background."""
+
+    finished = Signal(dict)
+    error = Signal(str)
+    log = Signal(str)
+    progress = Signal(int)
+    cancelled = Signal()
+
+    def __init__(self, inference_model: dict, dataset_context: dict):
+        super().__init__()
+        self.inference_model = inference_model
+        self.dataset_context = dataset_context
+        self._cancel_requested = False
+        self._runner = None
+
+    def request_cancel(self):
+        self._cancel_requested = True
+        if self._runner:
+            self._runner.cancel()
+        self.log.emit("已请求取消测试，当前 Runner.test() 调用结束后生效")
+
+    def run(self):
+        try:
+            if self._cancel_requested:
+                self.cancelled.emit()
+                return
+
+            self.progress.emit(5)
+            builder = MMSegTestConfigBuilder()
+            test_config = builder.build(
+                config_path=self.inference_model.get("config", ""),
+                checkpoint_path=self.inference_model.get("checkpoint", ""),
+                data_root=self.dataset_context.get("data_root", ""),
+                splits=self.dataset_context.get("splits", {}),
+            )
+
+            self.progress.emit(25)
+            self._runner = MMSegTestRunner(log_callback=self.log.emit)
+            runner_result = self._runner.run(
+                test_config=test_config.test_config,
+                checkpoint=test_config.checkpoint,
+                work_dir=test_config.work_dir,
+                show_dir=test_config.show_dir,
+                out_dir=test_config.out_dir,
+                import_paths=[test_config.custom_module_dir],
+            )
+
+            if self._cancel_requested:
+                self.cancelled.emit()
+                return
+
+            self.progress.emit(90)
+            samples = self._build_sample_results(test_config.samples, test_config.show_dir)
+            result = {
+                "summary": {
+                    "split": test_config.split,
+                    "sample_count": test_config.sample_count,
+                    "labelled_count": test_config.labelled_count,
+                    "format_only": test_config.format_only,
+                    "work_dir": runner_result.get("work_dir", ""),
+                    "show_dir": runner_result.get("show_dir", ""),
+                    "out_dir": runner_result.get("out_dir", ""),
+                },
+                "metrics": runner_result.get("metrics", {}),
+                "samples": samples,
+            }
+            self.progress.emit(100)
+            self.finished.emit(result)
+
+        except Exception as e:
+            if self._cancel_requested:
+                self.cancelled.emit()
+                return
+            import traceback
+            self.error.emit(f"{e}\n\n{traceback.format_exc()}")
+        finally:
+            self._runner = None
+
+    def _build_sample_results(self, samples: list, show_dir: str) -> list:
+        prediction_files = self._collect_prediction_files(show_dir)
+        results = []
+        for sample in samples:
+            image_path = sample.get("image_path", "")
+            label_path = sample.get("label_path", "")
+            sample_id = sample.get("sample_id") or os.path.splitext(os.path.basename(image_path))[0]
+            results.append({
+                "sample_id": sample_id,
+                "image_path": image_path,
+                "label_path": label_path if label_path and os.path.exists(label_path) else "",
+                "prediction_path": self._find_prediction_file(sample_id, image_path, prediction_files),
+            })
+        return results
+
+    def _collect_prediction_files(self, show_dir: str) -> list:
+        if not show_dir or not os.path.isdir(show_dir):
+            return []
+        files = []
+        for root, _dirs, names in os.walk(show_dir):
+            for name in names:
+                if os.path.splitext(name)[1].lower() in {".png", ".jpg", ".jpeg", ".bmp"}:
+                    files.append(os.path.join(root, name))
+        return files
+
+    def _find_prediction_file(self, sample_id: str, image_path: str, prediction_files: list) -> str:
+        stems = {
+            os.path.splitext(os.path.basename(image_path))[0].lower(),
+            str(sample_id).lower(),
+        }
+        for file_path in prediction_files:
+            pred_stem = os.path.splitext(os.path.basename(file_path))[0].lower()
+            if any(stem and stem in pred_stem for stem in stems):
+                return file_path
+        return ""
 
 
 class InferencePanel(QWidget):
@@ -178,10 +646,16 @@ class InferencePanel(QWidget):
         #   - 软件关闭后状态丢失，重启后由用户重新加载数据集触发扫描
         #   - 单一数据源原则: comboBox_modelRegistry 内容始终来自 work_dirs/ 即时扫描
         self._current_data_root = None
+        self._dataset_context = None
+        self._model_test_worker = None
+        self._model_test_results = []
+        self._model_test_summary = {}
+        self._is_model_testing = False
 
         self._setup_ui()
         self._connect_signals()
         self._init_inference_config()
+        self._refresh_model_test_state()
 
     def _setup_ui(self):
         """设置UI布局"""
@@ -191,6 +665,7 @@ class InferencePanel(QWidget):
 
         # 模型加载区
         self._create_model_config_group(layout)
+        self._create_model_test_group(layout)
 
         # 推理策略区
         self._create_inference_strategy_group(layout)
@@ -293,6 +768,44 @@ class InferencePanel(QWidget):
         form_layout.addRow(self.label_classesLegend, self.scrollArea_classesLegend)
 
         parent_layout.addWidget(self.groupBox_modelConfig)
+
+    def _create_model_test_group(self, parent_layout):
+        """Create model test/evaluation controls."""
+        self.groupBox_modelTest = QGroupBox("模型测试验证 (Model Test / Evaluation)")
+        form_layout = QFormLayout(self.groupBox_modelTest)
+        form_layout.setSpacing(3)
+        form_layout.setContentsMargins(6, 6, 6, 6)
+
+        self.label_testDataset = QLabel("测试数据:")
+        self.label_testDatasetInfo = QLabel("未加载")
+        self.label_testDatasetInfo.setWordWrap(True)
+        form_layout.addRow(self.label_testDataset, self.label_testDatasetInfo)
+
+        button_layout = QHBoxLayout()
+        self.pushButton_testModel = QPushButton("测试模型")
+        self.pushButton_cancelModelTest = QPushButton("取消测试")
+        self.pushButton_cancelModelTest.setEnabled(False)
+        button_layout.addWidget(self.pushButton_testModel)
+        button_layout.addWidget(self.pushButton_cancelModelTest)
+        button_layout.addStretch()
+        form_layout.addRow("", button_layout)
+
+        self.label_testProgress = QLabel("测试进度:")
+        progress_layout = QHBoxLayout()
+        self.progressBar_modelTest = QProgressBar()
+        self.progressBar_modelTest.setValue(0)
+        progress_layout.addWidget(self.progressBar_modelTest)
+        form_layout.addRow(self.label_testProgress, progress_layout)
+
+        self.label_testStatus = QLabel("未测试")
+        form_layout.addRow("测试状态:", self.label_testStatus)
+
+        self.comboBox_testSamples = QComboBox()
+        self.comboBox_testSamples.addItem("暂无样本", userData=None)
+        self.comboBox_testSamples.setEnabled(False)
+        form_layout.addRow("样本预览:", self.comboBox_testSamples)
+
+        parent_layout.addWidget(self.groupBox_modelTest)
 
     def _create_inference_strategy_group(self, parent_layout):
         """创建推理策略区"""
@@ -553,6 +1066,24 @@ class InferencePanel(QWidget):
         self.label_inferenceResult.setMinimumHeight(100)
         layout.addWidget(self.label_inferenceResult)
 
+        self.table_modelTestMetrics = QTableWidget(0, 3)
+        self.table_modelTestMetrics.setHorizontalHeaderLabels(["指标", "数值", "来源"])
+        self.table_modelTestMetrics.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.table_modelTestMetrics.verticalHeader().setVisible(False)
+        self.table_modelTestMetrics.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.table_modelTestMetrics.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
+        self.table_modelTestMetrics.setVisible(False)
+        layout.addWidget(self.table_modelTestMetrics)
+
+        self.table_modelTestClassMetrics = QTableWidget(0, 4)
+        self.table_modelTestClassMetrics.setHorizontalHeaderLabels(["类别", "IoU", "Acc", "Dice"])
+        self.table_modelTestClassMetrics.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.table_modelTestClassMetrics.verticalHeader().setVisible(False)
+        self.table_modelTestClassMetrics.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.table_modelTestClassMetrics.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
+        self.table_modelTestClassMetrics.setVisible(False)
+        layout.addWidget(self.table_modelTestClassMetrics)
+
         # 类别颜色配置组件（推理完成后显示）
         self.visualization_settings = VisualizationSettingsWidget()
         self.visualization_settings.setVisible(False)
@@ -561,6 +1092,7 @@ class InferencePanel(QWidget):
         # 可视化渲染预览组件（已废弃，永久隐藏）
         self.visualization_widget = InferenceVisualizationWidget()
         self.visualization_widget.setVisible(False)
+        layout.addWidget(self.visualization_widget)
 
         parent_layout.addWidget(self.groupBox_inferenceResult)
 
@@ -575,6 +1107,9 @@ class InferencePanel(QWidget):
         self.pushButton_browseCheckpoint.clicked.connect(self._browse_checkpoint_file)
         self.lineEdit_configFile.textChanged.connect(self._on_config_file_changed)
         self.pushButton_loadModel.clicked.connect(self._load_inference_model)
+        self.pushButton_testModel.clicked.connect(self._run_model_test)
+        self.pushButton_cancelModelTest.clicked.connect(self._cancel_model_test)
+        self.comboBox_testSamples.currentIndexChanged.connect(self._on_test_sample_changed)
 
         # 推理模式切换
         self.radioButton_batchInference.toggled.connect(self._on_inference_mode_changed)
@@ -619,6 +1154,34 @@ class InferencePanel(QWidget):
         # 仅当下拉框尚处于初始占位状态时自动扫一次，避免覆盖用户已选的项
         if self.comboBox_modelRegistry.count() <= 1:
             self.scan_trained_models(data_root)
+        self._refresh_model_test_state()
+
+    def set_dataset_context(self, dataset_context: dict):
+        """Inject the dataset context loaded in Data Insight."""
+        self._dataset_context = dataset_context or None
+        if dataset_context and dataset_context.get("data_root"):
+            self._current_data_root = dataset_context.get("data_root")
+        self._refresh_model_test_state()
+
+    def _refresh_model_test_state(self):
+        if not hasattr(self, "label_testDatasetInfo"):
+            return
+
+        context = self._dataset_context or {}
+        data_root = context.get("data_root") or self._current_data_root
+        splits = context.get("splits", {})
+        if not data_root:
+            self.label_testDatasetInfo.setText("未加载")
+            self.pushButton_testModel.setEnabled(False)
+            return
+
+        split = self._resolve_model_test_split(self.lineEdit_configFile.text().strip(), splits)
+        samples = list(splits.get(split, []))
+        labelled_count = sum(1 for sample in samples if sample.get("label_path"))
+        self.label_testDatasetInfo.setText(
+            f"划分: {split.upper()} | 样本: {len(samples)} | 标注: {labelled_count}"
+        )
+        self.pushButton_testModel.setEnabled(bool(samples) and bool(self.inference_model) and not self._is_model_testing)
 
     def scan_trained_models(self, data_root=None):
         """扫描已训练模型库"""
@@ -760,7 +1323,11 @@ class InferencePanel(QWidget):
     def _emit_log(self, message: str):
         """发送日志消息"""
         self.log_message.emit(message)
-        print(message)
+        try:
+            sys.__stdout__.write(f"{message}\n")
+            sys.__stdout__.flush()
+        except Exception:
+            pass
 
     def _browse_config_file(self):
         """浏览并选择MMSeg配置文件"""
@@ -930,6 +1497,8 @@ class InferencePanel(QWidget):
         if not text:
             self.label_modelNameValue.setText("未加载配置")
             self.label_modelNameValue.setStyleSheet("color: #888; font-style: italic;")
+
+        self._refresh_model_test_state()
 
     def _on_inference_mode_changed(self, checked):
         """推理模式切换"""
@@ -1127,6 +1696,7 @@ class InferencePanel(QWidget):
 
             self._emit_log("✅ 模型已就绪 (Model Ready)")
             self.model_loaded.emit(self.inference_model)
+            self._refresh_model_test_state()
 
         except Exception as e:
             self._handle_model_loading_error(e)
@@ -1240,6 +1810,209 @@ class InferencePanel(QWidget):
                 self.scrollArea_classesLegend.setVisible(False)
             except:
                 pass
+
+    def _resolve_model_test_split(self, config_path: str, splits: dict) -> str:
+        if config_path and os.path.exists(config_path):
+            try:
+                with open(config_path, "r", encoding="utf-8") as f:
+                    config_text = f.read().lower()
+                if "test_dataloader" in config_text and "test" in config_text and splits.get("test"):
+                    return "test"
+            except Exception:
+                pass
+        if splits.get("val"):
+            return "val"
+        if splits.get("test"):
+            return "test"
+        return "val"
+
+    def _run_model_test(self):
+        if not self.inference_model:
+            QMessageBox.warning(self, "模型未加载", "请先加载模型。")
+            return
+        if not self._dataset_context or not self._dataset_context.get("data_root"):
+            QMessageBox.warning(self, "数据集未加载", "请先在数据洞察中加载数据集。")
+            return
+        if self._is_model_testing:
+            return
+
+        self._set_model_test_running(True)
+        self._clear_model_test_tables()
+        self._emit_log("模型测试开始")
+        self.progressBar_modelTest.setValue(0)
+        self._clear_test_sample_selector()
+
+        self._model_test_worker = ModelTestWorker(self.inference_model, self._dataset_context)
+        self._model_test_worker.log.connect(self._emit_log)
+        self._model_test_worker.progress.connect(self.progressBar_modelTest.setValue)
+        self._model_test_worker.finished.connect(self._on_model_test_finished)
+        self._model_test_worker.error.connect(self._on_model_test_error)
+        self._model_test_worker.cancelled.connect(self._on_model_test_cancelled)
+        self._model_test_worker.finished.connect(self._cleanup_model_test_worker)
+        self._model_test_worker.error.connect(self._cleanup_model_test_worker)
+        self._model_test_worker.cancelled.connect(self._cleanup_model_test_worker)
+        self._model_test_worker.start()
+
+    def _cancel_model_test(self):
+        if self._model_test_worker:
+            self._model_test_worker.request_cancel()
+            self.pushButton_cancelModelTest.setEnabled(False)
+            self.label_testStatus.setText("取消中")
+
+    def _on_model_test_finished(self, result: dict):
+        self._model_test_summary = result.get("summary", {})
+        self._model_test_results = result.get("samples", [])
+        self.label_testStatus.setText("测试完成")
+        self._clear_model_test_tables()
+        self._clear_test_sample_selector()
+        self._log_model_test_result(self._model_test_summary, result.get("metrics", {}))
+
+    def _on_model_test_error(self, error_msg: str):
+        self.progressBar_modelTest.setValue(0)
+        self.label_testStatus.setText("测试失败")
+        self._emit_log(f"模型测试失败: {error_msg}")
+
+    def _on_model_test_cancelled(self):
+        self.progressBar_modelTest.setValue(0)
+        self.label_testStatus.setText("已取消")
+        self._emit_log("模型测试已取消")
+
+    def _cleanup_model_test_worker(self):
+        self._set_model_test_running(False)
+        if self._model_test_worker:
+            self._model_test_worker.deleteLater()
+            self._model_test_worker = None
+
+    def _set_model_test_running(self, is_running: bool):
+        self._is_model_testing = is_running
+        self.pushButton_testModel.setEnabled(not is_running)
+        self.pushButton_cancelModelTest.setEnabled(is_running)
+        if is_running:
+            self.label_testStatus.setText("测试中")
+        else:
+            self._refresh_model_test_state()
+
+    def _format_model_test_summary(self, summary: dict) -> str:
+        return (
+            f"模型测试完成\n"
+            f"划分: {str(summary.get('split', '')).upper()}\n"
+            f"样本: {summary.get('sample_count', 0)}\n"
+            f"标注: {summary.get('labelled_count', 0)}\n"
+            f"输出: {summary.get('work_dir', '')}"
+        )
+
+    def _clear_model_test_tables(self):
+        self.table_modelTestMetrics.setRowCount(0)
+        self.table_modelTestMetrics.setVisible(False)
+        self.table_modelTestClassMetrics.setRowCount(0)
+        self.table_modelTestClassMetrics.setVisible(False)
+
+    def _clear_test_sample_selector(self):
+        self.comboBox_testSamples.blockSignals(True)
+        self.comboBox_testSamples.clear()
+        self.comboBox_testSamples.addItem("暂无样本", userData=None)
+        self.comboBox_testSamples.setEnabled(False)
+        self.comboBox_testSamples.blockSignals(False)
+
+    def _log_model_test_result(self, summary: dict, metrics: dict):
+        self._emit_log("模型测试完成")
+        self._emit_log(f"划分: {str(summary.get('split', '')).upper()}")
+        self._emit_log(f"样本: {summary.get('sample_count', 0)}")
+        self._emit_log(f"标注: {summary.get('labelled_count', 0)}")
+        self._emit_log(f"Work dir: {summary.get('work_dir', '')}")
+        show_dir = summary.get("show_dir", "")
+        out_dir = summary.get("out_dir", "")
+        if show_dir:
+            self._emit_log(f"Show dir: {show_dir}")
+        if out_dir:
+            self._emit_log(f"Out dir: {out_dir}")
+
+    def _update_model_test_tables(self, metrics: dict):
+        metric_items = []
+        class_items = []
+        for key, value in (metrics or {}).items():
+            if isinstance(value, (list, tuple)) and key.lower() in {"classes", "class_metrics"}:
+                class_items = list(value)
+            elif isinstance(value, (int, float, str, np.integer, np.floating)):
+                metric_items.append((str(key), value))
+
+        self.table_modelTestMetrics.setRowCount(len(metric_items))
+        for row, (name, value) in enumerate(metric_items):
+            self.table_modelTestMetrics.setItem(row, 0, QTableWidgetItem(name))
+            self.table_modelTestMetrics.setItem(row, 1, QTableWidgetItem(self._format_metric_value(value)))
+            self.table_modelTestMetrics.setItem(row, 2, QTableWidgetItem("Runner.test()"))
+        self.table_modelTestMetrics.setVisible(bool(metric_items))
+
+        self.table_modelTestClassMetrics.setRowCount(len(class_items))
+        for row, item in enumerate(class_items):
+            if isinstance(item, dict):
+                values = [
+                    item.get("class") or item.get("name") or str(row),
+                    item.get("IoU", item.get("iou", "")),
+                    item.get("Acc", item.get("acc", "")),
+                    item.get("Dice", item.get("dice", "")),
+                ]
+            else:
+                values = [str(item), "", "", ""]
+            for col, value in enumerate(values):
+                self.table_modelTestClassMetrics.setItem(row, col, QTableWidgetItem(self._format_metric_value(value)))
+        self.table_modelTestClassMetrics.setVisible(bool(class_items))
+
+    def _format_metric_value(self, value) -> str:
+        if isinstance(value, (np.integer, int)):
+            return str(int(value))
+        if isinstance(value, (np.floating, float)):
+            return f"{float(value):.4f}"
+        return str(value)
+
+    def _populate_test_sample_selector(self, samples: list):
+        self.comboBox_testSamples.blockSignals(True)
+        self.comboBox_testSamples.clear()
+        if not samples:
+            self.comboBox_testSamples.addItem("暂无样本", userData=None)
+            self.comboBox_testSamples.setEnabled(False)
+        else:
+            for sample in samples:
+                label_state = "有标签" if sample.get("label_path") else "无标签"
+                self.comboBox_testSamples.addItem(f"{sample.get('sample_id', '')} ({label_state})", userData=sample)
+            self.comboBox_testSamples.setEnabled(True)
+            self.comboBox_testSamples.setCurrentIndex(0)
+        self.comboBox_testSamples.blockSignals(False)
+
+    def _on_test_sample_changed(self, index: int):
+        sample = self.comboBox_testSamples.itemData(index)
+        if sample:
+            self._display_test_sample(sample)
+
+    def _display_test_sample(self, sample: dict):
+        try:
+            image = self._read_preview_image(sample.get("image_path", ""), as_mask=False)
+            label = None
+            if sample.get("label_path"):
+                label = self._read_preview_image(sample.get("label_path", ""), as_mask=True)
+            prediction_path = sample.get("prediction_path", "")
+            if not prediction_path:
+                self.visualization_widget.clear()
+                self.visualization_widget.setVisible(True)
+                self.visualization_widget.image_label.setText("预测结果未找到")
+                return
+            prediction = self._read_preview_image(prediction_path, as_mask=False)
+            self.visualization_settings.setVisible(False)
+            self.visualization_widget.setVisible(True)
+            self.visualization_widget.render_test_images(image=image, prediction=prediction, label=label)
+        except Exception as e:
+            self.visualization_widget.setVisible(True)
+            self.visualization_widget.image_label.setText(f"样本预览失败: {e}")
+
+    def _read_preview_image(self, path: str, as_mask: bool = False):
+        if not path or not os.path.exists(path):
+            raise FileNotFoundError(path)
+        from PIL import Image
+
+        image = Image.open(path)
+        if as_mask:
+            return np.array(image)
+        return np.array(image.convert("RGB"))
 
     def _run_inference(self):
         """运行单图推理"""

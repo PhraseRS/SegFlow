@@ -639,6 +639,7 @@ class MainWindow(QMainWindow):
         
         # 加载数据
         self.data_manager.load_from_txt_files(data_root)
+        self._sync_inference_dataset_context()
         self.statusBar().showMessage(f"已从 {data_root} 加载VOC数据集")
 
         # 数据集加载后激活视图切换按钮，默认切换到详细视图
@@ -2474,6 +2475,7 @@ class MainWindow(QMainWindow):
         
         # 更新数据集概览
         self.ui.widget_datasetOverview.update_data(len(train_samples), len(val_samples), len(test_samples))
+        self._sync_inference_dataset_context()
         
         self.statusBar().showMessage("数据集重新划分完成")
         
@@ -2491,6 +2493,39 @@ class MainWindow(QMainWindow):
             self.ui.analysis_panel.stop_analysis()
             self._initialize_analysis_panel(self._current_data_root)
     
+    def _sync_inference_dataset_context(self):
+        if (
+            not hasattr(self, 'ui')
+            or not hasattr(self.ui, 'inference_panel')
+            or not hasattr(self.ui.inference_panel, 'set_dataset_context')
+        ):
+            return
+
+        data_root = getattr(self.data_manager, 'data_root', None) or self._current_data_root
+        if not data_root:
+            return
+
+        context = {
+            'data_root': data_root,
+            'splits': {
+                'train': self._build_inference_split_context('train'),
+                'val': self._build_inference_split_context('val'),
+                'test': self._build_inference_split_context('test'),
+            },
+        }
+        self.ui.inference_panel.set_dataset_context(context)
+
+    def _build_inference_split_context(self, split: str):
+        samples = []
+        for sample_id in self.data_manager.get_samples(split):
+            image_path, label_path = self.data_manager.get_sample_paths(sample_id, split)
+            samples.append({
+                'sample_id': sample_id,
+                'image_path': image_path or '',
+                'label_path': label_path or '',
+            })
+        return samples
+
     def _on_prediction_palette_changed(self, palette: dict):
         """右侧可视化设置：调色板变化 → 更新 GIS 主图预测图层"""
         ok = self.ui.gisCanvas.set_prediction_palette(palette)

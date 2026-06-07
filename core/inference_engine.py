@@ -9,7 +9,8 @@ import os
 import sys
 import math
 import numpy as np
-from typing import Dict, Tuple, Optional
+from contextlib import contextmanager
+from typing import Dict, Tuple, Optional, Iterable
 from PIL import Image
 import cv2
 import time
@@ -27,6 +28,34 @@ from skills.skill_raster_io import (
     read_block,
     write_block,
 )
+
+
+@contextmanager
+def temporary_sys_path(paths: str | Iterable[str] | None):
+    if paths is None:
+        normalized_paths = []
+    elif isinstance(paths, str):
+        normalized_paths = [paths]
+    else:
+        normalized_paths = list(paths)
+
+    added_paths = []
+    for path in normalized_paths:
+        if not path:
+            continue
+        abs_path = os.path.abspath(path)
+        if os.path.isdir(abs_path) and abs_path not in sys.path:
+            sys.path.insert(0, abs_path)
+            added_paths.append(abs_path)
+
+    try:
+        yield
+    finally:
+        for path in reversed(added_paths):
+            try:
+                sys.path.remove(path)
+            except ValueError:
+                pass
 
 
 class Block:
@@ -56,12 +85,25 @@ class InferenceEngine:
         """
         self.model_info = model_info
         self.model = None
+        self._import_context = None
 
         # 取消和进度回调支持
         self._cancel_requested = False
         self._progress_callback = None
 
+        config_dir = os.path.dirname(os.path.abspath(model_info.get('config', '')))
+        self._import_context = temporary_sys_path(config_dir)
+        self._import_context.__enter__()
         self._init_model()
+
+    def close(self):
+        """Release scoped import paths added for this engine."""
+        if self._import_context is not None:
+            self._import_context.__exit__(None, None, None)
+            self._import_context = None
+
+    def __del__(self):
+        self.close()
 
     def set_progress_callback(self, callback):
         """
