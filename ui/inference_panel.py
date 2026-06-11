@@ -1919,13 +1919,13 @@ class InferencePanel(QWidget):
         self._emit_log(f"划分: {str(summary.get('split', '')).upper()}")
         self._emit_log(f"样本: {summary.get('sample_count', 0)}")
         self._emit_log(f"标注: {summary.get('labelled_count', 0)}")
-        self._emit_log(f"Work dir: {summary.get('work_dir', '')}")
+        self._emit_log(f"测试日志、临时运行状态与评估记录目录 已保存到 {summary.get('work_dir', '')}")
         show_dir = summary.get("show_dir", "")
         out_dir = summary.get("out_dir", "")
         if show_dir:
-            self._emit_log(f"Show dir: {show_dir}")
+            self._emit_log(f"官方可视化预测图输出目录 已保存到 {show_dir}")
         if out_dir:
-            self._emit_log(f"Out dir: {out_dir}")
+            self._emit_log(f"原始预测结果输出目录 已保存到 {out_dir}")
 
     def _update_model_test_tables(self, metrics: dict):
         metric_items = []
