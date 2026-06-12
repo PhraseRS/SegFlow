@@ -209,3 +209,25 @@ class ModelSelectionWidget(QWidget):
             'backbone_key': BACKBONE_CHOICES.get(backbone_name, ''),
         }
 
+    def set_params(self, params: dict):
+        if not isinstance(params, dict):
+            return
+
+        framework = params.get('framework')
+        if framework:
+            idx = self.combo_framework.findText(str(framework))
+            if idx >= 0:
+                self.combo_framework.setCurrentIndex(idx)
+
+        method = params.get('method')
+        if method:
+            idx = self.combo_method.findText(str(method))
+            if idx >= 0:
+                self.combo_method.setCurrentIndex(idx)
+
+        backbone = params.get('backbone')
+        if backbone:
+            idx = self.combo_backbone.findText(str(backbone))
+            if idx >= 0:
+                self.combo_backbone.setCurrentIndex(idx)
+

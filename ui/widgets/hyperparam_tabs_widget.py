@@ -425,6 +425,67 @@ class HyperparamTabsWidget(QWidget):
             'aug_multi_scale': self.check_random_scale.isChecked(),
         }
 
+    def set_params(self, params: dict):
+        if not isinstance(params, dict):
+            return
+
+        int_fields = {
+            'num_classes': self.spin_num_classes,
+            'in_channels': self.spin_in_channels,
+            'crop_size': self.spin_crop_size,
+            'batch_size': self.spin_batch_size,
+            'max_iters': self.spin_max_iters,
+            'num_workers': self.spin_num_workers,
+            'val_interval': self.spin_val_interval,
+            'save_interval': self.spin_save_interval,
+            'max_keep_ckpts': self.spin_max_keep,
+        }
+        for key, widget in int_fields.items():
+            if key in params and params[key] is not None:
+                widget.setValue(int(params[key]))
+
+        float_fields = {
+            'lr': self.dspin_lr,
+            'weight_decay': self.dspin_weight_decay,
+            'momentum': self.dspin_momentum,
+        }
+        for key, widget in float_fields.items():
+            if key in params and params[key] is not None:
+                widget.setValue(float(params[key]))
+
+        combo_fields = {
+            'img_suffix': self.combo_img_suffix,
+            'seg_map_suffix': self.combo_seg_map_suffix,
+            'loss_type': self.combo_loss_type,
+            'optimizer': self.combo_optimizer,
+            'lr_schedule': self.combo_lr_schedule,
+        }
+        for key, widget in combo_fields.items():
+            if key in params and params[key] is not None:
+                self._set_combo_text(widget, str(params[key]))
+
+        bool_fields = {
+            'class_weight': self.chk_use_class_weight,
+            'save_best': self.check_save_best,
+            'aug_random_flip': self.check_random_flip,
+            'aug_photo_distortion': self.check_photo_distortion,
+            'aug_random_rotate': self.check_random_rotate,
+            'aug_multi_scale': self.check_random_scale,
+        }
+        for key, widget in bool_fields.items():
+            if key in params:
+                widget.setChecked(bool(params[key]))
+
+        self.config_changed.emit()
+
+    @staticmethod
+    def _set_combo_text(combo: QComboBox, text: str):
+        idx = combo.findText(text)
+        if idx >= 0:
+            combo.setCurrentIndex(idx)
+        elif combo.isEditable():
+            combo.setCurrentText(text)
+
     def set_num_classes(self, num_classes: int):
         """由外部（推荐系统或 Tab1 联动）设置类别数量。"""
         if num_classes and num_classes >= 2:

@@ -262,3 +262,26 @@ class WeightSelectionWidget(QWidget):
             'use_custom_weight': self.check_use_custom_weight.isChecked(),
             'custom_weight_path': self.line_custom_weight.text(),
         }
+
+    def set_params(self, params: dict):
+        if not isinstance(params, dict):
+            return
+
+        if 'use_pretrained' in params:
+            self.check_use_pretrained.setChecked(bool(params.get('use_pretrained')))
+
+        pretrained_model = params.get('pretrained_model')
+        if pretrained_model:
+            idx = self.combo_pretrained_model.findText(str(pretrained_model))
+            if idx >= 0:
+                self.combo_pretrained_model.setCurrentIndex(idx)
+            else:
+                self.combo_pretrained_model.addItem(str(pretrained_model))
+                self.combo_pretrained_model.setCurrentText(str(pretrained_model))
+
+        custom_weight_path = params.get('custom_weight_path')
+        if custom_weight_path:
+            self.line_custom_weight.setText(str(custom_weight_path))
+
+        if 'use_custom_weight' in params:
+            self.check_use_custom_weight.setChecked(bool(params.get('use_custom_weight')))

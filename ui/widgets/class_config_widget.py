@@ -169,6 +169,22 @@ class ClassConfigWidget(QWidget):
             palette.append(list(btn.property('rgb')) if btn else list(_default_color(r)))
         return {'class_names': names, 'palette': palette}
 
+    def set_class_config(self, config: dict):
+        if not isinstance(config, dict):
+            return
+        class_names = config.get('class_names') or []
+        palette = config.get('palette') or []
+        if not class_names:
+            return
+
+        self.table.blockSignals(True)
+        self.table.setRowCount(0)
+        for i, name in enumerate(class_names):
+            color = tuple(palette[i]) if i < len(palette) else _default_color(i)
+            self._add_row(name=name, color=color)
+        self.table.blockSignals(False)
+        self.config_changed.emit()
+
     def load_from_advisor(self, class_names: list, palette: list = None):
         """由推荐系统或 Tab1 联动批量填入类别名和颜色。"""
         if not class_names:

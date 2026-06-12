@@ -271,6 +271,15 @@ class AdvancedConfigWidget(QWidget):
             result[key] = row.get_value()
         return result
 
+    def set_params(self, params: Dict[str, Any]):
+        if not isinstance(params, dict):
+            return
+        for key, value in params.items():
+            row = self._param_rows.get(key)
+            if row is not None:
+                row.set_value(value)
+        self.config_changed.emit()
+
     def get_overrides(self) -> Dict[str, Any]:
         """
         获取底部文本框中填写的强制覆写字典
@@ -285,3 +294,9 @@ class AdvancedConfigWidget(QWidget):
         except:
             pass
         return {}
+
+    def set_overrides(self, overrides: Dict[str, Any]):
+        if not overrides:
+            self.text_override.clear()
+            return
+        self.text_override.setPlainText(json.dumps(overrides, ensure_ascii=False, indent=2))
