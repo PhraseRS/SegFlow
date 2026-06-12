@@ -6,14 +6,13 @@
 """
 
 import os
-import sys
 import math
 import numpy as np
-from contextlib import contextmanager
-from typing import Dict, Tuple, Optional, Iterable
+from typing import Dict, Tuple, Optional
 from PIL import Image
 import cv2
 import time
+from core.custom_module_import import temporary_sys_path
 
 # 针对大尺寸遥感影像，提高PIL的像素限制
 # 默认限制约为178MB像素，这里提高到10GB像素
@@ -28,34 +27,6 @@ from skills.skill_raster_io import (
     read_block,
     write_block,
 )
-
-
-@contextmanager
-def temporary_sys_path(paths: str | Iterable[str] | None):
-    if paths is None:
-        normalized_paths = []
-    elif isinstance(paths, str):
-        normalized_paths = [paths]
-    else:
-        normalized_paths = list(paths)
-
-    added_paths = []
-    for path in normalized_paths:
-        if not path:
-            continue
-        abs_path = os.path.abspath(path)
-        if os.path.isdir(abs_path) and abs_path not in sys.path:
-            sys.path.insert(0, abs_path)
-            added_paths.append(abs_path)
-
-    try:
-        yield
-    finally:
-        for path in reversed(added_paths):
-            try:
-                sys.path.remove(path)
-            except ValueError:
-                pass
 
 
 class Block:
@@ -91,13 +62,13 @@ class InferenceEngine:
         self._cancel_requested = False
         self._progress_callback = None
 
-        config_dir = os.path.dirname(os.path.abspath(model_info.get('config', '')))
-        self._import_context = temporary_sys_path(config_dir)
+        import_paths = model_info.get("import_paths") or []
+        self._import_context = temporary_sys_path(import_paths)
         self._import_context.__enter__()
         self._init_model()
 
     def close(self):
-        """Release scoped import paths added for this engine."""
+        """Release scoped custom module import paths."""
         if self._import_context is not None:
             self._import_context.__exit__(None, None, None)
             self._import_context = None
@@ -151,9 +122,6 @@ class InferenceEngine:
             self.use_real_model = True
 
         except ImportError as e:
-
-            import mmseg
-            print(f"\n[推理排查] 🚨 当前正在使用此目录下的 MMSeg 代码: {mmseg.__file__}\n")
 
             # MMSegmentation 未安装，使用模拟模式
             print(f"[推理引擎] ⚠️  MMSegmentation 未安装，使用模拟模式")
