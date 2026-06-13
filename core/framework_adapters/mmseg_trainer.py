@@ -372,6 +372,10 @@ class MMSegTrainer(BaseTrainer):
                 (128,0,128),(0,128,128),(128,128,128),(64,0,0),(192,0,0),
             ]
             palette = [_default_pal[i % len(_default_pal)] for i in range(len(class_names))]
+        cfg.metainfo = dict(
+            classes=tuple(class_names),
+            palette=[list(color) for color in palette],
+        )
         try:
             self._write_custom_dataset_file(work_dir, class_names, palette)
             custom_imports_list.append('custom_rs_dataset')

@@ -8,40 +8,12 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import sys
-from contextlib import contextmanager
-from typing import Any, Iterable
+from typing import Any
+
+from core.custom_module_import import temporary_sys_path
 
 
 RESULT_PREFIX = "__MMSEG_TEST_RESULT__"
-
-
-@contextmanager
-def temporary_sys_path(paths: str | Iterable[str] | None):
-    if paths is None:
-        normalized_paths = []
-    elif isinstance(paths, str):
-        normalized_paths = [paths]
-    else:
-        normalized_paths = list(paths)
-
-    added_paths = []
-    for path in normalized_paths:
-        if not path:
-            continue
-        abs_path = os.path.abspath(path)
-        if os.path.isdir(abs_path) and abs_path not in sys.path:
-            sys.path.insert(0, abs_path)
-            added_paths.append(abs_path)
-
-    try:
-        yield
-    finally:
-        for path in reversed(added_paths):
-            try:
-                sys.path.remove(path)
-            except ValueError:
-                pass
 
 
 def main() -> int:

@@ -17,51 +17,24 @@ from PySide6.QtCore import Qt, Signal, QTimer, QThread
 import copy
 import json
 import os
+import queue
 import subprocess
 import sys
+import threading
 from dataclasses import dataclass
 from datetime import datetime
-from contextlib import contextmanager
-from typing import Any, Callable, Iterable
+from typing import Any, Callable
 import numpy as np
 
 from ui.widgets.visualization_settings_widget import VisualizationSettingsWidget
 from ui.widgets.inference_visualization_widget import InferenceVisualizationWidget
 from ui.widgets.wheel_guard import install_wheel_guard
+from core.custom_module_import import normalize_import_paths, temporary_sys_path
 from core.mask_renderer import MaskRenderer
 from skills.skill_raster_io import sample_band_stats
 
 
 RESULT_PREFIX = "__MMSEG_TEST_RESULT__"
-
-
-@contextmanager
-def temporary_sys_path(paths: str | Iterable[str] | None):
-    """Temporarily prepend import paths for one model test operation."""
-    if paths is None:
-        normalized_paths = []
-    elif isinstance(paths, str):
-        normalized_paths = [paths]
-    else:
-        normalized_paths = list(paths)
-
-    added_paths = []
-    for path in normalized_paths:
-        if not path:
-            continue
-        abs_path = os.path.abspath(path)
-        if os.path.isdir(abs_path) and abs_path not in sys.path:
-            sys.path.insert(0, abs_path)
-            added_paths.append(abs_path)
-
-    try:
-        yield
-    finally:
-        for path in reversed(added_paths):
-            try:
-                sys.path.remove(path)
-            except ValueError:
-                pass
 
 
 @dataclass
@@ -72,7 +45,7 @@ class MMSegTestConfig:
     work_dir: str
     show_dir: str
     out_dir: str
-    custom_module_dir: str
+    import_paths: list[str]
     sample_count: int
     labelled_count: int
     samples: list[dict]
@@ -89,6 +62,7 @@ class MMSegTestConfigBuilder:
         data_root: str,
         splits: dict[str, list[dict]],
         output_root: str | None = None,
+        import_paths: list[str] | None = None,
     ) -> MMSegTestConfig:
         from mmengine.config import Config
 
@@ -99,8 +73,8 @@ class MMSegTestConfigBuilder:
         if not data_root or not os.path.isdir(data_root):
             raise FileNotFoundError(f"Dataset root not found: {data_root}")
 
-        custom_module_dir = os.path.dirname(os.path.abspath(config_path))
-        with temporary_sys_path(custom_module_dir):
+        resolved_import_paths = self._resolve_import_paths(config_path, import_paths)
+        with temporary_sys_path(resolved_import_paths):
             cfg = Config.fromfile(config_path)
 
         split = self._resolve_split(cfg, splits)
@@ -131,12 +105,19 @@ class MMSegTestConfigBuilder:
             work_dir=work_dir,
             show_dir=show_dir,
             out_dir=out_dir,
-            custom_module_dir=custom_module_dir,
+            import_paths=resolved_import_paths,
             sample_count=len(samples),
             labelled_count=sum(1 for sample in samples if sample.get("label_path")),
             samples=samples,
             format_only=format_only,
         )
+
+    @staticmethod
+    def _resolve_import_paths(config_path: str, import_paths: list[str] | None) -> list[str]:
+        paths = list(import_paths or [])
+        if config_path:
+            paths.append(os.path.dirname(os.path.abspath(config_path)))
+        return normalize_import_paths(paths)
 
     def _resolve_split(self, cfg: Any, splits: dict[str, list[dict]]) -> str:
         if hasattr(cfg, "val_dataloader") and (splits or {}).get("val"):
@@ -258,7 +239,7 @@ class MMSegTestRunner:
     def cancel(self) -> None:
         self._cancel_requested = True
         if self._process and self._process.poll() is None:
-            self._process.terminate()
+            self._terminate_process_tree(self._process)
 
     def run(
         self,
@@ -297,7 +278,7 @@ class MMSegTestRunner:
         env = os.environ.copy()
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         python_paths = [project_root]
-        python_paths.extend(path for path in (import_paths or []) if path)
+        python_paths.extend(path for path in normalize_import_paths(import_paths) if path)
         existing_pythonpath = env.get("PYTHONPATH")
         if existing_pythonpath:
             python_paths.append(existing_pythonpath)
@@ -324,26 +305,53 @@ class MMSegTestRunner:
             encoding="utf-8",
             errors="replace",
             bufsize=1,
+            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0,
         )
         self._process = process
 
         try:
             assert process.stdout is not None
-            for raw_line in process.stdout:
-                line = raw_line.rstrip()
-                if not line:
-                    continue
-                if line.startswith(RESULT_PREFIX):
-                    result = self._parse_result_line(line)
-                else:
-                    self._log(line)
+            stdout_queue: queue.Queue[str | None] = queue.Queue()
+            reader = threading.Thread(
+                target=self._read_stdout_lines,
+                args=(process.stdout, stdout_queue),
+                daemon=True,
+            )
+            reader.start()
 
-            return_code = process.wait()
+            while True:
+                if self._cancel_requested:
+                    self._terminate_process_tree(process)
+                    break
+                try:
+                    raw_line = stdout_queue.get(timeout=0.1)
+                except queue.Empty:
+                    if process.poll() is not None:
+                        if not reader.is_alive() and stdout_queue.empty():
+                            break
+                    continue
+
+                if raw_line is None:
+                    if process.poll() is not None:
+                        break
+                    continue
+
+                line = raw_line.rstrip()
+                if line:
+                    if line.startswith(RESULT_PREFIX):
+                        result = self._parse_result_line(line)
+                    else:
+                        self._log(line)
+
             if self._cancel_requested:
+                self._terminate_process_tree(process)
                 raise RuntimeError("Model test cancelled")
+            return_code = process.wait()
             if return_code != 0:
                 raise RuntimeError(f"Model test subprocess exited with code {return_code}")
         finally:
+            if self._cancel_requested and process.poll() is None:
+                self._terminate_process_tree(process)
             self._process = None
 
         return {
@@ -364,6 +372,43 @@ class MMSegTestRunner:
         if isinstance(metrics, dict):
             return metrics
         return {}
+
+    def _read_stdout_lines(self, stdout, stdout_queue: queue.Queue) -> None:
+        try:
+            for line in stdout:
+                stdout_queue.put(line)
+        except Exception as e:
+            stdout_queue.put(f"Failed to read model test output: {e}")
+        finally:
+            stdout_queue.put(None)
+
+    def _terminate_process_tree(self, process: subprocess.Popen) -> None:
+        if process.poll() is not None:
+            return
+        try:
+            process.terminate()
+        except Exception:
+            pass
+
+        if sys.platform == "win32":
+            try:
+                subprocess.run(
+                    ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=False,
+                )
+            except Exception as e:
+                self._log(f"Failed to taskkill model test process tree: {e}")
+        else:
+            try:
+                process.kill()
+            except Exception:
+                pass
+        try:
+            process.wait(timeout=2)
+        except Exception:
+            pass
 
     def _log(self, message: str) -> None:
         if self._log_callback:
@@ -512,7 +557,7 @@ class ModelTestWorker(QThread):
         self._cancel_requested = True
         if self._runner:
             self._runner.cancel()
-        self.log.emit("已请求取消测试，当前 Runner.test() 调用结束后生效")
+        self.log.emit("已请求取消测试，正在终止测试进程...")
 
     def run(self):
         try:
@@ -527,6 +572,7 @@ class ModelTestWorker(QThread):
                 checkpoint_path=self.inference_model.get("checkpoint", ""),
                 data_root=self.dataset_context.get("data_root", ""),
                 splits=self.dataset_context.get("splits", {}),
+                import_paths=self.inference_model.get("import_paths", []),
             )
 
             self.progress.emit(25)
@@ -537,7 +583,7 @@ class ModelTestWorker(QThread):
                 work_dir=test_config.work_dir,
                 show_dir=test_config.show_dir,
                 out_dir=test_config.out_dir,
-                import_paths=[test_config.custom_module_dir],
+                import_paths=test_config.import_paths,
             )
 
             if self._cancel_requested:
@@ -651,6 +697,7 @@ class InferencePanel(QWidget):
         self._model_test_results = []
         self._model_test_summary = {}
         self._is_model_testing = False
+        self._custom_module_dirs = []
 
         self._setup_ui()
         self._connect_signals()
@@ -1162,6 +1209,18 @@ class InferencePanel(QWidget):
         if dataset_context and dataset_context.get("data_root"):
             self._current_data_root = dataset_context.get("data_root")
         self._refresh_model_test_state()
+
+    def set_custom_module_dirs(self, module_dirs: list[str] | None):
+        self._custom_module_dirs = normalize_import_paths(module_dirs)
+
+    def get_custom_module_dirs(self) -> list[str]:
+        return list(self._custom_module_dirs)
+
+    def _resolve_custom_module_dirs(self, config_path: str = "") -> list[str]:
+        paths = list(self._custom_module_dirs)
+        if config_path:
+            paths.append(os.path.dirname(os.path.abspath(config_path)))
+        return normalize_import_paths(paths)
 
     def _refresh_model_test_state(self):
         if not hasattr(self, "label_testDatasetInfo"):
@@ -1681,7 +1740,8 @@ class InferencePanel(QWidget):
                 'device': device,
                 'classes': config_info.get('classes'),
                 'palette': config_info.get('palette'),
-                'model_name': config_info.get('model_name', 'Unknown Model')
+                'model_name': config_info.get('model_name', 'Unknown Model'),
+                'import_paths': self._resolve_custom_module_dirs(config_path),
             }
 
             self.pushButton_loadModel.setEnabled(True)
@@ -1919,13 +1979,13 @@ class InferencePanel(QWidget):
         self._emit_log(f"划分: {str(summary.get('split', '')).upper()}")
         self._emit_log(f"样本: {summary.get('sample_count', 0)}")
         self._emit_log(f"标注: {summary.get('labelled_count', 0)}")
-        self._emit_log(f"Work dir: {summary.get('work_dir', '')}")
+        self._emit_log(f"测试日志、临时运行状态与评估记录目录 已保存到 {summary.get('work_dir', '')}")
         show_dir = summary.get("show_dir", "")
         out_dir = summary.get("out_dir", "")
         if show_dir:
-            self._emit_log(f"Show dir: {show_dir}")
+            self._emit_log(f"官方可视化预测图输出目录 已保存到 {show_dir}")
         if out_dir:
-            self._emit_log(f"Out dir: {out_dir}")
+            self._emit_log(f"原始预测结果输出目录 已保存到 {out_dir}")
 
     def _update_model_test_tables(self, metrics: dict):
         metric_items = []

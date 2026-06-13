@@ -8,10 +8,12 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QTreeWidgetItem, QFile
                                 QMessageBox, QGraphicsScene, QGraphicsPixmapItem, QSplitter,
                                 QGraphicsRectItem, QGraphicsLineItem, QListWidgetItem,
                                 QMenu)
-from PySide6.QtCore import Qt, QRectF, QSize, QThread, Signal, QObject, QTimer
+from PySide6.QtCore import Qt, QRectF, QSize, QThread, Signal, QObject, QTimer, Slot
 from PySide6.QtGui import QIcon, QPixmap, QImage, QPainter, QColor, QPen, QBrush, QAction
 from ui.main_frame_ui import Ui_MainWindow
 from core.dataset_metadata import DatasetMetadataManager
+from core.project_manager import ProjectManager
+from core.project_state import InputState, ModelState, ProjectInfo, ProjectState
 from core.thumbnail_manager import ThumbnailLazyLoader
 import sys
 import os
@@ -415,6 +417,11 @@ class MainWindow(QMainWindow):
         
         # 初始化元数据管理器
         self.metadata_manager = DatasetMetadataManager()
+
+        self.project_manager = ProjectManager()
+        self._current_project_path = ""
+        self._current_data_root = ""
+        self._setup_project_actions()
         
         # 影像查看器 (SmartCanvas 已在 UI 中创建)
         self.image_viewer = self.ui.graphicsView_canvas
@@ -450,6 +457,244 @@ class MainWindow(QMainWindow):
         self.ui.verticalLayout_actions.addWidget(self.btn_send_to_inference)
         self.btn_send_to_inference.clicked.connect(self._on_send_to_inference_clicked)
         self._last_work_dir = None
+
+    def _setup_project_actions(self):
+        self.action_new_project = QAction("新建工程", self)
+        self.action_save_project_as = QAction("工程另存为", self)
+
+        self.ui.action_open.setText("打开工程")
+        self.ui.action_save.setText("保存工程")
+        self.ui.menu_file.insertAction(self.ui.action_open, self.action_new_project)
+        self.ui.menu_file.insertAction(self.ui.action_exit, self.action_save_project_as)
+
+        self.action_new_project.triggered.connect(self._on_new_project)
+        self.ui.action_open.triggered.connect(self._on_open_project)
+        self.ui.action_save.triggered.connect(self._on_save_project)
+        self.action_save_project_as.triggered.connect(self._on_save_project_as)
+
+    @Slot()
+    def _on_new_project(self):
+        self._current_project_path = ""
+        self.statusBar().showMessage("已新建工程，当前状态可通过“保存工程”写入工程文件")
+
+    @Slot()
+    def _on_open_project(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "打开工程文件",
+            "",
+            "RS Seg Project (*.rsgproj);;JSON Files (*.json);;All Files (*)",
+        )
+        if not path:
+            return
+
+        try:
+            state = self.project_manager.load_project(path)
+            warnings = self.project_manager.validate_state(state)
+            self._apply_project_state(state)
+            self._current_project_path = state.project_path
+            self._log_project_warnings(warnings)
+            self.statusBar().showMessage(f"当前工程: {os.path.basename(state.project_path)}")
+        except Exception as e:
+            QMessageBox.critical(self, "打开工程失败", f"无法打开工程文件:\n{e}")
+
+    @Slot()
+    def _on_save_project(self):
+        if not self._current_project_path:
+            self._on_save_project_as()
+            return
+        self._save_project_to_path(self._current_project_path)
+
+    @Slot()
+    def _on_save_project_as(self):
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "保存工程文件",
+            self._default_project_path(),
+            "RS Seg Project (*.rsgproj);;JSON Files (*.json);;All Files (*)",
+        )
+        if not path:
+            return
+        self._save_project_to_path(path)
+
+    def _save_project_to_path(self, path: str):
+        try:
+            state = self._collect_project_state()
+            self.project_manager.save_project(path, state)
+            self._current_project_path = state.project_path
+            warnings = self.project_manager.validate_state(state)
+            self._log_project_warnings(warnings)
+            self.statusBar().showMessage(f"当前工程: {os.path.basename(state.project_path)}")
+        except Exception as e:
+            QMessageBox.critical(self, "保存工程失败", f"无法保存工程文件:\n{e}")
+
+    def _collect_project_state(self) -> ProjectState:
+        data_root = getattr(self.data_manager, "data_root", "") or self._current_data_root
+        inference_panel = getattr(self.ui, "inference_panel", None)
+
+        config_path = ""
+        checkpoint_path = ""
+        device = "Auto"
+        strategy = "large_image_block"
+        crop_size = 1024
+        overlap_rate = 0.2
+
+        if inference_panel is not None:
+            config_path = inference_panel.lineEdit_configFile.text().strip()
+            checkpoint_path = inference_panel.lineEdit_checkpointFile.text().strip()
+            device = inference_panel.comboBox_device.currentText()
+            crop_size = inference_panel.spinBox_cropSize.value()
+            overlap_rate = inference_panel.doubleSpinBox_overlapRate.value()
+            if getattr(inference_panel, "radioButton_resize", None) and inference_panel.radioButton_resize.isChecked():
+                strategy = "resize"
+            elif getattr(inference_panel, "radioButton_slidingWindow", None) and inference_panel.radioButton_slidingWindow.isChecked():
+                strategy = "sliding_window"
+
+        work_dir = os.path.dirname(config_path) if config_path else ""
+        custom_modules = self.project_manager.infer_custom_modules(config_path, work_dir)
+        if inference_panel is not None and hasattr(inference_panel, "get_custom_module_dirs"):
+            panel_module_dirs = inference_panel.get_custom_module_dirs()
+            if panel_module_dirs:
+                custom_modules.module_dirs = panel_module_dirs
+        return ProjectState(
+            project_path=self._current_project_path,
+            project=ProjectInfo(name=self._default_project_name(data_root)),
+            inputs=InputState(dataset_root=data_root, sample_library=data_root),
+            model=ModelState(config=config_path, checkpoint=checkpoint_path, work_dir=work_dir),
+            custom_modules=custom_modules,
+            inference={
+                "strategy": strategy,
+                "crop_size": crop_size,
+                "overlap_rate": overlap_rate,
+                "device": device,
+            },
+            task_config=self._collect_task_config_state(),
+            ui={"last_tab": self.ui.tabWidget_contextControl.currentIndex()},
+        )
+
+    def _apply_project_state(self, state: ProjectState):
+        data_root = state.inputs.dataset_root
+        if data_root and os.path.isdir(data_root):
+            self._current_data_root = data_root
+            if hasattr(self.ui.inference_panel, "set_data_root"):
+                self.ui.inference_panel.set_data_root(data_root)
+            self.data_manager.load_from_txt_files(data_root)
+            self._sync_inference_dataset_context()
+            self.ui.action_detailView.setEnabled(True)
+            self.ui.action_gridView.setEnabled(True)
+            self.on_switch_to_detail_view()
+            self.thumbnail_manager.set_cache_dir(data_root)
+            self._update_dataset_overview()
+            self._initialize_analysis_panel(data_root)
+
+        inference_panel = getattr(self.ui, "inference_panel", None)
+        if inference_panel is not None:
+            if hasattr(inference_panel, "set_custom_module_dirs"):
+                inference_panel.set_custom_module_dirs(state.custom_modules.module_dirs)
+            if state.model.config:
+                inference_panel.lineEdit_configFile.setText(state.model.config)
+            if state.model.checkpoint:
+                inference_panel.lineEdit_checkpointFile.setText(state.model.checkpoint)
+            self._set_combo_text(inference_panel.comboBox_device, state.inference.get("device", ""))
+            self._apply_inference_strategy(state.inference)
+
+        self._apply_task_config_state(state.task_config)
+
+        last_tab = state.ui.get("last_tab")
+        if isinstance(last_tab, int) and 0 <= last_tab < self.ui.tabWidget_contextControl.count():
+            self.ui.tabWidget_contextControl.setCurrentIndex(last_tab)
+
+    def _collect_task_config_state(self) -> dict:
+        task_config = {}
+        if hasattr(self.ui, 'widget_modelSelection'):
+            task_config['model_selection'] = self.ui.widget_modelSelection.get_params()
+        if hasattr(self.ui, 'widget_weightSelection'):
+            task_config['weight_selection'] = self.ui.widget_weightSelection.get_params()
+        if hasattr(self.ui, 'widget_hyperparamTabs'):
+            task_config['hyperparams'] = self.ui.widget_hyperparamTabs.get_params()
+        if hasattr(self.ui, 'widget_classConfig'):
+            task_config['class_config'] = self.ui.widget_classConfig.get_class_config()
+        if hasattr(self.ui, 'widget_advancedConfig'):
+            task_config['advanced_params'] = self.ui.widget_advancedConfig.get_params()
+            task_config['advanced_overrides'] = self.ui.widget_advancedConfig.get_overrides()
+        return task_config
+
+    def _apply_task_config_state(self, task_config: dict):
+        if not isinstance(task_config, dict) or not task_config:
+            return
+
+        model_selection = task_config.get('model_selection')
+        if model_selection and hasattr(self.ui, 'widget_modelSelection'):
+            self.ui.widget_modelSelection.set_params(model_selection)
+
+        weight_selection = task_config.get('weight_selection')
+        if weight_selection and hasattr(self.ui, 'widget_weightSelection'):
+            self.ui.widget_weightSelection.set_params(weight_selection)
+
+        hyperparams = task_config.get('hyperparams')
+        if hyperparams and hasattr(self.ui, 'widget_hyperparamTabs'):
+            self.ui.widget_hyperparamTabs.set_params(hyperparams)
+
+        class_config = task_config.get('class_config')
+        if class_config and hasattr(self.ui, 'widget_classConfig'):
+            self.ui.widget_classConfig.set_class_config(class_config)
+
+        advanced_params = task_config.get('advanced_params')
+        if advanced_params and hasattr(self.ui, 'widget_advancedConfig'):
+            self.ui.widget_advancedConfig.set_params(advanced_params)
+
+        advanced_overrides = task_config.get('advanced_overrides')
+        if hasattr(self.ui, 'widget_advancedConfig'):
+            self.ui.widget_advancedConfig.set_overrides(advanced_overrides or {})
+
+        self._update_task_config_dashboard()
+
+    def _apply_inference_strategy(self, inference_state: dict):
+        inference_panel = getattr(self.ui, "inference_panel", None)
+        if inference_panel is None:
+            return
+
+        strategy = inference_state.get("strategy")
+        if strategy == "resize" and getattr(inference_panel, "radioButton_resize", None):
+            inference_panel.radioButton_resize.setChecked(True)
+        elif strategy == "sliding_window" and getattr(inference_panel, "radioButton_slidingWindow", None):
+            inference_panel.radioButton_slidingWindow.setChecked(True)
+        elif getattr(inference_panel, "radioButton_largeImageBlock", None):
+            inference_panel.radioButton_largeImageBlock.setChecked(True)
+
+        crop_size = inference_state.get("crop_size")
+        if isinstance(crop_size, int):
+            inference_panel.spinBox_cropSize.setValue(crop_size)
+        overlap_rate = inference_state.get("overlap_rate")
+        if isinstance(overlap_rate, (int, float)):
+            inference_panel.doubleSpinBox_overlapRate.setValue(float(overlap_rate))
+
+    @staticmethod
+    def _set_combo_text(combo, text: str):
+        if not text:
+            return
+        index = combo.findText(text)
+        if index >= 0:
+            combo.setCurrentIndex(index)
+
+    def _default_project_path(self) -> str:
+        data_root = getattr(self.data_manager, "data_root", "") or self._current_data_root
+        if data_root:
+            return os.path.join(data_root, f"{self._default_project_name(data_root)}.rsgproj")
+        return "untitled.rsgproj"
+
+    @staticmethod
+    def _default_project_name(data_root: str) -> str:
+        if data_root:
+            return os.path.basename(os.path.normpath(data_root)) or "untitled"
+        return "untitled"
+
+    def _log_project_warnings(self, warnings: list[str]):
+        if not warnings:
+            return
+        message = "工程文件已加载/保存，但存在路径提示:\n" + "\n".join(warnings)
+        self._log_to_bottom(message)
+        QMessageBox.warning(self, "工程路径提示", message)
     
     def _init_view_switcher(self):
         """初始化视图切换器"""
