@@ -17,8 +17,10 @@ from PySide6.QtCore import Qt, Signal, QTimer, QThread
 import copy
 import json
 import os
+import queue
 import subprocess
 import sys
+import threading
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Callable
@@ -237,7 +239,7 @@ class MMSegTestRunner:
     def cancel(self) -> None:
         self._cancel_requested = True
         if self._process and self._process.poll() is None:
-            self._process.terminate()
+            self._terminate_process_tree(self._process)
 
     def run(
         self,
@@ -303,26 +305,53 @@ class MMSegTestRunner:
             encoding="utf-8",
             errors="replace",
             bufsize=1,
+            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0,
         )
         self._process = process
 
         try:
             assert process.stdout is not None
-            for raw_line in process.stdout:
-                line = raw_line.rstrip()
-                if not line:
-                    continue
-                if line.startswith(RESULT_PREFIX):
-                    result = self._parse_result_line(line)
-                else:
-                    self._log(line)
+            stdout_queue: queue.Queue[str | None] = queue.Queue()
+            reader = threading.Thread(
+                target=self._read_stdout_lines,
+                args=(process.stdout, stdout_queue),
+                daemon=True,
+            )
+            reader.start()
 
-            return_code = process.wait()
+            while True:
+                if self._cancel_requested:
+                    self._terminate_process_tree(process)
+                    break
+                try:
+                    raw_line = stdout_queue.get(timeout=0.1)
+                except queue.Empty:
+                    if process.poll() is not None:
+                        if not reader.is_alive() and stdout_queue.empty():
+                            break
+                    continue
+
+                if raw_line is None:
+                    if process.poll() is not None:
+                        break
+                    continue
+
+                line = raw_line.rstrip()
+                if line:
+                    if line.startswith(RESULT_PREFIX):
+                        result = self._parse_result_line(line)
+                    else:
+                        self._log(line)
+
             if self._cancel_requested:
+                self._terminate_process_tree(process)
                 raise RuntimeError("Model test cancelled")
+            return_code = process.wait()
             if return_code != 0:
                 raise RuntimeError(f"Model test subprocess exited with code {return_code}")
         finally:
+            if self._cancel_requested and process.poll() is None:
+                self._terminate_process_tree(process)
             self._process = None
 
         return {
@@ -343,6 +372,43 @@ class MMSegTestRunner:
         if isinstance(metrics, dict):
             return metrics
         return {}
+
+    def _read_stdout_lines(self, stdout, stdout_queue: queue.Queue) -> None:
+        try:
+            for line in stdout:
+                stdout_queue.put(line)
+        except Exception as e:
+            stdout_queue.put(f"Failed to read model test output: {e}")
+        finally:
+            stdout_queue.put(None)
+
+    def _terminate_process_tree(self, process: subprocess.Popen) -> None:
+        if process.poll() is not None:
+            return
+        try:
+            process.terminate()
+        except Exception:
+            pass
+
+        if sys.platform == "win32":
+            try:
+                subprocess.run(
+                    ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=False,
+                )
+            except Exception as e:
+                self._log(f"Failed to taskkill model test process tree: {e}")
+        else:
+            try:
+                process.kill()
+            except Exception:
+                pass
+        try:
+            process.wait(timeout=2)
+        except Exception:
+            pass
 
     def _log(self, message: str) -> None:
         if self._log_callback:
@@ -491,7 +557,7 @@ class ModelTestWorker(QThread):
         self._cancel_requested = True
         if self._runner:
             self._runner.cancel()
-        self.log.emit("已请求取消测试，当前 Runner.test() 调用结束后生效")
+        self.log.emit("已请求取消测试，正在终止测试进程...")
 
     def run(self):
         try:
