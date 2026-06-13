@@ -82,7 +82,7 @@ call python -m pip install mmcv==2.1.0 -f https://download.openmmlab.com/mmcv/di
 if errorlevel 1 goto install_err
 
 echo - 正在安装 MMSegmentation 算法库...
-call python -m pip install mmengine mmsegmentation==1.2.2
+call python -m pip install mmdet mmengine mmsegmentation==1.2.2
 if errorlevel 1 goto install_err
 
 echo - 正在预装完美兼容包 (NumPy 1.x, OpenCV 4.9.x, ftfy, regex)...
@@ -110,7 +110,8 @@ echo 以后启动GUI请在终端运行:
 echo 1. conda activate gui-mmseg
 echo 2. python main.py
 echo 训练前请在"环境配置"面板中选择 gui-mmseg 环境的解释器。
-echo 可在该面板验证:CUDA 应显示为 Available。
+echo 可在该面板验证:
+echo CUDA 应显示为 Available。
 echo ============================================================
 echo.
 pause
