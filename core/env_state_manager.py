@@ -18,6 +18,8 @@ EnvStateManager - 环境状态管理器
 """
 
 from __future__ import annotations
+import os
+import sys
 from typing import Optional
 
 from PySide6.QtCore import QObject, Signal
@@ -135,3 +137,23 @@ class EnvStateManager(QObject):
             "details":       dict(self._details),
             "message":       self._message,
         }
+
+
+def resolve_training_python(fallback: str | None = None) -> str:
+    """Return the Python interpreter selected for training/runtime tasks."""
+    candidates = [
+        EnvStateManager.instance().python_path,
+        fallback,
+        sys.executable,
+    ]
+    for path in candidates:
+        if path and os.path.isfile(path):
+            return os.path.abspath(path)
+    return sys.executable
+
+
+def is_current_python(python_path: str | None) -> bool:
+    """Whether the given interpreter is the current GUI process interpreter."""
+    if not python_path:
+        return True
+    return os.path.normcase(os.path.abspath(python_path)) == os.path.normcase(os.path.abspath(sys.executable))

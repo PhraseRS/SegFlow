@@ -20,6 +20,7 @@ import os
 import queue
 import subprocess
 import sys
+import tempfile
 import threading
 from dataclasses import dataclass
 from datetime import datetime
@@ -30,11 +31,13 @@ from ui.widgets.visualization_settings_widget import VisualizationSettingsWidget
 from ui.widgets.inference_visualization_widget import InferenceVisualizationWidget
 from ui.widgets.wheel_guard import install_wheel_guard
 from core.custom_module_import import normalize_import_paths, temporary_sys_path
+from core.env_state_manager import is_current_python, resolve_training_python
 from core.mask_renderer import MaskRenderer
 from skills.skill_raster_io import sample_band_stats
 
 
 RESULT_PREFIX = "__MMSEG_TEST_RESULT__"
+INFERENCE_PROGRESS_PREFIX = "__RS_INFER_PROGRESS__"
 
 
 @dataclass
@@ -93,6 +96,7 @@ class MMSegTestConfigBuilder:
 
         self._patch_test_dataloader(cfg, data_root, split)
         self._ensure_full_iou_metrics(cfg)
+        self._disable_test_visualization(cfg)
         format_only = self._is_format_only(cfg)
 
         test_config = os.path.join(root, "test_config.py")
@@ -194,6 +198,15 @@ class MMSegTestConfigBuilder:
     def _ensure_full_iou_metrics(self, cfg: Any) -> None:
         self._patch_evaluator_metrics(getattr(cfg, "test_evaluator", None))
 
+    def _disable_test_visualization(self, cfg: Any) -> None:
+        default_hooks = getattr(cfg, "default_hooks", None)
+        if isinstance(default_hooks, dict) and "visualization" in default_hooks:
+            default_hooks["visualization"]["draw"] = False
+            default_hooks["visualization"]["show"] = False
+        visualizer = getattr(cfg, "visualizer", None)
+        if isinstance(visualizer, dict):
+            visualizer.pop("save_dir", None)
+
     def _patch_evaluator_metrics(self, evaluator: Any) -> None:
         if isinstance(evaluator, dict):
             evaluator_type = str(evaluator.get("type", ""))
@@ -251,9 +264,11 @@ class MMSegTestRunner:
         cfg_options: dict | None = None,
         tta: bool = False,
         import_paths: list[str] | None = None,
+        python_path: str | None = None,
     ) -> dict:
+        runtime_python = resolve_training_python(python_path)
         command = [
-            sys.executable,
+            runtime_python,
             "-B",
             "-m",
             "core.mmseg_test_runner_entry",
@@ -264,8 +279,6 @@ class MMSegTestRunner:
             "--work-dir",
             work_dir,
         ]
-        if show_dir:
-            command.extend(["--show-dir", show_dir])
         if out_dir:
             command.extend(["--out-dir", out_dir])
         if tta:
@@ -285,11 +298,12 @@ class MMSegTestRunner:
         env["PYTHONPATH"] = os.pathsep.join(python_paths)
         env.setdefault("PYTHONIOENCODING", "utf-8")
 
+        self._log(f"Python: {runtime_python}")
         self._log(f"Config: {test_config}")
         self._log(f"Checkpoint: {checkpoint}")
         self._log(f"Work dir: {work_dir}")
         if show_dir:
-            self._log(f"Show dir: {show_dir}")
+            self._log(f"Show dir: {show_dir} (official visualization disabled)")
         if out_dir:
             self._log(f"Out dir: {out_dir}")
 
@@ -357,7 +371,7 @@ class MMSegTestRunner:
         return {
             "metrics": self._normalize_metrics(result.get("metrics", {})),
             "work_dir": result.get("work_dir", work_dir),
-            "show_dir": result.get("show_dir", show_dir or ""),
+            "show_dir": result.get("show_dir", ""),
             "out_dir": result.get("out_dir", out_dir or ""),
         }
 
@@ -442,6 +456,7 @@ class InferenceWorker(QThread):
 
         # 推理引擎引用 (用于取消)
         self._engine = None
+        self._process = None
         self._cancel_requested = False
 
     def request_cancel(self):
@@ -449,6 +464,8 @@ class InferenceWorker(QThread):
         self._cancel_requested = True
         if self._engine:
             self._engine.request_cancel()
+        if self._process and self._process.poll() is None:
+            self._terminate_process_tree(self._process)
         self.log.emit("🛑 已发送取消请求...")
 
     def _on_engine_progress(self, current, total):
@@ -464,6 +481,23 @@ class InferenceWorker(QThread):
             self.log.emit(f"   推理策略: {self.strategy}")
 
             # 导入推理引擎 (延迟导入避免循环依赖)
+            runtime_python = resolve_training_python(self.inference_model.get("python_path", ""))
+            self.log.emit(f"Python: {runtime_python}")
+            if not is_current_python(runtime_python):
+                self.log.emit(
+                    "正在使用训练环境 Python 启动推理子进程..."
+                )
+                result = self._run_subprocess_inference(runtime_python)
+                self.progress.emit(90)
+                if self._cancel_requested:
+                    self.log.emit("推理已取消")
+                    self.cancelled.emit()
+                    return
+                if result is None:
+                    raise RuntimeError("推理返回结果为空")
+                self.finished.emit(self.image_path, result, self.inference_params)
+                return
+
             from core.inference_engine import InferenceEngine
 
             # 创建推理引擎
@@ -535,6 +569,159 @@ class InferenceWorker(QThread):
         finally:
             if self._engine and hasattr(self._engine, "close"):
                 self._engine.close()
+            self._process = None
+
+    def _run_subprocess_inference(self, runtime_python: str) -> dict:
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        import_paths = normalize_import_paths(self.inference_model.get("import_paths", []))
+        artifact_dir = tempfile.mkdtemp(prefix="rs_seg_infer_")
+        request_json = os.path.join(artifact_dir, "request.json")
+        result_json = os.path.join(artifact_dir, "result.json")
+
+        payload = {
+            "inference_model": self.inference_model,
+            "image_path": self.image_path,
+            "strategy": self.strategy,
+            "inference_params": self.inference_params,
+            "output_path": self.output_path,
+            "artifact_dir": artifact_dir,
+        }
+        with open(request_json, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False)
+
+        command = [
+            runtime_python,
+            "-B",
+            "-m",
+            "core.mmseg_inference_runner_entry",
+            "--request-json",
+            request_json,
+            "--result-json",
+            result_json,
+        ]
+
+        env = os.environ.copy()
+        python_paths = [project_root]
+        python_paths.extend(path for path in import_paths if path)
+        existing_pythonpath = env.get("PYTHONPATH")
+        if existing_pythonpath:
+            python_paths.append(existing_pythonpath)
+        env["PYTHONPATH"] = os.pathsep.join(python_paths)
+        env.setdefault("PYTHONIOENCODING", "utf-8")
+
+        self._process = subprocess.Popen(
+            command,
+            cwd=project_root,
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            bufsize=1,
+            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0,
+        )
+
+        stdout_queue: queue.Queue[str | None] = queue.Queue()
+        assert self._process.stdout is not None
+        reader = threading.Thread(
+            target=self._read_stdout_lines,
+            args=(self._process.stdout, stdout_queue),
+            daemon=True,
+        )
+        reader.start()
+
+        while True:
+            if self._cancel_requested:
+                self._terminate_process_tree(self._process)
+                raise RuntimeError("Inference cancelled")
+            try:
+                raw_line = stdout_queue.get(timeout=0.1)
+            except queue.Empty:
+                if self._process.poll() is not None and not reader.is_alive() and stdout_queue.empty():
+                    break
+                continue
+            if raw_line is None:
+                if self._process.poll() is not None:
+                    break
+                continue
+            line = raw_line.rstrip()
+            if line:
+                if line.startswith(INFERENCE_PROGRESS_PREFIX):
+                    self._handle_subprocess_progress(line)
+                else:
+                    self.log.emit(line)
+
+        return_code = self._process.wait()
+        if return_code != 0:
+            error_text = ""
+            if os.path.isfile(result_json):
+                with open(result_json, "r", encoding="utf-8") as f:
+                    error_text = json.load(f).get("error", "")
+            raise RuntimeError(error_text or f"Inference subprocess exited with code {return_code}")
+        if not os.path.isfile(result_json):
+            raise RuntimeError("Inference subprocess did not write result.json")
+
+        with open(result_json, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+        if not payload.get("ok"):
+            raise RuntimeError(payload.get("error", "Inference subprocess failed"))
+        return self._restore_subprocess_value(payload.get("result", {}))
+
+    def _handle_subprocess_progress(self, line: str) -> None:
+        payload = line[len(INFERENCE_PROGRESS_PREFIX):]
+        try:
+            data = json.loads(payload)
+            value = int(data.get("value", 0))
+        except Exception:
+            return
+        self.progress.emit(max(0, min(100, value)))
+
+    def _restore_subprocess_value(self, value):
+        if isinstance(value, dict) and "__ndarray__" in value:
+            return np.load(value["__ndarray__"], allow_pickle=False)
+        if isinstance(value, dict):
+            return {key: self._restore_subprocess_value(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [self._restore_subprocess_value(item) for item in value]
+        return value
+
+    def _read_stdout_lines(self, stdout, stdout_queue: queue.Queue) -> None:
+        try:
+            for line in stdout:
+                stdout_queue.put(line)
+        except Exception as e:
+            stdout_queue.put(f"Failed to read inference output: {e}")
+        finally:
+            stdout_queue.put(None)
+
+    def _terminate_process_tree(self, process: subprocess.Popen) -> None:
+        if process.poll() is not None:
+            return
+        try:
+            process.terminate()
+        except Exception:
+            pass
+
+        if sys.platform == "win32":
+            try:
+                subprocess.run(
+                    ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=False,
+                )
+            except Exception as e:
+                self.log.emit(f"Failed to taskkill inference process tree: {e}")
+        else:
+            try:
+                process.kill()
+            except Exception:
+                pass
+        try:
+            process.wait(timeout=2)
+        except Exception:
+            pass
 
 
 class ModelTestWorker(QThread):
@@ -584,6 +771,7 @@ class ModelTestWorker(QThread):
                 show_dir=test_config.show_dir,
                 out_dir=test_config.out_dir,
                 import_paths=test_config.import_paths,
+                python_path=self.inference_model.get("python_path", ""),
             )
 
             if self._cancel_requested:
@@ -1734,6 +1922,7 @@ class InferencePanel(QWidget):
                 self._emit_log("⚠️  未找到类别信息，将使用默认设置")
 
             # 保存模型信息（实际项目中应使用 MMSegmentation API 加载真实模型）
+            runtime_python = resolve_training_python()
             self.inference_model = {
                 'config': config_path,
                 'checkpoint': checkpoint_path,
@@ -1742,6 +1931,7 @@ class InferencePanel(QWidget):
                 'palette': config_info.get('palette'),
                 'model_name': config_info.get('model_name', 'Unknown Model'),
                 'import_paths': self._resolve_custom_module_dirs(config_path),
+                'python_path': runtime_python,
             }
 
             self.pushButton_loadModel.setEnabled(True)
@@ -1755,6 +1945,7 @@ class InferencePanel(QWidget):
                 self._emit_log(f"⚠️  类别图例显示警告: {legend_error}")
 
             self._emit_log("✅ 模型已就绪 (Model Ready)")
+            self._emit_log(f"Python: {runtime_python}")
             self.model_loaded.emit(self.inference_model)
             self._refresh_model_test_state()
 

@@ -67,6 +67,7 @@ def _run_test(
 
     cfg.work_dir = work_dir
     cfg.load_from = checkpoint
+    _disable_visualization(cfg)
 
     if show_dir:
         _enable_visualization(cfg, show_dir)
@@ -99,6 +100,16 @@ def _enable_visualization(cfg: Any, show_dir: str) -> None:
     else:
         print("VisualizationHook not found; show_dir output may be unavailable.")
     os.makedirs(show_dir, exist_ok=True)
+
+
+def _disable_visualization(cfg: Any) -> None:
+    default_hooks = getattr(cfg, "default_hooks", None)
+    if default_hooks is not None and "visualization" in default_hooks:
+        default_hooks["visualization"]["draw"] = False
+        default_hooks["visualization"]["show"] = False
+    visualizer = getattr(cfg, "visualizer", None)
+    if visualizer is not None:
+        visualizer.pop("save_dir", None)
 
 
 def _to_jsonable(value: Any) -> Any:
