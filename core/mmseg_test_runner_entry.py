@@ -10,7 +10,7 @@ import json
 import os
 from typing import Any
 
-from core.custom_module_import import temporary_sys_path
+from core.project_module_resolver import load_custom_modules_from_files, validate_custom_module_files
 
 
 RESULT_PREFIX = "__MMSEG_TEST_RESULT__"
@@ -19,17 +19,18 @@ RESULT_PREFIX = "__MMSEG_TEST_RESULT__"
 def main() -> int:
     args = _parse_args()
     cfg_options = json.loads(args.cfg_options_json) if args.cfg_options_json else None
+    custom_module_files = json.loads(args.custom_module_files_json) if args.custom_module_files_json else []
 
-    with temporary_sys_path(args.import_path):
-        result = _run_test(
-            test_config=args.test_config,
-            checkpoint=args.checkpoint,
-            work_dir=args.work_dir,
-            show_dir=args.show_dir,
-            out_dir=args.out_dir,
-            cfg_options=cfg_options,
-            tta=args.tta,
-        )
+    result = _run_test(
+        test_config=args.test_config,
+        checkpoint=args.checkpoint,
+        work_dir=args.work_dir,
+        show_dir=args.show_dir,
+        out_dir=args.out_dir,
+        cfg_options=cfg_options,
+        tta=args.tta,
+        custom_module_files=custom_module_files,
+    )
 
     print(RESULT_PREFIX + json.dumps(result, ensure_ascii=False))
     return 0
@@ -44,7 +45,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--out-dir", default="")
     parser.add_argument("--cfg-options-json", default="")
     parser.add_argument("--tta", action="store_true")
-    parser.add_argument("--import-path", action="append", default=[])
+    parser.add_argument("--custom-module-files-json", default="")
     return parser.parse_args()
 
 
@@ -56,9 +57,19 @@ def _run_test(
     out_dir: str = "",
     cfg_options: dict | None = None,
     tta: bool = False,
+    custom_module_files: list[str] | None = None,
 ) -> dict:
     from mmengine.config import Config
     from mmengine.runner import Runner
+
+    warnings = validate_custom_module_files(custom_module_files)
+    if warnings:
+        raise FileNotFoundError("; ".join(warnings))
+    load_results = load_custom_modules_from_files(custom_module_files)
+    failed = [item for item in load_results if not item.get("loaded")]
+    if failed:
+        message = "; ".join(f"{item.get('module')}: {item.get('error')}" for item in failed)
+        raise ImportError(f"Failed to load custom modules: {message}")
 
     cfg = Config.fromfile(test_config)
     cfg.launcher = "none"
@@ -67,6 +78,7 @@ def _run_test(
 
     cfg.work_dir = work_dir
     cfg.load_from = checkpoint
+    _force_single_process_test_dataloader(cfg)
     _disable_visualization(cfg)
 
     if show_dir:
@@ -88,6 +100,13 @@ def _run_test(
         "show_dir": show_dir,
         "out_dir": out_dir,
     }
+
+
+def _force_single_process_test_dataloader(cfg: Any) -> None:
+    dataloader = getattr(cfg, "test_dataloader", None)
+    if isinstance(dataloader, dict):
+        dataloader["num_workers"] = 0
+        dataloader["persistent_workers"] = False
 
 
 def _enable_visualization(cfg: Any, show_dir: str) -> None:

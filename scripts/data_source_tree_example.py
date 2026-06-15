@@ -552,6 +552,14 @@ class MainWindow(QMainWindow):
 
         work_dir = os.path.dirname(config_path) if config_path else ""
         custom_modules = self.project_manager.infer_custom_modules(config_path, work_dir)
+        if inference_panel is not None and hasattr(inference_panel, "get_custom_module_files"):
+            panel_module_files = inference_panel.get_custom_module_files()
+            for module_file in panel_module_files:
+                name = os.path.basename(module_file)
+                if name == "custom_rs_dataset.py":
+                    custom_modules.custom_rs_dataset = module_file
+                elif name == "custom_live_pred_hook.py":
+                    custom_modules.custom_live_pred_hook = module_file
         if inference_panel is not None and hasattr(inference_panel, "get_custom_module_dirs"):
             panel_module_dirs = inference_panel.get_custom_module_dirs()
             if panel_module_dirs:
@@ -589,6 +597,12 @@ class MainWindow(QMainWindow):
 
         inference_panel = getattr(self.ui, "inference_panel", None)
         if inference_panel is not None:
+            module_files = [
+                state.custom_modules.custom_rs_dataset,
+                state.custom_modules.custom_live_pred_hook,
+            ]
+            if hasattr(inference_panel, "set_custom_module_files"):
+                inference_panel.set_custom_module_files([path for path in module_files if path])
             if hasattr(inference_panel, "set_custom_module_dirs"):
                 inference_panel.set_custom_module_dirs(state.custom_modules.module_dirs)
             if state.model.config:

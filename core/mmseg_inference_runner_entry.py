@@ -11,7 +11,6 @@ from typing import Any
 
 import numpy as np
 
-from core.custom_module_import import temporary_sys_path
 from core.inference_engine import InferenceEngine
 
 INFERENCE_PROGRESS_PREFIX = "__RS_INFER_PROGRESS__"
@@ -50,39 +49,37 @@ def _run_request(payload: dict) -> dict:
     params = payload.get("inference_params", {})
     output_path = payload.get("output_path")
     artifact_dir = payload["artifact_dir"]
-    import_paths = inference_model.get("import_paths", [])
 
     engine = None
     try:
-        with temporary_sys_path(import_paths):
-            engine = InferenceEngine(inference_model)
-            engine.set_progress_callback(_emit_progress)
-            if strategy == "large_image_block":
-                if not output_path:
-                    raise ValueError("large_image_block inference requires output_path")
-                result = engine.large_image_block_inference(
-                    image_path,
-                    output_path,
-                    crop_size=params["crop_size"],
-                    overlap_rate=params["overlap_rate"],
-                    enable_tta=params["enable_tta"],
-                )
-            elif strategy == "sliding_window":
-                result = engine.sliding_window_inference(
-                    image_path,
-                    crop_size=params["crop_size"],
-                    stride=params["stride"],
-                    batch_size=params["batch_size"],
-                    enable_tta=params["enable_tta"],
-                )
-            elif strategy == "resize":
-                result = engine.resize_inference(
-                    image_path,
-                    enable_tta=params["enable_tta"],
-                )
-            else:
-                raise ValueError(f"Unknown inference strategy: {strategy}")
-            return {"ok": True, "result": _save_arrays(result, artifact_dir)}
+        engine = InferenceEngine(inference_model)
+        engine.set_progress_callback(_emit_progress)
+        if strategy == "large_image_block":
+            if not output_path:
+                raise ValueError("large_image_block inference requires output_path")
+            result = engine.large_image_block_inference(
+                image_path,
+                output_path,
+                crop_size=params["crop_size"],
+                overlap_rate=params["overlap_rate"],
+                enable_tta=params["enable_tta"],
+            )
+        elif strategy == "sliding_window":
+            result = engine.sliding_window_inference(
+                image_path,
+                crop_size=params["crop_size"],
+                stride=params["stride"],
+                batch_size=params["batch_size"],
+                enable_tta=params["enable_tta"],
+            )
+        elif strategy == "resize":
+            result = engine.resize_inference(
+                image_path,
+                enable_tta=params["enable_tta"],
+            )
+        else:
+            raise ValueError(f"Unknown inference strategy: {strategy}")
+        return {"ok": True, "result": _save_arrays(result, artifact_dir)}
     except Exception as exc:
         return {"ok": False, "error": f"{exc}\n\n{traceback.format_exc()}"}
     finally:

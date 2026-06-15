@@ -30,9 +30,10 @@ import numpy as np
 from ui.widgets.visualization_settings_widget import VisualizationSettingsWidget
 from ui.widgets.inference_visualization_widget import InferenceVisualizationWidget
 from ui.widgets.wheel_guard import install_wheel_guard
-from core.custom_module_import import normalize_import_paths, temporary_sys_path
+from core.custom_module_import import normalize_import_paths
 from core.env_state_manager import is_current_python, resolve_training_python
 from core.mask_renderer import MaskRenderer
+from core.project_module_resolver import load_custom_modules_from_files, validate_custom_module_files
 from skills.skill_raster_io import sample_band_stats
 
 
@@ -48,7 +49,7 @@ class MMSegTestConfig:
     work_dir: str
     show_dir: str
     out_dir: str
-    import_paths: list[str]
+    custom_module_files: list[str]
     sample_count: int
     labelled_count: int
     samples: list[dict]
@@ -65,7 +66,7 @@ class MMSegTestConfigBuilder:
         data_root: str,
         splits: dict[str, list[dict]],
         output_root: str | None = None,
-        import_paths: list[str] | None = None,
+        custom_module_files: list[str] | None = None,
     ) -> MMSegTestConfig:
         from mmengine.config import Config
 
@@ -76,8 +77,18 @@ class MMSegTestConfigBuilder:
         if not data_root or not os.path.isdir(data_root):
             raise FileNotFoundError(f"Dataset root not found: {data_root}")
 
-        resolved_import_paths = self._resolve_import_paths(config_path, import_paths)
-        with temporary_sys_path(resolved_import_paths):
+        resolved_custom_module_files = self._resolve_custom_module_files(config_path, custom_module_files)
+        warnings = validate_custom_module_files(resolved_custom_module_files)
+        if warnings:
+            raise FileNotFoundError("; ".join(warnings))
+        try:
+            cfg = Config.fromfile(config_path)
+        except (ImportError, ModuleNotFoundError):
+            load_results = load_custom_modules_from_files(resolved_custom_module_files)
+            failed = [item for item in load_results if not item.get("loaded")]
+            if failed:
+                message = "; ".join(f"{item.get('module')}: {item.get('error')}" for item in failed)
+                raise ImportError(f"Failed to load custom modules: {message}")
             cfg = Config.fromfile(config_path)
 
         split = self._resolve_split(cfg, splits)
@@ -95,6 +106,7 @@ class MMSegTestConfigBuilder:
         os.makedirs(out_dir, exist_ok=True)
 
         self._patch_test_dataloader(cfg, data_root, split)
+        self._force_single_process_test_dataloader(cfg)
         self._ensure_full_iou_metrics(cfg)
         self._disable_test_visualization(cfg)
         format_only = self._is_format_only(cfg)
@@ -109,7 +121,7 @@ class MMSegTestConfigBuilder:
             work_dir=work_dir,
             show_dir=show_dir,
             out_dir=out_dir,
-            import_paths=resolved_import_paths,
+            custom_module_files=resolved_custom_module_files,
             sample_count=len(samples),
             labelled_count=sum(1 for sample in samples if sample.get("label_path")),
             samples=samples,
@@ -117,11 +129,21 @@ class MMSegTestConfigBuilder:
         )
 
     @staticmethod
-    def _resolve_import_paths(config_path: str, import_paths: list[str] | None) -> list[str]:
-        paths = list(import_paths or [])
+    def _resolve_custom_module_files(config_path: str, custom_module_files: list[str] | None) -> list[str]:
+        paths = [path for path in (custom_module_files or []) if path]
         if config_path:
-            paths.append(os.path.dirname(os.path.abspath(config_path)))
-        return normalize_import_paths(paths)
+            config_dir = os.path.dirname(os.path.abspath(config_path))
+            for filename in ("custom_rs_dataset.py", "custom_live_pred_hook.py"):
+                candidate = os.path.join(config_dir, filename)
+                if os.path.isfile(candidate):
+                    paths.append(candidate)
+
+        resolved_paths = []
+        for path in paths:
+            abs_path = os.path.abspath(path)
+            if abs_path not in resolved_paths:
+                resolved_paths.append(abs_path)
+        return resolved_paths
 
     def _resolve_split(self, cfg: Any, splits: dict[str, list[dict]]) -> str:
         if hasattr(cfg, "val_dataloader") and (splits or {}).get("val"):
@@ -170,6 +192,13 @@ class MMSegTestConfigBuilder:
         elif isinstance(node, list):
             for child in node:
                 self._patch_dataset_node(child, data_root, split)
+
+    def _force_single_process_test_dataloader(self, cfg: Any) -> None:
+        """Avoid Windows spawn workers needing importable project custom modules."""
+        dataloader = getattr(cfg, "test_dataloader", None)
+        if isinstance(dataloader, dict):
+            dataloader["num_workers"] = 0
+            dataloader["persistent_workers"] = False
 
     def _find_dataloader_split(self, node: Any) -> str | None:
         if isinstance(node, dict):
@@ -263,7 +292,7 @@ class MMSegTestRunner:
         out_dir: str | None = None,
         cfg_options: dict | None = None,
         tta: bool = False,
-        import_paths: list[str] | None = None,
+        custom_module_files: list[str] | None = None,
         python_path: str | None = None,
     ) -> dict:
         runtime_python = resolve_training_python(python_path)
@@ -285,13 +314,15 @@ class MMSegTestRunner:
             command.append("--tta")
         if cfg_options:
             command.extend(["--cfg-options-json", json.dumps(cfg_options, ensure_ascii=False)])
-        for path in import_paths or []:
-            command.extend(["--import-path", path])
+        if custom_module_files:
+            command.extend([
+                "--custom-module-files-json",
+                json.dumps(custom_module_files, ensure_ascii=False),
+            ])
 
         env = os.environ.copy()
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         python_paths = [project_root]
-        python_paths.extend(path for path in normalize_import_paths(import_paths) if path)
         existing_pythonpath = env.get("PYTHONPATH")
         if existing_pythonpath:
             python_paths.append(existing_pythonpath)
@@ -306,6 +337,8 @@ class MMSegTestRunner:
             self._log(f"Show dir: {show_dir} (official visualization disabled)")
         if out_dir:
             self._log(f"Out dir: {out_dir}")
+        for module_file in custom_module_files or []:
+            self._log(f"Custom module: {module_file}")
 
         result = {}
         self._cancel_requested = False
@@ -573,7 +606,6 @@ class InferenceWorker(QThread):
 
     def _run_subprocess_inference(self, runtime_python: str) -> dict:
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        import_paths = normalize_import_paths(self.inference_model.get("import_paths", []))
         artifact_dir = tempfile.mkdtemp(prefix="rs_seg_infer_")
         request_json = os.path.join(artifact_dir, "request.json")
         result_json = os.path.join(artifact_dir, "result.json")
@@ -602,7 +634,6 @@ class InferenceWorker(QThread):
 
         env = os.environ.copy()
         python_paths = [project_root]
-        python_paths.extend(path for path in import_paths if path)
         existing_pythonpath = env.get("PYTHONPATH")
         if existing_pythonpath:
             python_paths.append(existing_pythonpath)
@@ -759,7 +790,7 @@ class ModelTestWorker(QThread):
                 checkpoint_path=self.inference_model.get("checkpoint", ""),
                 data_root=self.dataset_context.get("data_root", ""),
                 splits=self.dataset_context.get("splits", {}),
-                import_paths=self.inference_model.get("import_paths", []),
+                custom_module_files=self.inference_model.get("custom_module_files", []),
             )
 
             self.progress.emit(25)
@@ -770,7 +801,7 @@ class ModelTestWorker(QThread):
                 work_dir=test_config.work_dir,
                 show_dir=test_config.show_dir,
                 out_dir=test_config.out_dir,
-                import_paths=test_config.import_paths,
+                custom_module_files=test_config.custom_module_files,
                 python_path=self.inference_model.get("python_path", ""),
             )
 
@@ -886,6 +917,7 @@ class InferencePanel(QWidget):
         self._model_test_summary = {}
         self._is_model_testing = False
         self._custom_module_dirs = []
+        self._custom_module_files = []
 
         self._setup_ui()
         self._connect_signals()
@@ -1404,11 +1436,46 @@ class InferencePanel(QWidget):
     def get_custom_module_dirs(self) -> list[str]:
         return list(self._custom_module_dirs)
 
+    def set_custom_module_files(self, module_files: list[str] | None):
+        resolved = []
+        for path in module_files or []:
+            if not path:
+                continue
+            abs_path = os.path.abspath(path)
+            if abs_path not in resolved:
+                resolved.append(abs_path)
+        self._custom_module_files = resolved
+
+    def get_custom_module_files(self) -> list[str]:
+        return list(self._custom_module_files)
+
     def _resolve_custom_module_dirs(self, config_path: str = "") -> list[str]:
         paths = list(self._custom_module_dirs)
         if config_path:
             paths.append(os.path.dirname(os.path.abspath(config_path)))
         return normalize_import_paths(paths)
+
+    def _resolve_custom_module_files(self, config_path: str = "") -> list[str]:
+        paths = list(self._custom_module_files)
+        if not paths and self._custom_module_dirs:
+            for module_dir in normalize_import_paths(self._custom_module_dirs):
+                for filename in ("custom_rs_dataset.py", "custom_live_pred_hook.py"):
+                    candidate = os.path.join(module_dir, filename)
+                    if os.path.isfile(candidate):
+                        paths.append(candidate)
+        if config_path:
+            config_dir = os.path.dirname(os.path.abspath(config_path))
+            for filename in ("custom_rs_dataset.py", "custom_live_pred_hook.py"):
+                candidate = os.path.join(config_dir, filename)
+                if os.path.isfile(candidate):
+                    paths.append(candidate)
+
+        resolved = []
+        for path in paths:
+            abs_path = os.path.abspath(path)
+            if abs_path not in resolved:
+                resolved.append(abs_path)
+        return resolved
 
     def _refresh_model_test_state(self):
         if not hasattr(self, "label_testDatasetInfo"):
@@ -1923,6 +1990,7 @@ class InferencePanel(QWidget):
 
             # 保存模型信息（实际项目中应使用 MMSegmentation API 加载真实模型）
             runtime_python = resolve_training_python()
+            custom_module_files = self._resolve_custom_module_files(config_path)
             self.inference_model = {
                 'config': config_path,
                 'checkpoint': checkpoint_path,
@@ -1930,7 +1998,7 @@ class InferencePanel(QWidget):
                 'classes': config_info.get('classes'),
                 'palette': config_info.get('palette'),
                 'model_name': config_info.get('model_name', 'Unknown Model'),
-                'import_paths': self._resolve_custom_module_dirs(config_path),
+                'custom_module_files': custom_module_files,
                 'python_path': runtime_python,
             }
 
@@ -1946,6 +2014,8 @@ class InferencePanel(QWidget):
 
             self._emit_log("✅ 模型已就绪 (Model Ready)")
             self._emit_log(f"Python: {runtime_python}")
+            for module_file in custom_module_files:
+                self._emit_log(f"Custom module: {module_file}")
             self.model_loaded.emit(self.inference_model)
             self._refresh_model_test_state()
 
@@ -2080,6 +2150,14 @@ class InferencePanel(QWidget):
     def _run_model_test(self):
         if not self.inference_model:
             QMessageBox.warning(self, "模型未加载", "请先加载模型。")
+            return
+        module_warnings = validate_custom_module_files(
+            self.inference_model.get("custom_module_files", [])
+        )
+        if module_warnings:
+            message = "\n".join(module_warnings)
+            self._emit_log(f"Custom module path invalid: {message}")
+            QMessageBox.critical(self, "自定义模块路径失效", message)
             return
         if not self._dataset_context or not self._dataset_context.get("data_root"):
             QMessageBox.warning(self, "数据集未加载", "请先在数据洞察中加载数据集。")
@@ -2271,6 +2349,15 @@ class InferencePanel(QWidget):
         if not self.inference_model:
             self._emit_log("⚠️  模型未加载，无法执行推理")
             QMessageBox.warning(self, "模型未加载", "请先加载推理模型。")
+            return
+
+        module_warnings = validate_custom_module_files(
+            self.inference_model.get("custom_module_files", [])
+        )
+        if module_warnings:
+            message = "\n".join(module_warnings)
+            self._emit_log(f"Custom module path invalid: {message}")
+            QMessageBox.critical(self, "自定义模块路径失效", message)
             return
 
         # 2. 使用已选择的输入影像路径

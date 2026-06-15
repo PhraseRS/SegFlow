@@ -12,7 +12,7 @@ from typing import Dict, Tuple, Optional
 from PIL import Image
 import cv2
 import time
-from core.custom_module_import import temporary_sys_path
+from core.project_module_resolver import load_custom_modules_from_files, validate_custom_module_files
 
 # 针对大尺寸遥感影像，提高PIL的像素限制
 # 默认限制约为178MB像素，这里提高到10GB像素
@@ -56,22 +56,24 @@ class InferenceEngine:
         """
         self.model_info = model_info
         self.model = None
-        self._import_context = None
-
         # 取消和进度回调支持
         self._cancel_requested = False
         self._progress_callback = None
 
-        import_paths = model_info.get("import_paths") or []
-        self._import_context = temporary_sys_path(import_paths)
-        self._import_context.__enter__()
+        custom_module_files = model_info.get("custom_module_files") or []
+        warnings = validate_custom_module_files(custom_module_files)
+        if warnings:
+            raise FileNotFoundError("; ".join(warnings))
+        load_results = load_custom_modules_from_files(custom_module_files)
+        failed = [item for item in load_results if not item.get("loaded")]
+        if failed:
+            message = "; ".join(f"{item.get('module')}: {item.get('error')}" for item in failed)
+            raise ImportError(f"Failed to load custom modules: {message}")
         self._init_model()
 
     def close(self):
-        """Release scoped custom module import paths."""
-        if self._import_context is not None:
-            self._import_context.__exit__(None, None, None)
-            self._import_context = None
+        """Release inference resources."""
+        return None
 
     def __del__(self):
         self.close()
