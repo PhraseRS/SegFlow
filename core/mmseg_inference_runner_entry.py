@@ -2,7 +2,17 @@
 """Subprocess entry for MMSeg inference with the selected training Python."""
 
 from __future__ import annotations
+# =================================================================
+# [终极防暴毙补丁]：必须在 PyTorch 加载 CUDA DLL 之前，优先把 GDAL 锁死在内存里！
+# =================================================================
+try:
+    from osgeo import gdal
+except ImportError:
+    pass
+# =================================================================
 
+import sys
+import torch   # <-- 必须确保 GDAL 在 torch 之前被 import！
 import argparse
 import json
 import os

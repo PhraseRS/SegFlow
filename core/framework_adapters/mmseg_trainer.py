@@ -145,6 +145,19 @@ class MMSegTrainer(BaseTrainer):
         """
         try:
             from mmengine.config import Config
+            import mmengine.utils.misc
+            import mmengine.config.config
+            
+            # ==========================================================
+            # [神级黑客补丁 2.0]：强制“物理阉割” MMEngine 的自动导包函数！
+            # 因为 GUI 只需要修改文本参数，根本不需要真正导入 mmdet 等庞大的包。
+            # 直接把它的导包函数替换为空函数，彻底斩断它的报错机制！
+            # ==========================================================
+            dummy_func = lambda *args, **kwargs: None
+            mmengine.utils.misc.import_modules_from_strings = dummy_func
+            mmengine.config.config.import_modules_from_strings = dummy_func
+            # ==========================================================
+            
         except ImportError:
             raise ImportError(
                 "mmengine 未安装。请运行: pip install mmengine"
@@ -442,10 +455,33 @@ class MMSegTrainer(BaseTrainer):
         self._config_path = config_path
         self._work_dir = work_dir
 
-        # 确定使用的 Python 解释器
-        interpreter = python_path if (python_path and os.path.isfile(python_path)) else sys.executable
-        if python_path and not os.path.isfile(python_path):
-            print(f"[Warning] 指定的 python_path 不存在: {python_path}，回退到 sys.executable")
+# ========================================================
+        # [智能推算 Python 解释器]
+        # ========================================================
+        if python_path and os.path.isfile(python_path):
+            interpreter = python_path
+        else:
+            # 优先从 CONDA_PREFIX 环境变量获取 Conda Python
+            conda_prefix = os.environ.get('CONDA_PREFIX')
+            if conda_prefix:
+                # Windows 下 python.exe 直接位于 conda_prefix 下
+                conda_python = os.path.join(conda_prefix, 'python.exe')
+                if not os.path.isfile(conda_python):
+                    # Linux/macOS 可能在 bin/python
+                    conda_python = os.path.join(conda_prefix, 'bin', 'python')
+                if os.path.isfile(conda_python):
+                    interpreter = conda_python
+                    print(f"[INFO] 使用 Conda 环境 Python: {interpreter}")
+                else:
+                    # 若找不到，回退到当前进程的解释器并警告
+                    interpreter = sys.executable
+                    print(f"[Warning] CONDA_PREFIX 存在但未找到 python，回退到 {interpreter}")
+            else:
+                # 未检测到 Conda 环境，使用打包解释器（可能缺失依赖）
+                interpreter = sys.executable
+                print(f"[Warning] 未指定 python_path 且未检测到 CONDA_PREFIX，使用打包解释器 {interpreter}")
+                print("[Warning] 这可能导致 mmdet 等依赖无法导入，请确保在 Conda 环境中运行 GUI 或显式指定 python_path。")
+        # ========================================================
 
         # 动态寻找 mmsegmentation 的 train.py 文件
         # 使用目标解释器探测 mmseg 安装位置，而非当前进程的 mmseg
@@ -457,13 +493,18 @@ class MMSegTrainer(BaseTrainer):
             '--work-dir', work_dir,
         ]
 
+        # ========================================================
+        # [终极解毒补丁] 清理 PyInstaller 的环境变量污染
+        # ========================================================
         env = os.environ.copy()
-        current_pythonpath = env.get('PYTHONPATH', '')
-        env['PYTHONPATH'] = (
-            f"{os.path.abspath(work_dir)}{os.pathsep}{current_pythonpath}"
-            if current_pythonpath
-            else os.path.abspath(work_dir)
-        )
+        
+        # 1. 删掉 PyInstaller 偷偷塞进来的 PYTHONHOME
+        env.pop('PYTHONHOME', None)
+        
+        # 2. 彻底抛弃被污染的旧 PYTHONPATH，只保留当前的工作目录！
+        env.pop('PYTHONPATH', None)
+        env['PYTHONPATH'] = os.path.abspath(work_dir)
+        # ========================================================
 
         self._process = subprocess.Popen(
             cmd,

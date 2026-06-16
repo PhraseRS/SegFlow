@@ -1727,14 +1727,29 @@ class MainWindow(QMainWindow):
             # 收集所有可能的 site-packages 路径
             site_packages_dirs = set()
             
-            # 2a: 从 sys.executable 推算（最可靠）
+            # 2a: 从 sys.executable 推算（EXE模式下会失效）
             exe_dir = os.path.dirname(sys.executable)
-            site_packages_dirs.add(os.path.join(exe_dir, 'Lib', 'site-packages'))      # Windows conda
-            site_packages_dirs.add(os.path.join(exe_dir, 'lib', 'site-packages'))      # 备选
-            site_packages_dirs.add(os.path.join(os.path.dirname(exe_dir), 'lib', 
-                                                 f'python{sys.version_info.major}.{sys.version_info.minor}',
-                                                 'site-packages'))                      # Linux/macOS
+            site_packages_dirs.add(os.path.join(exe_dir, 'Lib', 'site-packages')) 
+
+            # =========================================================
+            # [新增防坑补丁]：穿透 EXE，直接定位真实的 Conda 炼丹炉
+            # =========================================================
             
+            # 补丁 1：从启动脚本的系统环境变量中抓取 CONDA 路径
+            conda_prefix = os.environ.get('CONDA_PREFIX')
+            if conda_prefix:
+                site_packages_dirs.add(os.path.join(conda_prefix, 'Lib', 'site-packages'))
+                
+            # 补丁 2：从软件右侧 "环境准备状态" 面板中用户选中的路径推算
+            try:
+                from core.env_state_manager import EnvStateManager
+                env_mgr = EnvStateManager.instance()
+                if env_mgr.python_path:
+                    env_dir = os.path.dirname(env_mgr.python_path)
+                    site_packages_dirs.add(os.path.join(env_dir, 'Lib', 'site-packages'))
+            except Exception:
+                pass
+            # =========================================================
             # 2b: 从 site 模块获取
             try:
                 import site
