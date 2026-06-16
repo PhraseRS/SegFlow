@@ -81,15 +81,45 @@ class MMSegTestConfigBuilder:
         warnings = validate_custom_module_files(resolved_custom_module_files)
         if warnings:
             raise FileNotFoundError("; ".join(warnings))
+
+        temp_config_path = None
         try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            modified = False
+            if "custom_imports" in content:
+                if "allow_failed_imports=False" in content:
+                    content = content.replace("allow_failed_imports=False", "allow_failed_imports=True")
+                    modified = True
+                elif "allow_failed_imports" not in content:
+                    lines = content.split("\n")
+                    new_lines = []
+                    for line in lines:
+                        if "custom_imports" in line and "dict(" in line:
+                            if line.strip().endswith(")"):
+                                line = line.rstrip().rstrip(")") + ", allow_failed_imports=True)"
+                                modified = True
+                            elif line.strip().endswith(","):
+                                line = line.rstrip().rstrip(",") + ", allow_failed_imports=True)"
+                                modified = True
+                        new_lines.append(line)
+                    content = "\n".join(new_lines)
+
+            if modified:
+                temp_config_path = config_path + ".tmp.py"
+                with open(temp_config_path, "w", encoding="utf-8") as f:
+                    f.write(content)
+                config_path = temp_config_path
+
             cfg = Config.fromfile(config_path)
-        except (ImportError, ModuleNotFoundError):
-            load_results = load_custom_modules_from_files(resolved_custom_module_files)
-            failed = [item for item in load_results if not item.get("loaded")]
-            if failed:
-                message = "; ".join(f"{item.get('module')}: {item.get('error')}" for item in failed)
-                raise ImportError(f"Failed to load custom modules: {message}")
-            cfg = Config.fromfile(config_path)
+
+            if hasattr(cfg, "custom_imports"):
+                cfg.custom_imports["allow_failed_imports"] = False
+
+        finally:
+            if temp_config_path and os.path.isfile(temp_config_path):
+                os.remove(temp_config_path)
 
         split = self._resolve_split(cfg, splits)
         samples = list((splits or {}).get(split, []))
