@@ -18,20 +18,8 @@ from PySide6.QtWidgets import (
     QSizePolicy, QProgressBar, QMessageBox
 )
 from PySide6.QtCore import Signal, QThread
-from ui.widgets.model_selection_widget import PRETRAINED_MODELS
 from ui.widgets.wheel_guard import install_wheel_guard
-
-# 预训练权重下载地址表 {(backbone_display_name, dataset): url}
-WEIGHT_URL_MAP = {
-    ('MiT-B0', 'ImageNet-1K'): 'https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/segformer/mit_b0_20220624-7e0fe6dd.pth',
-    ('MiT-B1', 'ImageNet-1K'): 'https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/segformer/mit_b1_20220624-02e5a6a1.pth',
-    ('MiT-B2', 'ImageNet-1K'): 'https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/segformer/mit_b2_20220624-66e8bf70.pth',
-    ('MiT-B5', 'ImageNet-1K'): 'https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/segformer/mit_b5_20220624-658746d9.pth',
-    ('ResNet-50', 'ImageNet-1K'): 'https://download.openmmlab.com/pretrain/third_party/resnet50_v1c-2cccc1ad.pth',
-    ('ResNet-101', 'ImageNet-1K'): 'https://download.openmmlab.com/pretrain/third_party/resnet101_v1c-e67eebb6.pth',
-    ('Swin-Tiny', 'ImageNet-1K'): 'https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/swin/swin_tiny_patch4_window7_224_20220317-1cdeb081.pth',
-    ('Swin-Base', 'ImageNet-22K'): 'https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/swin/swin_base_patch4_window12_384_20220317-55b0104a.pth',
-}
+from config.backbone_registry import PRETRAINED_MODELS, WEIGHT_URL_MAP
 
 
 class WeightDownloadWorker(QThread):
@@ -159,6 +147,10 @@ class WeightSelectionWidget(QWidget):
         weight_row.addWidget(self.btn_browse_weight)
         tab_custom_layout.addLayout(weight_row)
 
+        self.lbl_local_hint = QLabel("")
+        self.lbl_local_hint.setStyleSheet("color: #E65100; font-size: 11px;")
+        tab_custom_layout.addWidget(self.lbl_local_hint)
+
         self.tab_pretrained.addTab(tab_custom, "自有业务权重 (Custom)")
         layout.addWidget(self.tab_pretrained)
 
@@ -178,11 +170,12 @@ class WeightSelectionWidget(QWidget):
         self.combo_pretrained_model.clear()
         models = PRETRAINED_MODELS.get(backbone_name, [])
         self.combo_pretrained_model.addItems(models)
+        self.lbl_local_hint.setText("")
         self._scan_local_pretrain(backbone_name)
         self.config_changed.emit()
 
     def _scan_local_pretrain(self, backbone_name: str):
-        """扫描 pretrain/ 目录，若找到匹配当前 backbone 的权重则自动填入自有权重路径。"""
+        """扫描 pretrain/ 目录，若找到匹配当前 backbone 的权重则填入自有权重路径，但不自动勾选。"""
         project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
         pretrain_dir = os.path.join(project_root, 'pretrain')
         if not os.path.isdir(pretrain_dir):
@@ -193,7 +186,8 @@ class WeightSelectionWidget(QWidget):
             if keyword in fname.lower() and fname.endswith('.pth'):
                 full_path = os.path.join(pretrain_dir, fname)
                 self.line_custom_weight.setText(full_path)
-                self.check_use_custom_weight.setChecked(True)
+                self.lbl_local_hint.setText("⚡ 已在本地发现匹配权重，可手动勾选使用")
+                # 移除强制 setChecked(True) 避免覆盖用户意图
                 self.config_changed.emit()
                 return
 

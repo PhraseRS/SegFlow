@@ -14,7 +14,6 @@ from PySide6.QtWidgets import (
     QSizePolicy
 )
 from PySide6.QtCore import Signal, Qt
-from PySide6.QtGui import QColor, Qt
 from PySide6.QtGui import QColor
 
 from core.framework_registry import (
@@ -23,6 +22,7 @@ from core.framework_registry import (
     get_key_by_display_name,
 )
 from ui.widgets.wheel_guard import install_wheel_guard
+from config.backbone_registry import METHOD_BACKBONE_MAP, BACKBONE_CHOICES
 
 
 # 算法家族分组（决定下拉框的呈现顺序与分隔符位置）
@@ -31,57 +31,6 @@ METHOD_GROUPS = [
     ('Transformer', ['Mask2Former', 'SegFormer', 'Swin-Transformer', 'UperNet']),
     ('CNN', ['DeepLabV3+', 'FCN', 'HRNet+OCR', 'PSPNet', 'UNet', 'UNet++']),
 ]
-
-# 算法-Backbone映射关系（每组内 backbone 也按首字母升序）
-METHOD_BACKBONE_MAP = {
-    'PSPNet': ['ResNet-50', 'ResNet-101'],
-    'DeepLabV3+': ['MobileNetV2', 'MobileNetV3', 'ResNet-50', 'ResNet-101'],
-    'SegFormer': ['MiT-B0', 'MiT-B1', 'MiT-B2', 'MiT-B3', 'MiT-B4', 'MiT-B5'],
-    'UperNet': ['ConvNeXt-Tiny', 'ResNet-50', 'Swin-Base', 'Swin-Tiny'],
-    'FCN': ['ResNet-18', 'ResNet-50', 'ResNet-101'],
-    'UNet': ['ResNet-50'],
-    'UNet++': ['ResNet-50', 'ResNet-101'],
-    'Mask2Former': ['ResNet-50', 'Swin-Base', 'Swin-Large', 'Swin-Tiny'],
-    'HRNet+OCR': ['HRNet-W32', 'HRNet-W48'],
-    'Swin-Transformer': ['Swin-Base', 'Swin-Large', 'Swin-Small', 'Swin-Tiny'],
-}
-
-# Backbone内部标识映射
-BACKBONE_CHOICES = {
-    'ResNet-18': 'resnet18',
-    'ResNet-50': 'resnet50',
-    'ResNet-101': 'resnet101',
-    'MobileNetV2': 'mobilenet_v2',
-    'MobileNetV3': 'mobilenet_v3_large',
-    'HRNet-W32': 'hrnet_w32',
-    'HRNet-W48': 'hrnet_w48',
-    'Swin-Tiny': 'swin_tiny',
-    'Swin-Small': 'swin_small',
-    'Swin-Base': 'swin_base',
-    'Swin-Large': 'swin_large',
-    'ConvNeXt-Tiny': 'convnext_tiny',
-    'MiT-B0': 'mit_b0',
-    'MiT-B1': 'mit_b1',
-    'MiT-B2': 'mit_b2',
-    'MiT-B3': 'mit_b3',
-    'MiT-B4': 'mit_b4',
-    'MiT-B5': 'mit_b5',
-}
-
-PRETRAINED_MODELS = {
-    'ResNet-50': ['ImageNet-1K', 'COCO (DeepLabV3+)'],
-    'ResNet-101': ['ImageNet-1K', 'COCO (DeepLabV3+)', 'Cityscapes'],
-    'MobileNetV2': ['ImageNet-1K'],
-    'HRNet-W48': ['ImageNet-1K', 'Cityscapes'],
-    'Swin-Tiny': ['ImageNet-1K', 'ADE20K'],
-    'Swin-Small': ['ImageNet-1K', 'ADE20K'],
-    'Swin-Base': ['ImageNet-22K', 'ADE20K'],
-    'Swin-Large': ['ImageNet-22K', 'ADE20K'],
-    'MiT-B0': ['ImageNet-1K'],
-    'MiT-B1': ['ImageNet-1K'],
-    'MiT-B2': ['ImageNet-1K', 'ADE20K'],
-    'MiT-B5': ['ImageNet-1K', 'ADE20K'],
-}
 
 
 class ModelSelectionWidget(QWidget):
@@ -176,8 +125,9 @@ class ModelSelectionWidget(QWidget):
 
     def _on_method_changed(self, method_name: str):
         """算法改变时更新Backbone列表"""
-        # 防御：分隔标题项被误触发时直接忽略
-        if method_name.startswith('──'):
+        idx = self.combo_method.currentIndex()
+        item = self.combo_method.model().item(idx)
+        if item and not item.isEnabled():   # 分隔项 isEnabled=False
             return
         self._update_backbone_list(method_name)
         self.config_changed.emit()

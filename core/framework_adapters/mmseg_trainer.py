@@ -342,15 +342,44 @@ class MMSegTrainer(BaseTrainer):
             if in_channels and in_channels != 3 and hasattr(cfg, 'model'):
                 cfg.model.backbone.in_channels = int(in_channels)
 
-            # 裁剪大小
+            # 裁剪大小：覆盖 pipeline 中所有尺寸相关字段，防止跨尺寸 base config 引起 shape mismatch
+            # 背景：MMSeg 配置文件中尺寸分散在 5 处，仅覆盖 crop_size + RandomCrop 是不够的。
+            # 当用户选择的 crop_size 与 base config 文件名中的默认尺寸不同时，
+            # Resize.scale / data_preprocessor.size / test_cfg 必须同步修正，否则训练可能报 shape 错误。
             crop_size = advisor_params.get('crop_size')
             if crop_size:
-                cfg.crop_size = tuple(crop_size)
-                # 更新 pipeline 中的 RandomCrop
-                if hasattr(cfg, 'train_pipeline'):
-                    for transform in cfg.train_pipeline:
-                        if isinstance(transform, dict) and transform.get('type') == 'RandomCrop':
-                            transform['crop_size'] = tuple(crop_size)
+                h, w = int(crop_size[0]), int(crop_size[1])
+                size_tuple = (h, w)
+
+                # ① 顶层 crop_size 变量
+                cfg.crop_size = size_tuple
+
+                # ② train_pipeline 中的 RandomCrop
+                for t in cfg.get('train_pipeline', []):
+                    if isinstance(t, dict) and t.get('type') == 'RandomCrop':
+                        t['crop_size'] = size_tuple
+
+                # ③ train / val / test pipeline 中的 Resize.scale
+                # MMSeg 惯例：scale = (长边上限, 短边目标)，长边取短边的 4 倍确保足够大
+                long_side = max(h, w) * 4
+                for pipeline_key in ('train_pipeline', 'val_pipeline', 'test_pipeline'):
+                    for t in cfg.get(pipeline_key, []):
+                        if isinstance(t, dict) and t.get('type') == 'Resize':
+                            t['scale'] = (long_side, min(h, w))
+
+                # ④ data_preprocessor.size（Mask2Former 等算法用此字段控制 batch padding 目标）
+                if hasattr(cfg, 'data_preprocessor') and isinstance(cfg.data_preprocessor, dict):
+                    if 'size' in cfg.data_preprocessor:
+                        cfg.data_preprocessor['size'] = size_tuple
+
+                # ⑤ test_cfg 中的滑窗推理参数（部分算法开启 whole_mode 时无此字段，安全跳过）
+                if hasattr(cfg, 'test_cfg') and isinstance(cfg.test_cfg, dict):
+                    if 'crop_size' in cfg.test_cfg:
+                        cfg.test_cfg['crop_size'] = size_tuple
+                    if 'stride' in cfg.test_cfg:
+                        # 保持 2/3 overlap 惯例
+                        cfg.test_cfg['stride'] = (h * 2 // 3, w * 2 // 3)
+
 
             # 损失函数
             loss_config = advisor_params.get('loss_config')

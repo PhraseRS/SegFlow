@@ -1635,46 +1635,11 @@ class MainWindow(QMainWindow):
         """
         import os
         import glob
+        from config.backbone_registry import CONFIG_MAP
 
         method = model_params.get('method', '')
         backbone_key = model_params.get('backbone_key', 'resnet50')
 
-        # 映射 (算法, backbone) → (子目录, 文件名关键词)
-        CONFIG_MAP = {
-            ('PSPNet', 'resnet50'): ('pspnet', 'pspnet_r50*d8*512x512.py'),
-            ('PSPNet', 'resnet101'): ('pspnet', 'pspnet_r101*d8*512x512.py'),
-            ('DeepLabV3+', 'resnet50'): ('deeplabv3plus', 'deeplabv3plus_r50*d8*512x512.py'),
-            ('DeepLabV3+', 'resnet101'): ('deeplabv3plus', 'deeplabv3plus_r101*d8*512x512.py'),
-            ('DeepLabV3+', 'mobilenet_v2'): ('mobilenet_v2', 'deeplabv3plus_m-v2*d8*512x512.py'),
-            ('DeepLabV3+', 'mobilenet_v3_large'): ('mobilenet_v3', 'deeplabv3plus_m-v3*512x512*.py'),
-            ('SegFormer', 'mit_b0'): ('segformer', 'segformer_mit-b0*512x512.py'),
-            ('SegFormer', 'mit_b1'): ('segformer', 'segformer_mit-b1*512x512.py'),
-            ('SegFormer', 'mit_b2'): ('segformer', 'segformer_mit-b2*512x512.py'),
-            ('SegFormer', 'mit_b3'): ('segformer', 'segformer_mit-b3*512x512.py'),
-            ('SegFormer', 'mit_b4'): ('segformer', 'segformer_mit-b4*512x512.py'),
-            ('SegFormer', 'mit_b5'): ('segformer', 'segformer_mit-b5*512x512.py'),
-            ('UperNet', 'swin_tiny'): ('swin', 'upernet_swin-tiny*512x512.py'),
-            ('UperNet', 'swin_base'): ('swin', 'upernet_swin-base*512x512.py'),
-            ('UperNet', 'resnet50'): ('upernet', 'upernet_r50*512x512.py'),
-            ('UperNet', 'convnext_tiny'): ('convnext', 'upernet_convnext-tiny*512x512*.py'),
-            ('FCN', 'resnet18'): ('fcn', 'fcn_r18*d8*512x512*.py'),
-            ('FCN', 'resnet50'): ('fcn', 'fcn_r50*d8*512x512.py'),
-            ('FCN', 'resnet101'): ('fcn', 'fcn_r101*d8*512x512.py'),
-            ('FCN', 'hrnet_w48'): ('hrnet', 'fcn_hr48*512x512.py'),
-            ('UNet', 'resnet50'): ('unet', 'unet_s5*d16_fcn*r50*d8*512x512.py'),
-            ('UNet++', 'resnet50'): ('unet', 'unet-s5-d16_fcn*512x512*.py'),
-            ('UNet++', 'resnet101'): ('unet', 'unet-s5-d16_fcn*512x512*.py'),
-            ('Mask2Former', 'swin_tiny'): ('mask2former', 'mask2former_swin-t*512x512*.py'),
-            ('Mask2Former', 'swin_base'): ('mask2former', 'mask2former_swin-b*512x512*.py'),
-            ('Mask2Former', 'swin_large'): ('mask2former', 'mask2former_swin-l*512x512*.py'),
-            ('Mask2Former', 'resnet50'): ('mask2former', 'mask2former_r50*512x512*.py'),
-            ('HRNet+OCR', 'hrnet_w32'): ('ocrnet', 'ocrnet_hr32*512x512*.py'),
-            ('HRNet+OCR', 'hrnet_w48'): ('ocrnet', 'ocrnet_hr48*512x512*.py'),
-            ('Swin-Transformer', 'swin_tiny'): ('swin', 'swin-tiny*upernet*512x512.py'),
-            ('Swin-Transformer', 'swin_small'): ('swin', 'swin-small*upernet*512x512.py'),
-            ('Swin-Transformer', 'swin_base'): ('swin', 'swin-base*upernet*512x512.py'),
-            ('Swin-Transformer', 'swin_large'): ('swin', 'swin-large*upernet*512x512.py'),
-        }
 
         # 优先使用算法+Backbone组合查找
         entry = CONFIG_MAP.get((method, backbone_key))
