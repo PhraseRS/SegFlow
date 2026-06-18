@@ -14,7 +14,7 @@ RS-Seg-GUI 的依赖体系天然存在**两个独立层次**，设计上已有�
 │  (运行 RS-Seg-GUI 本体所需，必须在启动 Python 环境中安装)   │
 │                                                            │
 │  PySide6 · NumPy · OpenCV · Pillow · Matplotlib           │
-│  Jinja2 · rasterio (可选/强推荐)                          │
+│  rasterio (可选/强推荐)                                   │
 └──────────────────────────┬─────────────────────────────────┘
                            │ 通过 subprocess 隔离调用
 ┌──────────────────────────▼─────────────────────────────────┐
@@ -39,7 +39,6 @@ RS-Seg-GUI 的依赖体系天然存在**两个独立层次**，设计上已有�
 | `opencv-python` (cv2) | 图像读写、缩放、颜色空间转换 | `smart_canvas`, `mask_renderer`, `inference_engine` |
 | `Pillow` (PIL) | 大图打开（`Image.MAX_IMAGE_PIXELS`）、PNG/JPEG 读取 | `inference_engine` |
 | `matplotlib` | 类别分布图、训练曲线绘制 | `class_distribution_widget`, `metrics_plot_widget` |
-| `jinja2` | 配置文件模板生成 | `core/logic_engine.py` |
 
 ### 2.2 可选但强推荐依赖（缺失时功能降级）
 
@@ -111,7 +110,7 @@ RS-Seg-GUI 的依赖体系天然存在**两个独立层次**，设计上已有�
 
 ```bash
 # Python 版本要求：>= 3.9（__pycache__ 中同时存在 cp39 和 cp313 字节码）
-pip install PySide6 numpy opencv-python Pillow matplotlib jinja2 rasterio
+pip install PySide6 numpy opencv-python Pillow matplotlib rasterio
 ```
 
 ### 5.2 Layer B 最小安装（训练/推理，建议独立 conda 环境）
@@ -154,7 +153,6 @@ numpy>=1.24.0
 opencv-python>=4.8.0
 Pillow>=10.0.0
 matplotlib>=3.7.0
-Jinja2>=3.1.0
 rasterio>=1.3.0
 ```
 

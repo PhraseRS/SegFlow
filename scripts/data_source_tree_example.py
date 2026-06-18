@@ -1644,25 +1644,6 @@ class MainWindow(QMainWindow):
         # 优先使用算法+Backbone组合查找
         entry = CONFIG_MAP.get((method, backbone_key))
 
-        # 回退：如果没有找到组合，尝试用旧的 backbone 映射（兼容性）
-        if not entry:
-            LEGACY_MAP = {
-                'resnet50': ('deeplabv3plus', 'deeplabv3plus_r50*d8*512x512.py'),
-                'resnet101': ('deeplabv3plus', 'deeplabv3plus_r101*d8*512x512.py'),
-                'hrnet_w48': ('hrnet', 'fcn_hr48*512x512.py'),
-                'swin_tiny': ('swin', 'upernet_swin-tiny*512x512.py'),
-                'swin_small': ('swin', 'swin-small*upernet*512x512.py'),
-                'swin_base': ('swin', 'upernet_swin-base*512x512.py'),
-                'swin_large': ('swin', 'swin-large*upernet*512x512.py'),
-                'mit_b0': ('segformer', 'segformer_mit-b0*512x512.py'),
-                'mit_b1': ('segformer', 'segformer_mit-b1*512x512.py'),
-                'mit_b2': ('segformer', 'segformer_mit-b2*512x512.py'),
-                'mit_b5': ('segformer', 'segformer_mit-b5*512x512.py'),
-            }
-            entry = LEGACY_MAP.get(backbone_key)
-            if entry:
-                self._log_to_bottom(f"⚠️ 使用兼容模式: {backbone_key} → {entry[0]}")
-
         if not entry:
             self._log_to_bottom(f"⚠️ 未定义 ({method}, {backbone_key}) 的配置映射")
             return ''
