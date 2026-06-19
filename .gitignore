@@ -38,6 +38,7 @@ Thumbs.db
 
 # Project specific
 work_dirs/
+pretrain/
 *.csv
 *.log
 health_check_report.csv

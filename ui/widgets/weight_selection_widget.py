@@ -33,13 +33,21 @@ class WeightDownloadWorker(QThread):
         self._url = url
         self._save_path = save_path
         self._cancelled = False
+        self._paused = False
 
     def cancel(self):
         self._cancelled = True
 
+    def pause(self):
+        self._paused = True
+        
+    def resume(self):
+        self._paused = False
+
     def run(self):
         try:
             import urllib.request
+            import time
             os.makedirs(os.path.dirname(self._save_path), exist_ok=True)
 
             # 先获取文件大小
@@ -49,6 +57,10 @@ class WeightDownloadWorker(QThread):
                 chunk = 8192
                 with open(self._save_path, 'wb') as f:
                     while not self._cancelled:
+                        if self._paused:
+                            time.sleep(0.1)
+                            continue
+                            
                         data = resp.read(chunk)
                         if not data:
                             break
@@ -60,7 +72,7 @@ class WeightDownloadWorker(QThread):
             if self._cancelled:
                 if os.path.exists(self._save_path):
                     os.remove(self._save_path)
-                self.failed.emit("Download cancelled")
+                self.failed.emit("已取消下载")
             else:
                 self.progress.emit(100)
                 self.finished_ok.emit(self._save_path)
@@ -117,9 +129,20 @@ class WeightSelectionWidget(QWidget):
         )
         pretrained_row.addWidget(self.combo_pretrained_model)
         self.btn_download = QPushButton("⬇ Download")
-        self.btn_download.setFixedWidth(64)
+        self.btn_download.setMinimumWidth(85)
         self.btn_download.setToolTip("下载所选预训练权重到 pretrain/ 目录")
         pretrained_row.addWidget(self.btn_download)
+        
+        self.btn_pause = QPushButton("⏸ Pause")
+        self.btn_pause.setMinimumWidth(80)
+        self.btn_pause.setVisible(False)
+        pretrained_row.addWidget(self.btn_pause)
+        
+        self.btn_cancel = QPushButton("⏹ Cancel")
+        self.btn_cancel.setMinimumWidth(80)
+        self.btn_cancel.setVisible(False)
+        pretrained_row.addWidget(self.btn_cancel)
+        
         tab_public_layout.addLayout(pretrained_row)
 
         self.progress_download = QProgressBar()
@@ -161,6 +184,8 @@ class WeightSelectionWidget(QWidget):
         self.check_use_pretrained.toggled.connect(self._on_pretrained_toggled)
         self.btn_browse_weight.clicked.connect(self._on_browse_weight)
         self.btn_download.clicked.connect(self._on_download_weight)
+        self.btn_pause.clicked.connect(self._on_pause_resume_download)
+        self.btn_cancel.clicked.connect(self._on_cancel_download)
         self.combo_pretrained_model.currentTextChanged.connect(lambda: self.config_changed.emit())
         self.check_use_custom_weight.toggled.connect(lambda: self.config_changed.emit())
 
@@ -226,7 +251,10 @@ class WeightSelectionWidget(QWidget):
             self.tab_pretrained.setCurrentIndex(1)
             return
 
-        self.btn_download.setEnabled(False)
+        self.btn_download.setVisible(False)
+        self.btn_pause.setVisible(True)
+        self.btn_cancel.setVisible(True)
+        self.btn_pause.setText("⏸ Pause")
         self.progress_download.setValue(0)
         self.progress_download.setVisible(True)
 
@@ -236,18 +264,40 @@ class WeightSelectionWidget(QWidget):
         self._download_worker.failed.connect(self._on_download_failed)
         self._download_worker.start()
 
-    def _on_download_finished(self, path: str):
+    def _reset_download_ui(self):
+        self.btn_download.setVisible(True)
+        self.btn_pause.setVisible(False)
+        self.btn_cancel.setVisible(False)
         self.progress_download.setVisible(False)
-        self.btn_download.setEnabled(True)
+        self.progress_download.setValue(0)
+        self.btn_pause.setText("⏸ Pause")
+
+    def _on_pause_resume_download(self):
+        if not self._download_worker:
+            return
+        if self._download_worker._paused:
+            self._download_worker.resume()
+            self.btn_pause.setText("⏸ Pause")
+        else:
+            self._download_worker.pause()
+            self.btn_pause.setText("▶ Resume")
+
+    def _on_cancel_download(self):
+        if self._download_worker:
+            self._download_worker.cancel()
+        self._reset_download_ui()
+
+    def _on_download_finished(self, path: str):
+        self._reset_download_ui()
         self.line_custom_weight.setText(path)
         self.check_use_custom_weight.setChecked(True)
         self.tab_pretrained.setCurrentIndex(1)
         self.config_changed.emit()
 
     def _on_download_failed(self, error: str):
-        self.progress_download.setVisible(False)
-        self.btn_download.setEnabled(True)
-        QMessageBox.warning(self, "Download failed", f"权重Download failed：\n{error}")
+        self._reset_download_ui()
+        if "已取消下载" not in error:
+            QMessageBox.warning(self, "Download failed", f"权重Download failed：\n{error}")
 
     def get_params(self) -> dict:
         return {
