@@ -83,7 +83,7 @@ class ClassDistributionChart(FigureCanvas):
     def _draw_empty(self) -> None:
         """绘制空图表"""
         self.axes.clear()
-        self.axes.text(0.5, 0.5, 'No Data', ha='center', va='center',
+        self.axes.text(0.5, 0.5, self.tr('No Data'), ha='center', va='center',
                        transform=self.axes.transAxes, fontsize=9, color='gray')
         self.axes.set_xticks([])
         self.axes.set_yticks([])
@@ -278,13 +278,13 @@ class ClassDistributionWidget(QWidget):
         control_layout.setContentsMargins(0, 0, 0, 0)
         
         # RadioButton 切换
-        self.radio_pixel = QRadioButton("Px")
-        self.radio_image = QRadioButton("Img")
+        self.radio_pixel = QRadioButton(self.tr("Px"))
+        self.radio_image = QRadioButton(self.tr("Img"))
         self.radio_pixel.setChecked(True)
         self.radio_pixel.setStyleSheet("font-size: 10px; padding: 0;")
         self.radio_image.setStyleSheet("font-size: 10px; padding: 0;")
-        self.radio_pixel.setToolTip("按像素总数统计各类别分布")
-        self.radio_image.setToolTip("按包含该类别的图像数量统计")
+        self.radio_pixel.setToolTip(self.tr("按像素总数统计各类别分布"))
+        self.radio_image.setToolTip(self.tr("按包含该类别的图像数量统计"))
 
         self.radio_group = QButtonGroup(self)
         self.radio_group.addButton(self.radio_pixel, 0)
@@ -295,21 +295,21 @@ class ClassDistributionWidget(QWidget):
         control_layout.addSpacing(8)
 
         # CheckBox
-        self.check_log = QCheckBox("Log")
+        self.check_log = QCheckBox(self.tr("Log"))
         self.check_log.setStyleSheet("font-size: 10px; padding: 0;")
-        self.check_log.setToolTip("使用对数坐标，适合类别间差异极大的情况")
+        self.check_log.setToolTip(self.tr("使用对数坐标，适合类别间差异极大的情况"))
         control_layout.addWidget(self.check_log)
         
-        self.check_hide_bg = QCheckBox("NoBG")
+        self.check_hide_bg = QCheckBox(self.tr("NoBG"))
         self.check_hide_bg.setStyleSheet("font-size: 10px; padding: 0;")
-        self.check_hide_bg.setToolTip("隐藏背景类 (Class 0)")
+        self.check_hide_bg.setToolTip(self.tr("隐藏背景类 (Class 0)"))
         control_layout.addWidget(self.check_hide_bg)
 
         control_layout.addStretch()
         layout.addLayout(control_layout)
 
         # P2-3: 常驻说明文字（替代不可见的 Tooltip）
-        self.label_control_hint = QLabel("Px=Pixels | Img=Images | Log=Log Scale | NoBG=Hide BG")
+        self.label_control_hint = QLabel(self.tr("Px=Pixels | Img=Images | Log=Log Scale | NoBG=Hide BG"))
         self.label_control_hint.setStyleSheet("font-size: 9px; color: gray; padding-left: 2px;")
         layout.addWidget(self.label_control_hint)
         
@@ -322,8 +322,8 @@ class ClassDistributionWidget(QWidget):
         
         # === 权重按钮（供外部添加到标题栏）===
         self.btn_calc_weights = QToolButton()
-        self.btn_calc_weights.setText("📊 Calculate Weights")
-        self.btn_calc_weights.setToolTip("计算类别权重 (Median Frequency Balancing)")
+        self.btn_calc_weights.setText(self.tr("📊 Calculate Weights"))
+        self.btn_calc_weights.setToolTip(self.tr("计算类别权重 (Median Frequency Balancing)"))
         self.btn_calc_weights.setStyleSheet("""
             QToolButton {
                 font-size: 10px;

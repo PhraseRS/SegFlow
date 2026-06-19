@@ -984,20 +984,20 @@ class InferencePanel(QWidget):
     
     def _create_model_config_group(self, parent_layout):
         """创建Model Load区"""
-        self.groupBox_modelConfig = QGroupBox("Model Configuration")
+        self.groupBox_modelConfig = QGroupBox(self.tr("Model Configuration"))
         form_layout = QFormLayout(self.groupBox_modelConfig)
         form_layout.setSpacing(3)  # 压缩行间距
         form_layout.setContentsMargins(6, 6, 6, 6)  # 压缩边距
 
         # === 新增：模型库选择区 ===
-        self.label_modelRegistry = QLabel("Trained Model Repo:")
+        self.label_modelRegistry = QLabel(self.tr("Trained Model Repo:"))
         registry_layout = QHBoxLayout()
         self.comboBox_modelRegistry = QComboBox()
         self.comboBox_modelRegistry.addItem("Please select trained model...", userData=None)
 
-        self.pushButton_refreshRegistry = QPushButton("🔄 Refresh")
+        self.pushButton_refreshRegistry = QPushButton(self.tr("🔄 Refresh"))
         self.pushButton_refreshRegistry.setMaximumWidth(60)
-        self.pushButton_refreshRegistry.setToolTip("Need to load dataset in Tab1 to scan work_dirs")
+        self.pushButton_refreshRegistry.setToolTip(self.tr("Need to load dataset in Tab1 to scan work_dirs"))
 
         registry_layout.addWidget(self.comboBox_modelRegistry)
         registry_layout.addWidget(self.pushButton_refreshRegistry)
@@ -1010,48 +1010,48 @@ class InferencePanel(QWidget):
         form_layout.addRow(line_reg)
 
         # 配置文件
-        self.label_configFile = QLabel("Config File:")
+        self.label_configFile = QLabel(self.tr("Config File:"))
         config_layout = QHBoxLayout()
         self.lineEdit_configFile = QLineEdit()
-        self.lineEdit_configFile.setPlaceholderText("Select MMSeg Config (.py)")
-        self.pushButton_browseConfig = QPushButton("Browse...")
+        self.lineEdit_configFile.setPlaceholderText(self.tr("Select MMSeg Config (.py)"))
+        self.pushButton_browseConfig = QPushButton(self.tr("Browse..."))
         config_layout.addWidget(self.lineEdit_configFile)
         config_layout.addWidget(self.pushButton_browseConfig)
         form_layout.addRow(self.label_configFile, config_layout)
 
         # 模型名称（自动解析）
-        self.label_modelName = QLabel("Model Name:")
-        self.label_modelNameValue = QLabel("Config Not Loaded")
+        self.label_modelName = QLabel(self.tr("Model Name:"))
+        self.label_modelNameValue = QLabel(self.tr("Config Not Loaded"))
         self.label_modelNameValue.setStyleSheet("color: #888; font-style: italic;")
         form_layout.addRow(self.label_modelName, self.label_modelNameValue)
 
         # 权重文件
-        self.label_checkpointFile = QLabel("Weight File:")
+        self.label_checkpointFile = QLabel(self.tr("Weight File:"))
         checkpoint_layout = QHBoxLayout()
         self.lineEdit_checkpointFile = QLineEdit()
-        self.lineEdit_checkpointFile.setPlaceholderText("Select Model Weight File (.pth)")
-        self.pushButton_browseCheckpoint = QPushButton("Browse...")
+        self.lineEdit_checkpointFile.setPlaceholderText(self.tr("Select Model Weight File (.pth)"))
+        self.pushButton_browseCheckpoint = QPushButton(self.tr("Browse..."))
         checkpoint_layout.addWidget(self.lineEdit_checkpointFile)
         checkpoint_layout.addWidget(self.pushButton_browseCheckpoint)
         form_layout.addRow(self.label_checkpointFile, checkpoint_layout)
 
         # 计算设备
-        self.label_device = QLabel("Device:")
+        self.label_device = QLabel(self.tr("Device:"))
         self.comboBox_device = QComboBox()
         self.comboBox_device.addItems(["Auto", "CUDA:0", "CPU"])
         form_layout.addRow(self.label_device, self.comboBox_device)
 
         # 加载按钮和状态
         load_layout = QHBoxLayout()
-        self.pushButton_loadModel = QPushButton("Load Model")
-        self.label_modelStatus = QLabel("Not Loaded")
+        self.pushButton_loadModel = QPushButton(self.tr("Load Model"))
+        self.label_modelStatus = QLabel(self.tr("Not Loaded"))
         load_layout.addWidget(self.pushButton_loadModel)
         load_layout.addWidget(self.label_modelStatus)
         load_layout.addStretch()
         form_layout.addRow("", load_layout)
 
         # Class图例
-        self.label_classesLegend = QLabel("Class图例:")
+        self.label_classesLegend = QLabel(self.tr("Class图例:"))
         self.scrollArea_classesLegend = QScrollArea()
         self.scrollArea_classesLegend.setWidgetResizable(True)
         self.scrollArea_classesLegend.setMaximumHeight(150)
@@ -1068,33 +1068,33 @@ class InferencePanel(QWidget):
 
     def _create_model_test_group(self, parent_layout):
         """Create model test/evaluation controls."""
-        self.groupBox_modelTest = QGroupBox("Model Test / Evaluation")
+        self.groupBox_modelTest = QGroupBox(self.tr("Model Test / Evaluation"))
         form_layout = QFormLayout(self.groupBox_modelTest)
         form_layout.setSpacing(3)
         form_layout.setContentsMargins(6, 6, 6, 6)
 
-        self.label_testDataset = QLabel("Test Data:")
-        self.label_testDatasetInfo = QLabel("Not Loaded")
+        self.label_testDataset = QLabel(self.tr("Test Data:"))
+        self.label_testDatasetInfo = QLabel(self.tr("Not Loaded"))
         self.label_testDatasetInfo.setWordWrap(True)
         form_layout.addRow(self.label_testDataset, self.label_testDatasetInfo)
 
         button_layout = QHBoxLayout()
-        self.pushButton_testModel = QPushButton("Test Model")
-        self.pushButton_cancelModelTest = QPushButton("Cancel Test")
+        self.pushButton_testModel = QPushButton(self.tr("Test Model"))
+        self.pushButton_cancelModelTest = QPushButton(self.tr("Cancel Test"))
         self.pushButton_cancelModelTest.setEnabled(False)
         button_layout.addWidget(self.pushButton_testModel)
         button_layout.addWidget(self.pushButton_cancelModelTest)
         button_layout.addStretch()
         form_layout.addRow("", button_layout)
 
-        self.label_testProgress = QLabel("测试Progress:")
+        self.label_testProgress = QLabel(self.tr("测试Progress:"))
         progress_layout = QHBoxLayout()
         self.progressBar_modelTest = QProgressBar()
         self.progressBar_modelTest.setValue(0)
         progress_layout.addWidget(self.progressBar_modelTest)
         form_layout.addRow(self.label_testProgress, progress_layout)
 
-        self.label_testStatus = QLabel("Not Tested")
+        self.label_testStatus = QLabel(self.tr("Not Tested"))
         form_layout.addRow("Test Status:", self.label_testStatus)
 
         self.comboBox_testSamples = QComboBox()
@@ -1106,17 +1106,17 @@ class InferencePanel(QWidget):
 
     def _create_inference_strategy_group(self, parent_layout):
         """创建推理策略区"""
-        self.groupBox_inferenceStrategy = QGroupBox("Inference Strategy")
+        self.groupBox_inferenceStrategy = QGroupBox(self.tr("Inference Strategy"))
         form_layout = QFormLayout(self.groupBox_inferenceStrategy)
         form_layout.setSpacing(3)  # 压缩行间距
         form_layout.setContentsMargins(6, 6, 6, 6)  # 压缩边距
 
         # 推理模式选择（单图/批量）
-        self.label_inferenceMode = QLabel("Inference Mode:")
+        self.label_inferenceMode = QLabel(self.tr("Inference Mode:"))
         mode_layout = QHBoxLayout()
-        self.radioButton_singleImage = QRadioButton("Single Inference")
+        self.radioButton_singleImage = QRadioButton(self.tr("Single Inference"))
         self.radioButton_singleImage.setChecked(True)
-        self.radioButton_batchInference = QRadioButton("Batch Inference")
+        self.radioButton_batchInference = QRadioButton(self.tr("Batch Inference"))
         self.radioButton_batchInference.setVisible(False)  # P0-3: 隐藏Batch Inference
         mode_layout.addWidget(self.radioButton_singleImage)
         mode_layout.addWidget(self.radioButton_batchInference)
@@ -1127,25 +1127,25 @@ class InferencePanel(QWidget):
         form_layout.addRow(self.label_inferenceMode, mode_layout)
 
         # 输入影像选择（支持从 GIS 图层同步）
-        self.label_inputPath = QLabel("Input Image:")
+        self.label_inputPath = QLabel(self.tr("Input Image:"))
         input_layout = QHBoxLayout()
         self.lineEdit_inputPath = QLineEdit()
-        self.lineEdit_inputPath.setPlaceholderText("Select image file or sync from GIS layer")
+        self.lineEdit_inputPath.setPlaceholderText(self.tr("Select image file or sync from GIS layer"))
         self.lineEdit_inputPath.setReadOnly(True)  # 只读，防止手动输入
-        self.pushButton_browseInput = QPushButton("Browse...")
+        self.pushButton_browseInput = QPushButton(self.tr("Browse..."))
         input_layout.addWidget(self.lineEdit_inputPath)
         input_layout.addWidget(self.pushButton_browseInput)
         form_layout.addRow(self.label_inputPath, input_layout)
 
         # 输出路径选择（自动保存预览PNG）
-        self.label_outputPath = QLabel("Output Path (Preview PNG):")
+        self.label_outputPath = QLabel(self.tr("Output Path (Preview PNG):"))
         output_layout = QHBoxLayout()
         self.lineEdit_outputPath = QLineEdit()
-        self.lineEdit_outputPath.setPlaceholderText("Inference Complete后自动保存预览PNG的路径（默认为输入图像所在目录）")
+        self.lineEdit_outputPath.setPlaceholderText(self.tr("Inference Complete后自动保存预览PNG的路径（默认为输入图像所在目录）"))
         self.lineEdit_outputPath.setReadOnly(True)  # 只读，防止手动输入
-        self.lineEdit_outputPath.setToolTip("Inference Complete后会自动保存一个PNG格式的预览图到此路径")
-        self.pushButton_browseOutputPath = QPushButton("Browse...")
-        self.pushButton_browseOutputPath.setToolTip("Select folder for auto-saving preview PNG")
+        self.lineEdit_outputPath.setToolTip(self.tr("Inference Complete后会自动保存一个PNG格式的预览图到此路径"))
+        self.pushButton_browseOutputPath = QPushButton(self.tr("Browse..."))
+        self.pushButton_browseOutputPath.setToolTip(self.tr("Select folder for auto-saving preview PNG"))
         output_layout.addWidget(self.lineEdit_outputPath)
         output_layout.addWidget(self.pushButton_browseOutputPath)
         form_layout.addRow(self.label_outputPath, output_layout)
@@ -1157,14 +1157,14 @@ class InferencePanel(QWidget):
         form_layout.addRow(line1)
         
         # 推理策略模式选择（大图分块/滑窗/Full Image Scale）
-        self.label_strategyMode = QLabel("Strategy:")
+        self.label_strategyMode = QLabel(self.tr("Strategy:"))
         strategy_layout = QHBoxLayout()
         # 注意：调整布局顺序，把"大图分块"放第一位并默认选中
         # 对象名保持原命名，避免破坏 _on_strategy_mode_changed() 等已有信号槽
-        self.radioButton_largeImageBlock = QRadioButton("Large Image Tile (GDAL)")
+        self.radioButton_largeImageBlock = QRadioButton(self.tr("Large Image Tile (GDAL)"))
         self.radioButton_largeImageBlock.setChecked(True)
-        self.radioButton_slidingWindow = QRadioButton("Sliding Window")
-        self.radioButton_resize = QRadioButton("Full Image Scale")
+        self.radioButton_slidingWindow = QRadioButton(self.tr("Sliding Window"))
+        self.radioButton_resize = QRadioButton(self.tr("Full Image Scale"))
         strategy_layout.addWidget(self.radioButton_largeImageBlock)
         strategy_layout.addWidget(self.radioButton_slidingWindow)
         strategy_layout.addWidget(self.radioButton_resize)
@@ -1186,7 +1186,7 @@ class InferencePanel(QWidget):
         form_layout.addRow("", self.label_strategyNote)
 
         # 滑窗参数 - 窗口大小
-        self.label_cropSize = QLabel("Crop Size:")
+        self.label_cropSize = QLabel(self.tr("Crop Size:"))
         self.spinBox_cropSize = QSpinBox()
         self.spinBox_cropSize.setMinimum(256)
         self.spinBox_cropSize.setMaximum(2048)
@@ -1195,14 +1195,14 @@ class InferencePanel(QWidget):
         form_layout.addRow(self.label_cropSize, self.spinBox_cropSize)
 
         # 滑窗参数 - 步长 / 大图分块参数 - 重叠率
-        self.label_stride = QLabel("Stride:")
+        self.label_stride = QLabel(self.tr("Stride:"))
         stride_layout = QHBoxLayout()
         self.spinBox_stride = QSpinBox()
         self.spinBox_stride.setMinimum(64)
         self.spinBox_stride.setMaximum(2048)
         self.spinBox_stride.setSingleStep(64)
         self.spinBox_stride.setValue(512)
-        self.label_strideHint = QLabel("Recommended: 50%-75% of crop size")
+        self.label_strideHint = QLabel(self.tr("Recommended: 50%-75% of crop size"))
         self.label_strideHint.setStyleSheet("color: #888; font-size: 10px;")
         stride_layout.addWidget(self.spinBox_stride)
         stride_layout.addWidget(self.label_strideHint)
@@ -1210,7 +1210,7 @@ class InferencePanel(QWidget):
         form_layout.addRow(self.label_stride, stride_layout)
 
         # 大图分块 - 重叠率
-        self.label_overlapRate = QLabel("Overlap Rate:")
+        self.label_overlapRate = QLabel(self.tr("Overlap Rate:"))
         overlap_layout = QHBoxLayout()
         self.doubleSpinBox_overlapRate = QDoubleSpinBox()
         self.doubleSpinBox_overlapRate.setMinimum(0.0)
@@ -1218,7 +1218,7 @@ class InferencePanel(QWidget):
         self.doubleSpinBox_overlapRate.setSingleStep(0.05)
         self.doubleSpinBox_overlapRate.setValue(0.2)
         self.doubleSpinBox_overlapRate.setVisible(False)
-        self.label_overlapHint = QLabel("大图分块模式的重叠率")
+        self.label_overlapHint = QLabel(self.tr("大图分块模式的重叠率"))
         self.label_overlapHint.setStyleSheet("color: #888; font-size: 10px;")
         self.label_overlapHint.setVisible(False)
         overlap_layout.addWidget(self.doubleSpinBox_overlapRate)
@@ -1227,13 +1227,13 @@ class InferencePanel(QWidget):
         form_layout.addRow(self.label_overlapRate, overlap_layout)
 
         # 滑窗参数 - 批大小
-        self.label_batchSize = QLabel("Batch Size:")
+        self.label_batchSize = QLabel(self.tr("Batch Size:"))
         batch_size_layout = QHBoxLayout()
         self.spinBox_batchSize = QSpinBox()
         self.spinBox_batchSize.setMinimum(1)
         self.spinBox_batchSize.setMaximum(32)
         self.spinBox_batchSize.setValue(1)
-        self.label_batchSizeHint = QLabel("Adjust based on GPU VRAM")
+        self.label_batchSizeHint = QLabel(self.tr("Adjust based on GPU VRAM"))
         self.label_batchSizeHint.setStyleSheet("color: #888; font-size: 10px;")
         batch_size_layout.addWidget(self.spinBox_batchSize)
         batch_size_layout.addWidget(self.label_batchSizeHint)
@@ -1247,7 +1247,7 @@ class InferencePanel(QWidget):
         form_layout.addRow(line2)
 
         # TTA增强选项
-        self.checkBox_enableTTA = QCheckBox("Enable TTA")
+        self.checkBox_enableTTA = QCheckBox(self.tr("Enable TTA"))
         form_layout.addRow("", self.checkBox_enableTTA)
 
         # 分隔线
@@ -1257,42 +1257,42 @@ class InferencePanel(QWidget):
         form_layout.addRow(line3)
 
         # 置信度阈值
-        self.label_confThreshold = QLabel("Confidence Threshold:")
+        self.label_confThreshold = QLabel(self.tr("Confidence Threshold:"))
         self.doubleSpinBox_confThreshold = QDoubleSpinBox()
         self.doubleSpinBox_confThreshold.setMinimum(0.0)
         self.doubleSpinBox_confThreshold.setMaximum(1.0)
         self.doubleSpinBox_confThreshold.setSingleStep(0.05)
         self.doubleSpinBox_confThreshold.setValue(0.5)
-        self.doubleSpinBox_confThreshold.setToolTip("Confidence threshold, only valid for models supporting confidence output")
+        self.doubleSpinBox_confThreshold.setToolTip(self.tr("Confidence threshold, only valid for models supporting confidence output"))
         form_layout.addRow(self.label_confThreshold, self.doubleSpinBox_confThreshold)
 
         parent_layout.addWidget(self.groupBox_inferenceStrategy)
 
     def _create_action_export_group(self, parent_layout):
         """创建执行与Export区"""
-        self.groupBox_actionExport = QGroupBox("Action & Export")
+        self.groupBox_actionExport = QGroupBox(self.tr("Action & Export"))
         form_layout = QFormLayout(self.groupBox_actionExport)
         form_layout.setSpacing(3)  # 压缩行间距
         form_layout.setContentsMargins(6, 6, 6, 6)  # 压缩边距
 
         # 运行推理按钮
-        self.pushButton_runInference = QPushButton("Run Inference")
+        self.pushButton_runInference = QPushButton(self.tr("Run Inference"))
         form_layout.addRow(self.pushButton_runInference)
 
         # Batch Inference按钮
-        self.pushButton_batchInference = QPushButton("Batch Inference")
+        self.pushButton_batchInference = QPushButton(self.tr("Batch Inference"))
         self.pushButton_batchInference.setVisible(False)  # P0-3: 隐藏Batch Inference
         form_layout.addRow(self.pushButton_batchInference)
 
         # 进度条
-        self.label_inferenceProgress = QLabel("Progress:")
+        self.label_inferenceProgress = QLabel(self.tr("Progress:"))
         progress_layout = QHBoxLayout()
         self.progressBar_inference = QProgressBar()
         self.progressBar_inference.setValue(0)
 
         # 取消按钮
-        self.pushButton_cancelInference = QPushButton("❌ Cancel")
-        self.pushButton_cancelInference.setToolTip("取消当前正在进行的推理任务")
+        self.pushButton_cancelInference = QPushButton(self.tr("❌ Cancel"))
+        self.pushButton_cancelInference.setToolTip(self.tr("取消当前正在进行的推理任务"))
         self.pushButton_cancelInference.setEnabled(False)  # 初始Disable
         self.pushButton_cancelInference.setMaximumWidth(80)
 
@@ -1316,15 +1316,15 @@ class InferencePanel(QWidget):
         form_layout.addRow("", self.label_exportNote)
 
         # Export格式（语义分割常用格式）
-        self.label_exportFormat = QLabel("Export Format:")
+        self.label_exportFormat = QLabel(self.tr("Export Format:"))
         export_format_layout = QHBoxLayout()
-        self.checkBox_exportTIF = QCheckBox("GeoTIFF (.tif)")
+        self.checkBox_exportTIF = QCheckBox(self.tr("GeoTIFF (.tif)"))
         self.checkBox_exportTIF.setChecked(True)
-        self.checkBox_exportTIF.setToolTip("Export GeoTIFF, retain geo info (standard format)")
-        self.checkBox_exportPNG = QCheckBox("PNG")
-        self.checkBox_exportPNG.setToolTip("Export PNG format (no geo info)")
-        self.checkBox_exportNumpy = QCheckBox("NumPy (.npy)")
-        self.checkBox_exportNumpy.setToolTip("Export NumPy array format for further processing")
+        self.checkBox_exportTIF.setToolTip(self.tr("Export GeoTIFF, retain geo info (standard format)"))
+        self.checkBox_exportPNG = QCheckBox(self.tr("PNG"))
+        self.checkBox_exportPNG.setToolTip(self.tr("Export PNG format (no geo info)"))
+        self.checkBox_exportNumpy = QCheckBox(self.tr("NumPy (.npy)"))
+        self.checkBox_exportNumpy.setToolTip(self.tr("Export NumPy array format for further processing"))
         export_format_layout.addWidget(self.checkBox_exportTIF)
         export_format_layout.addWidget(self.checkBox_exportPNG)
         export_format_layout.addWidget(self.checkBox_exportNumpy)
@@ -1332,32 +1332,32 @@ class InferencePanel(QWidget):
         form_layout.addRow(self.label_exportFormat, export_format_layout)
 
         # Export目录
-        self.label_exportDir = QLabel("Export Directory:")
+        self.label_exportDir = QLabel(self.tr("Export Directory:"))
         export_dir_layout = QHBoxLayout()
         self.lineEdit_exportDir = QLineEdit()
-        self.lineEdit_exportDir.setPlaceholderText("Select export directory (optional, default: output path)")
-        self.lineEdit_exportDir.setToolTip("手动Export时使用的目录，用于正式存档")
-        self.pushButton_browseExportDir = QPushButton("Browse...")
-        self.pushButton_browseExportDir.setToolTip("Select Export Directory")
+        self.lineEdit_exportDir.setPlaceholderText(self.tr("Select export directory (optional, default: output path)"))
+        self.lineEdit_exportDir.setToolTip(self.tr("手动Export时使用的目录，用于正式存档"))
+        self.pushButton_browseExportDir = QPushButton(self.tr("Browse..."))
+        self.pushButton_browseExportDir.setToolTip(self.tr("Select Export Directory"))
         export_dir_layout.addWidget(self.lineEdit_exportDir)
         export_dir_layout.addWidget(self.pushButton_browseExportDir)
         form_layout.addRow(self.label_exportDir, export_dir_layout)
 
         # Export结果按钮
-        self.pushButton_exportResults = QPushButton("📤 Export Results")
-        self.pushButton_exportResults.setToolTip("Export inference results to selected formats (PNG/NumPy/JSON)")
+        self.pushButton_exportResults = QPushButton(self.tr("📤 Export Results"))
+        self.pushButton_exportResults.setToolTip(self.tr("Export inference results to selected formats (PNG/NumPy/JSON)"))
         form_layout.addRow(self.pushButton_exportResults)
 
         parent_layout.addWidget(self.groupBox_actionExport)
 
     def _create_inference_result_group(self, parent_layout):
         """创建推理结果显示区"""
-        self.groupBox_inferenceResult = QGroupBox("Inference Result")
+        self.groupBox_inferenceResult = QGroupBox(self.tr("Inference Result"))
         layout = QVBoxLayout(self.groupBox_inferenceResult)
         layout.setSpacing(3)  # 压缩行间距
         layout.setContentsMargins(6, 6, 6, 6)  # 压缩边距
 
-        self.label_inferenceResult = QLabel("No inference results\n\nPlease load model and run inference.")
+        self.label_inferenceResult = QLabel(self.tr("No inference results\n\nPlease load model and run inference."))
         self.label_inferenceResult.setWordWrap(True)
         self.label_inferenceResult.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         self.label_inferenceResult.setMinimumHeight(100)
@@ -1515,7 +1515,7 @@ class InferencePanel(QWidget):
         data_root = context.get("data_root") or self._current_data_root
         splits = context.get("splits", {})
         if not data_root:
-            self.label_testDatasetInfo.setText("Not Loaded")
+            self.label_testDatasetInfo.setText(self.tr("Not Loaded"))
             self.pushButton_testModel.setEnabled(False)
             return
 
@@ -1651,7 +1651,7 @@ class InferencePanel(QWidget):
             item = model.item(1)
             if item:
                 item.setEnabled(False)
-                item.setToolTip("CUDA Not Available")
+                item.setToolTip(self.tr("CUDA Not Available"))
             self._emit_log("⚠️  [推理配置] CUDA Not Available，默认设备: CPU")
 
     def _check_cuda_available(self) -> bool:
@@ -1705,7 +1705,7 @@ class InferencePanel(QWidget):
             self._suggest_checkpoint_file(file_path, model_name)
 
         except Exception as e:
-            self.label_modelNameValue.setText("Parse Failed")
+            self.label_modelNameValue.setText(self.tr("Parse Failed"))
             self.label_modelNameValue.setStyleSheet("color: #f00; font-style: italic;")
             self._emit_log(f"❌ [推理配置] 配置文件Parse Failed: {e}")
 
@@ -1839,7 +1839,7 @@ class InferencePanel(QWidget):
     def _on_config_file_changed(self, text):
         """配置文件路径变化时触发"""
         if not text:
-            self.label_modelNameValue.setText("Config Not Loaded")
+            self.label_modelNameValue.setText(self.tr("Config Not Loaded"))
             self.label_modelNameValue.setStyleSheet("color: #888; font-style: italic;")
 
         self._refresh_model_test_state()
@@ -1977,12 +1977,12 @@ class InferencePanel(QWidget):
 
         if not config_path:
             self._emit_log("⚠️  Please select config file first")
-            QMessageBox.warning(self, "Missing Config File", "请先Select MMSegmentation Config。")
+            QMessageBox.warning(self, self.tr("Missing Config File"), self.tr("请先Select MMSegmentation Config。"))
             return
 
         if not checkpoint_path:
             self._emit_log("⚠️  Please select weight file first")
-            QMessageBox.warning(self, "Missing Weight File", "请先Select Model Weight File。")
+            QMessageBox.warning(self, self.tr("Missing Weight File"), self.tr("请先Select Model Weight File。"))
             return
 
         if not os.path.exists(config_path):
@@ -2033,7 +2033,7 @@ class InferencePanel(QWidget):
             }
 
             self.pushButton_loadModel.setEnabled(True)
-            self.label_modelStatus.setText("Model Ready")
+            self.label_modelStatus.setText(self.tr("Model Ready"))
             self.label_modelStatus.setStyleSheet("color: #28a745; font-weight: bold;")
 
             # 显示Class图例 - 安全版本
@@ -2092,7 +2092,7 @@ class InferencePanel(QWidget):
     def _handle_model_loading_error(self, error: Exception):
         """处理Model Load错误"""
         self.pushButton_loadModel.setEnabled(True)
-        self.label_modelStatus.setText("Load Failed")
+        self.label_modelStatus.setText(self.tr("Load Failed"))
         self.label_modelStatus.setStyleSheet("color: #dc3545; font-weight: bold;")
 
         import traceback
@@ -2179,7 +2179,7 @@ class InferencePanel(QWidget):
 
     def _run_model_test(self):
         if not self.inference_model:
-            QMessageBox.warning(self, "Model Not Loaded", "Please load model first.")
+            QMessageBox.warning(self, self.tr("Model Not Loaded"), self.tr("Please load model first."))
             return
         module_warnings = validate_custom_module_files(
             self.inference_model.get("custom_module_files", [])
@@ -2190,7 +2190,7 @@ class InferencePanel(QWidget):
             QMessageBox.critical(self, "自定义模块路径失效", message)
             return
         if not self._dataset_context or not self._dataset_context.get("data_root"):
-            QMessageBox.warning(self, "Dataset not loaded", "Please load dataset in Data Profile first.")
+            QMessageBox.warning(self, self.tr("Dataset not loaded"), self.tr("Please load dataset in Data Profile first."))
             return
         if self._is_model_testing:
             return
@@ -2216,24 +2216,24 @@ class InferencePanel(QWidget):
         if self._model_test_worker:
             self._model_test_worker.request_cancel()
             self.pushButton_cancelModelTest.setEnabled(False)
-            self.label_testStatus.setText("Cancelling")
+            self.label_testStatus.setText(self.tr("Cancelling"))
 
     def _on_model_test_finished(self, result: dict):
         self._model_test_summary = result.get("summary", {})
         self._model_test_results = result.get("samples", [])
-        self.label_testStatus.setText("Test Complete")
+        self.label_testStatus.setText(self.tr("Test Complete"))
         self._clear_model_test_tables()
         self._clear_test_sample_selector()
         self._log_model_test_result(self._model_test_summary, result.get("metrics", {}))
 
     def _on_model_test_error(self, error_msg: str):
         self.progressBar_modelTest.setValue(0)
-        self.label_testStatus.setText("Test Failed")
+        self.label_testStatus.setText(self.tr("Test Failed"))
         self._emit_log(f"Model test failed: {error_msg}")
 
     def _on_model_test_cancelled(self):
         self.progressBar_modelTest.setValue(0)
-        self.label_testStatus.setText("Cancelled")
+        self.label_testStatus.setText(self.tr("Cancelled"))
         self._emit_log("模型测试Cancelled")
 
     def _cleanup_model_test_worker(self):
@@ -2247,7 +2247,7 @@ class InferencePanel(QWidget):
         self.pushButton_testModel.setEnabled(not is_running)
         self.pushButton_cancelModelTest.setEnabled(is_running)
         if is_running:
-            self.label_testStatus.setText("Testing")
+            self.label_testStatus.setText(self.tr("Testing"))
         else:
             self._refresh_model_test_state()
 
@@ -2353,7 +2353,7 @@ class InferencePanel(QWidget):
             if not prediction_path:
                 self.visualization_widget.clear()
                 self.visualization_widget.setVisible(True)
-                self.visualization_widget.image_label.setText("Prediction result not found")
+                self.visualization_widget.image_label.setText(self.tr("Prediction result not found"))
                 return
             prediction = self._read_preview_image(prediction_path, as_mask=False)
             self.visualization_settings.setVisible(False)
@@ -2378,7 +2378,7 @@ class InferencePanel(QWidget):
         # 1. 检查模型是否已加载
         if not self.inference_model:
             self._emit_log("⚠️  Model not loaded, cannot infer")
-            QMessageBox.warning(self, "Model Not Loaded", "Please load inference model first.")
+            QMessageBox.warning(self, self.tr("Model Not Loaded"), self.tr("Please load inference model first."))
             return
 
         module_warnings = validate_custom_module_files(
@@ -2397,8 +2397,7 @@ class InferencePanel(QWidget):
             self._emit_log("⚠️  No image selected文件")
             QMessageBox.warning(
                 self,
-                "No image selected",
-                "请先在'输入影像'中Select image to infer，\n或从 GIS 图层中同步图像。"
+                self.tr("No image selected"), self.tr("请先在'输入影像'中Select image to infer，\n或从 GIS 图层中同步图像。")
             )
             return
 
@@ -2603,7 +2602,7 @@ class InferencePanel(QWidget):
             self._emit_log("🛑 Cancelling inference...")
             self._inference_worker.request_cancel()
             self.pushButton_cancelInference.setEnabled(False)
-            self.pushButton_cancelInference.setText("Cancelling...")
+            self.pushButton_cancelInference.setText(self.tr("Cancelling..."))
         else:
             self._emit_log("⚠️  Cannot cancel: Worker not found")
 
@@ -2611,8 +2610,8 @@ class InferencePanel(QWidget):
         """推理被取消时的处理"""
         self._emit_log("✅ 推理已Success取消")
         self.progressBar_inference.setValue(0)
-        self.pushButton_cancelInference.setText("❌ Cancel")
-        self.label_inferenceResult.setText("推理Cancelled\\n\\n可以重新配置参数后再次运行推理。")
+        self.pushButton_cancelInference.setText(self.tr("❌ Cancel"))
+        self.label_inferenceResult.setText(self.tr("推理Cancelled\\n\\n可以重新配置参数后再次运行推理。"))
 
     def _handle_inference_success(self, image_path: str, result: dict, inference_params: dict):
         """处理推理Success的结果"""
@@ -2807,19 +2806,19 @@ class InferencePanel(QWidget):
     def _run_batch_inference(self):
         """Run Batch Inference"""
         if not self.inference_model:
-            QMessageBox.warning(self, "Model Not Loaded", "Please load inference model first.")
+            QMessageBox.warning(self, self.tr("Model Not Loaded"), self.tr("Please load inference model first."))
             return
 
         batch_dir = self.lineEdit_inputPath.text().strip()
         if not batch_dir or not os.path.isdir(batch_dir):
-            QMessageBox.warning(self, "Invalid Input Directory", "Please select valid batch inference image directory.")
+            QMessageBox.warning(self, self.tr("Invalid Input Directory"), self.tr("Please select valid batch inference image directory."))
             return
 
         self.inference_started.emit()
         self._emit_log(f"🚀 Start batch inference: {batch_dir}")
 
         # TODO: 实现实际的Batch Inference逻辑
-        self.label_inferenceResult.setText("Batch inference to be implemented...\n\nPlease integrate MMSegmentation API in actual project.")
+        self.label_inferenceResult.setText(self.tr("Batch inference to be implemented...\n\nPlease integrate MMSegmentation API in actual project."))
 
     def _export_results(self):
         """Export Inference Results"""
@@ -2828,8 +2827,7 @@ class InferencePanel(QWidget):
             self._emit_log("⚠️  No inference results to export")
             QMessageBox.warning(
                 self,
-                "No Inference Results",
-                "Please run inference first before exporting."
+                self.tr("No Inference Results"), self.tr("Please run inference first before exporting.")
             )
             return
 
@@ -2846,8 +2844,7 @@ class InferencePanel(QWidget):
                 else:
                     QMessageBox.warning(
                         self,
-                        "Export Directory Not Set",
-                        "请先Select Export Directory。"
+                        self.tr("Export Directory Not Set"), self.tr("请先Select Export Directory。")
                     )
                     return
 
@@ -2874,8 +2871,7 @@ class InferencePanel(QWidget):
         if not (export_tif or export_png or export_numpy):
             QMessageBox.warning(
                 self,
-                "Export Format Not Selected",
-                "Please select at least one export format (GeoTIFF, PNG, or NumPy)."
+                self.tr("Export Format Not Selected"), self.tr("Please select at least one export format (GeoTIFF, PNG, or NumPy).")
             )
             return
 
@@ -2954,8 +2950,7 @@ class InferencePanel(QWidget):
             else:
                 QMessageBox.warning(
                     self,
-                    "Export失败",
-                    "No data to export.\n\nNote: Tile mode doesn't generate full mask, cannot export PNG/NumPy."
+                    self.tr("Export失败"), self.tr("No data to export.\n\nNote: Tile mode doesn't generate full mask, cannot export PNG/NumPy.")
                 )
 
         except Exception as e:
@@ -3209,8 +3204,7 @@ class InferencePanel(QWidget):
         if not self.last_inference_result:
             QMessageBox.warning(
                 self,
-                "Cannot Apply",
-                "No inference results available.\n\nPlease run inference before adjusting visualization settings."
+                self.tr("Cannot Apply"), self.tr("No inference results available.\n\nPlease run inference before adjusting visualization settings.")
             )
             return
 

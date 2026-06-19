@@ -61,7 +61,7 @@ class EnvConfigWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
 
-        select_label = QLabel("Conda environments")
+        select_label = QLabel(self.tr("Conda environments"))
         select_label.setStyleSheet("font-weight: bold; color: #495057;")
         layout.addWidget(select_label)
 
@@ -73,7 +73,7 @@ class EnvConfigWidget(QWidget):
         self.env_select.currentIndexChanged.connect(self._on_env_changed)
         select_row.addWidget(self.env_select, stretch=1)
 
-        self.refresh_button = QPushButton("Refresh")
+        self.refresh_button = QPushButton(self.tr("Refresh"))
         self.refresh_button.clicked.connect(self.refresh_envs)
         select_row.addWidget(self.refresh_button)
 
@@ -82,23 +82,23 @@ class EnvConfigWidget(QWidget):
         # Python executable 行：标签 + Re-check 按钮
         path_row = QHBoxLayout()
         path_row.setSpacing(8)
-        path_label = QLabel("Python executable")
+        path_label = QLabel(self.tr("Python executable"))
         path_label.setStyleSheet("font-weight: bold; color: #495057;")
         path_row.addWidget(path_label)
         path_row.addStretch()
 
-        self.validate_button = QPushButton("Re-check")
-        self.validate_button.setToolTip("手动重新验证当前环境（安装新包后使用）")
+        self.validate_button = QPushButton(self.tr("Re-check"))
+        self.validate_button.setToolTip(self.tr("手动重新验证当前环境（安装新包后使用）"))
         self.validate_button.clicked.connect(self.validate_env)
         path_row.addWidget(self.validate_button)
         layout.addLayout(path_row)
 
         self.custom_path = QLineEdit()
-        self.custom_path.setPlaceholderText("e.g. D:\\anaconda3\\envs\\mmseg\\python.exe")
+        self.custom_path.setPlaceholderText(self.tr("e.g. D:\\anaconda3\\envs\\mmseg\\python.exe"))
         self.custom_path.textEdited.connect(self._on_custom_path_edited)
         layout.addWidget(self.custom_path)
 
-        self.framework_hint_label = QLabel("")
+        self.framework_hint_label = QLabel(self.tr(""))
         self.framework_hint_label.setWordWrap(True)
         self.framework_hint_label.setStyleSheet(
             "background-color: #EEF4FF; border: 1px solid #CFE0FF; "
@@ -107,7 +107,7 @@ class EnvConfigWidget(QWidget):
         self.framework_hint_label.setVisible(False)
         layout.addWidget(self.framework_hint_label)
 
-        self.status_label = QLabel("Please select Python environment")
+        self.status_label = QLabel(self.tr("Please select Python environment"))
         self.status_label.setWordWrap(True)
         self.status_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         self.status_label.setStyleSheet(

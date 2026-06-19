@@ -70,7 +70,7 @@ class VisualizationWidget(QWidget):
 
     def _create_alpha_control(self) -> QGroupBox:
         """创建Alpha控制组件"""
-        alpha_group = QGroupBox("Alpha")
+        alpha_group = QGroupBox(self.tr("Alpha"))
         alpha_layout = QHBoxLayout()
 
         # Alpha滑块
@@ -107,7 +107,7 @@ class VisualizationWidget(QWidget):
         content_layout.setSpacing(8)
 
         # 标题
-        title_label = QLabel("类别Color配置")
+        title_label = QLabel(self.tr("类别Color配置"))
         title_label.setStyleSheet("font-weight: bold; font-size: 11pt;")
         content_layout.addWidget(title_label)
 
@@ -190,13 +190,13 @@ class VisualizationWidget(QWidget):
         button_layout.setSpacing(10)
 
         # 重置按钮
-        reset_btn = QPushButton("Reset to Default")
-        reset_btn.setToolTip("恢复默认的Color和Alpha设置")
+        reset_btn = QPushButton(self.tr("Reset to Default"))
+        reset_btn.setToolTip(self.tr("恢复默认的Color和Alpha设置"))
         reset_btn.clicked.connect(self._on_reset_clicked)
 
         # 应用按钮
-        apply_btn = QPushButton("Apply to Preview")
-        apply_btn.setToolTip("将当前设置应用到推理结果预览")
+        apply_btn = QPushButton(self.tr("Apply to Preview"))
+        apply_btn.setToolTip(self.tr("将当前设置应用到推理结果预览"))
         apply_btn.setStyleSheet("QPushButton { font-weight: bold; }")
         apply_btn.clicked.connect(self.apply_requested.emit)
 

@@ -135,7 +135,7 @@ class SegmentedHeatmapBar(QWidget):
             # 无数据，绘制空条
             painter.fillRect(0, 0, width, height, QColor("#E0E0E0"))
             painter.setPen(QColor("#999"))
-            painter.drawText(QRect(0, 0, width, height), Qt.AlignmentFlag.AlignCenter, "N/A")
+            painter.drawText(QRect(0, 0, width, height), Qt.AlignmentFlag.AlignCenter, self.tr("N/A"))
             return
         
         # 计算各分段宽度（使用完整宽度，无边框）
@@ -190,7 +190,7 @@ class SegmentedHeatmapBar(QWidget):
             if new_hover:
                 config = BIN_CONFIGS[new_hover]
                 count = self._stats.bin_counts.get(new_hover, 0)
-                tooltip = f"{config.description}: {count} Images"
+                tooltip = f"{self.tr(config.description)}: {count} {self.tr('Images')}"
                 QToolTip.showText(event.globalPos(), tooltip, self)
             else:
                 QToolTip.hideText()
@@ -271,7 +271,7 @@ class CoverageAnalysisCard(QWidget):
         layout.setAlignment(Qt.AlignmentFlag.AlignTop)  # 顶部对齐
         
         # 说明文字
-        self.desc_label = QLabel("展示每个类别在单张图像中的像素占比分布，帮助发现稀疏样本或全图充满的异常样本")
+        self.desc_label = QLabel(self.tr("展示每个类别在单张图像中的像素占比分布，帮助发现稀疏样本或全图充满的异常样本"))
         self.desc_label.setWordWrap(True)
         self.desc_label.setStyleSheet("font-size: 10px; color: gray;")
         layout.addWidget(self.desc_label)
@@ -291,7 +291,7 @@ class CoverageAnalysisCard(QWidget):
             legend_layout.addWidget(color_block)
             
             # 标签
-            label = QLabel(config.name)
+            label = QLabel(self.tr(config.name))
             label.setStyleSheet(f"font-size: {LEGEND_FONT_SIZE}px; color: {LABEL_COLOR};")
             legend_layout.addWidget(label)
         
@@ -306,7 +306,7 @@ class CoverageAnalysisCard(QWidget):
         self.content_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         
         # 空状态Tip
-        self.empty_label = QLabel("No Data")
+        self.empty_label = QLabel(self.tr("No Data"))
         self.empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.empty_label.setStyleSheet("color: gray; font-size: 11px; padding: 10px;")
         self.content_layout.addWidget(self.empty_label)

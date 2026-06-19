@@ -38,7 +38,7 @@ class SampleManagementSidebar(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         
         # ========== 数据源管理 ==========
-        self.groupBox_dataSource = QGroupBox("Data Source Manager")
+        self.groupBox_dataSource = QGroupBox(self.tr("Data Source Manager"))
         sizePolicy = QSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
         self.groupBox_dataSource.setSizePolicy(sizePolicy)
         
@@ -51,54 +51,54 @@ class SampleManagementSidebar(QWidget):
         dataSource_layout.addWidget(self.treeWidget_dataSources)
         
         # 添加样本按钮
-        self.pushButton_addSample = QPushButton("📂 Load Dataset")
-        self.pushButton_addSample.setToolTip("Select VOC format dataset root (must contain JPEGImages, SegmentationClass, ImageSets)")
+        self.pushButton_addSample = QPushButton(self.tr("📂 Load Dataset"))
+        self.pushButton_addSample.setToolTip(self.tr("Select VOC format dataset root (must contain JPEGImages, SegmentationClass, ImageSets)"))
         dataSource_layout.addWidget(self.pushButton_addSample)
         
         layout.addWidget(self.groupBox_dataSource, stretch=3)
         
         # ========== 图层控制 ==========
-        self.groupBox_layerControl = QGroupBox("Layer Control")
+        self.groupBox_layerControl = QGroupBox(self.tr("Layer Control"))
         layerControl_layout = QVBoxLayout(self.groupBox_layerControl)
         
         # Overlay Prediction
-        self.checkBox_overlayPrediction = QCheckBox("Overlay Prediction")
+        self.checkBox_overlayPrediction = QCheckBox(self.tr("Overlay Prediction"))
         self.checkBox_overlayPrediction.setChecked(True)
         layerControl_layout.addWidget(self.checkBox_overlayPrediction)
         
         # Base Image
-        self.checkBox_baseImage = QCheckBox("Base Image (RGB/False Color)")
+        self.checkBox_baseImage = QCheckBox(self.tr("Base Image (RGB/False Color)"))
         self.checkBox_baseImage.setChecked(True)
         layerControl_layout.addWidget(self.checkBox_baseImage)
         
         # Label Only
-        self.checkBox_labelOnly = QCheckBox("Label Only")
+        self.checkBox_labelOnly = QCheckBox(self.tr("Label Only"))
         layerControl_layout.addWidget(self.checkBox_labelOnly)
         
         # Opacity
         opacity_layout = QHBoxLayout()
-        opacity_layout.addWidget(QLabel("Opacity:"))
+        opacity_layout.addWidget(QLabel(self.tr("Opacity:")))
         self.slider_opacity = QSlider(Qt.Orientation.Horizontal)
         self.slider_opacity.setRange(0, 100)
         self.slider_opacity.setValue(70)
         opacity_layout.addWidget(self.slider_opacity)
-        self.label_opacityValue = QLabel("70%")
+        self.label_opacityValue = QLabel(self.tr("70%"))
         opacity_layout.addWidget(self.label_opacityValue)
         layerControl_layout.addLayout(opacity_layout)
         
         # Swipe Compare
-        self.checkBox_swipeCompare = QCheckBox("Swipe Compare")
+        self.checkBox_swipeCompare = QCheckBox(self.tr("Swipe Compare"))
         layerControl_layout.addWidget(self.checkBox_swipeCompare)
         
         # Swipe Position
         swipe_layout = QHBoxLayout()
-        swipe_layout.addWidget(QLabel("Position:"))
+        swipe_layout.addWidget(QLabel(self.tr("Position:")))
         self.slider_swipe = QSlider(Qt.Orientation.Horizontal)
         self.slider_swipe.setRange(0, 100)
         self.slider_swipe.setValue(50)
         self.slider_swipe.setEnabled(False)
         swipe_layout.addWidget(self.slider_swipe)
-        self.label_swipeValue = QLabel("50%")
+        self.label_swipeValue = QLabel(self.tr("50%"))
         swipe_layout.addWidget(self.label_swipeValue)
         layerControl_layout.addLayout(swipe_layout)
 
@@ -110,7 +110,7 @@ class SampleManagementSidebar(QWidget):
         band_layout.setContentsMargins(4, 4, 4, 4)
         band_layout.setSpacing(2)
 
-        self.label_bandInfo = QLabel("Bands: -")
+        self.label_bandInfo = QLabel(self.tr("Bands: -"))
         self.label_bandInfo.setStyleSheet("font-size: 10px; color: gray;")
         band_layout.addWidget(self.label_bandInfo)
 
@@ -119,7 +119,7 @@ class SampleManagementSidebar(QWidget):
         preset_layout.setSpacing(4)
         self.combo_bandPreset = QComboBox()
         self.combo_bandPreset.addItems(["RGB (1,2,3)", "NIR False Color (4,3,2)", "SWIR (5,4,3)", "自定义"])
-        self.combo_bandPreset.setToolTip("Band Mapping Presets")
+        self.combo_bandPreset.setToolTip(self.tr("Band Mapping Presets"))
         self.combo_bandPreset.setStyleSheet("font-size: 10px;")
         preset_layout.addWidget(self.combo_bandPreset)
         band_layout.addLayout(preset_layout)
@@ -237,16 +237,16 @@ class GISLayerControlSidebar(QWidget):
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(8, 4, 8, 4)
 
-        title_label = QLabel("Layers")
+        title_label = QLabel(self.tr("Layers"))
         title_label.setStyleSheet("font-weight: bold;")
         header_layout.addWidget(title_label)
         header_layout.addStretch()
 
         # Add Layer按钮 (使用 QToolButton 支持菜单)
         self.btn_add_layer = QToolButton()
-        self.btn_add_layer.setText("+")
+        self.btn_add_layer.setText(self.tr("+"))
         self.btn_add_layer.setFixedSize(24, 24)
-        self.btn_add_layer.setToolTip("Add Layer")
+        self.btn_add_layer.setToolTip(self.tr("Add Layer"))
         header_layout.addWidget(self.btn_add_layer)
 
         # 初始化默认菜单
@@ -282,21 +282,21 @@ class GISLayerControlSidebar(QWidget):
         menu = QMenu(self.btn_add_layer)
         
         # 设置基础图像
-        action_base = QAction("📂 Set Base Image...", menu)
+        action_base = QAction(self.tr("📂 Set Base Image..."), menu)
         action_base.triggered.connect(self._on_set_base_image)
         menu.addAction(action_base)
         
         menu.addSeparator()
         
         # 添加叠加栅格图层
-        action_overlay = QAction("➕ Add Overlay Raster...", menu)
+        action_overlay = QAction(self.tr("➕ Add Overlay Raster..."), menu)
         action_overlay.triggered.connect(self._on_add_overlay)
         menu.addAction(action_overlay)
         
         # 添加矢量图层（占位）
-        action_vector = QAction("🖍️ Add Vector Layer...", menu)
+        action_vector = QAction(self.tr("🖍️ Add Vector Layer..."), menu)
         action_vector.setEnabled(False)
-        action_vector.setToolTip("矢量图层功能开发中...")
+        action_vector.setToolTip(self.tr("矢量图层功能开发中..."))
         menu.addAction(action_vector)
         
         self.btn_add_layer.setMenu(menu)
@@ -311,8 +311,7 @@ class GISLayerControlSidebar(QWidget):
         else:
             from PySide6.QtWidgets import QMessageBox
             QMessageBox.information(
-                self, "Tip", 
-                "Please switch to inference visualization mode first, canvas will load automatically."
+                self, self.tr("Tip"), self.tr("Please switch to inference visualization mode first, canvas will load automatically.")
             )
     
     def _on_add_overlay(self):
@@ -322,8 +321,7 @@ class GISLayerControlSidebar(QWidget):
         else:
             from PySide6.QtWidgets import QMessageBox
             QMessageBox.information(
-                self, "Tip",
-                "Please switch to inference visualization mode first, canvas will load automatically."
+                self, self.tr("Tip"), self.tr("Please switch to inference visualization mode first, canvas will load automatically.")
             )
     
     def _connect_signals(self):
@@ -420,7 +418,7 @@ class TaskConfigSidebar(QWidget):
         layout.setContentsMargins(8, 8, 8, 8)
         
         # 标题
-        title = QLabel("Quick Config")
+        title = QLabel(self.tr("Quick Config"))
         title.setStyleSheet("font-weight: bold; font-size: 14px;")
         layout.addWidget(title)
         
@@ -431,7 +429,7 @@ class TaskConfigSidebar(QWidget):
         layout.addWidget(line)
         
         # 占位Info
-        info = QLabel("After selecting a task on the right,\nquick config options will appear here.")
+        info = QLabel(self.tr("After selecting a task on the right,\nquick config options will appear here."))
         info.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(info)
         

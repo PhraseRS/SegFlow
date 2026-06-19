@@ -46,7 +46,7 @@ class DatasetResplitDialog(QDialog):
         layout.setSpacing(16)
         
         # 标题
-        title_label = QLabel("Select Split Mode")
+        title_label = QLabel(self.tr("Select Split Mode"))
         font = QFont()
         font.setPointSize(12)
         font.setBold(True)
@@ -63,17 +63,17 @@ class DatasetResplitDialog(QDialog):
         layout.addWidget(info_label)
         
         # 模式选择
-        mode_group = QGroupBox("Split Mode")
+        mode_group = QGroupBox(self.tr("Split Mode"))
         mode_layout = QVBoxLayout(mode_group)
         
         self.mode_button_group = QButtonGroup(self)
         
-        self.radio_auto = QRadioButton("Automatic Split")
+        self.radio_auto = QRadioButton(self.tr("Automatic Split"))
         self.radio_auto.setChecked(True)
         self.mode_button_group.addButton(self.radio_auto, 0)
         mode_layout.addWidget(self.radio_auto)
         
-        self.radio_custom = QRadioButton("Custom Split")
+        self.radio_custom = QRadioButton(self.tr("Custom Split"))
         self.mode_button_group.addButton(self.radio_custom, 1)
         mode_layout.addWidget(self.radio_custom)
         
@@ -99,11 +99,11 @@ class DatasetResplitDialog(QDialog):
         button_layout = QHBoxLayout()
         button_layout.addStretch()
         
-        self.btn_cancel = QPushButton("Cancel")
+        self.btn_cancel = QPushButton(self.tr("Cancel"))
         self.btn_cancel.clicked.connect(self.reject)
         button_layout.addWidget(self.btn_cancel)
         
-        self.btn_confirm = QPushButton("Confirm Split")
+        self.btn_confirm = QPushButton(self.tr("Confirm Split"))
         self.btn_confirm.setDefault(True)
         self.btn_confirm.clicked.connect(self._on_confirm)
         button_layout.addWidget(self.btn_confirm)
@@ -126,12 +126,12 @@ class DatasetResplitDialog(QDialog):
         layout.addWidget(desc_label)
         
         # 比例设置
-        ratio_group = QGroupBox("Split Ratio")
+        ratio_group = QGroupBox(self.tr("Split Ratio"))
         ratio_layout = QVBoxLayout(ratio_group)
         
         # Train 比例
         train_layout = QHBoxLayout()
-        train_layout.addWidget(QLabel("Train:"))
+        train_layout.addWidget(QLabel(self.tr("Train:")))
         self.spin_train_ratio = QDoubleSpinBox()
         self.spin_train_ratio.setRange(0, 100)
         self.spin_train_ratio.setValue(70)
@@ -144,7 +144,7 @@ class DatasetResplitDialog(QDialog):
         
         # Val 比例
         val_layout = QHBoxLayout()
-        val_layout.addWidget(QLabel("Val:"))
+        val_layout.addWidget(QLabel(self.tr("Val:")))
         self.spin_val_ratio = QDoubleSpinBox()
         self.spin_val_ratio.setRange(0, 100)
         self.spin_val_ratio.setValue(20)
@@ -157,7 +157,7 @@ class DatasetResplitDialog(QDialog):
         
         # Test 比例
         test_layout = QHBoxLayout()
-        test_layout.addWidget(QLabel("Test:"))
+        test_layout.addWidget(QLabel(self.tr("Test:")))
         self.spin_test_ratio = QDoubleSpinBox()
         self.spin_test_ratio.setRange(0, 100)
         self.spin_test_ratio.setValue(10)
@@ -176,15 +176,15 @@ class DatasetResplitDialog(QDialog):
         layout.addWidget(ratio_group)
         
         # 高级选项
-        advanced_group = QGroupBox("Advanced Options")
+        advanced_group = QGroupBox(self.tr("Advanced Options"))
         advanced_layout = QVBoxLayout(advanced_group)
         
-        self.check_shuffle = QCheckBox("Shuffle")
+        self.check_shuffle = QCheckBox(self.tr("Shuffle"))
         self.check_shuffle.setChecked(True)
         advanced_layout.addWidget(self.check_shuffle)
         
         seed_layout = QHBoxLayout()
-        seed_layout.addWidget(QLabel("Random Seed:"))
+        seed_layout.addWidget(QLabel(self.tr("Random Seed:")))
         self.spin_seed = QSpinBox()
         self.spin_seed.setRange(0, 999999)
         self.spin_seed.setValue(42)
@@ -226,17 +226,17 @@ class DatasetResplitDialog(QDialog):
         layout.addWidget(desc_label)
         
         # 自定义模式选择
-        custom_mode_group = QGroupBox("Custom Mode")
+        custom_mode_group = QGroupBox(self.tr("Custom Mode"))
         custom_mode_layout = QVBoxLayout(custom_mode_group)
         
         self.custom_mode_button_group = QButtonGroup(self)
         
-        self.radio_count_mode = QRadioButton("Count Mode")
+        self.radio_count_mode = QRadioButton(self.tr("Count Mode"))
         self.radio_count_mode.setChecked(True)
         self.custom_mode_button_group.addButton(self.radio_count_mode, 0)
         custom_mode_layout.addWidget(self.radio_count_mode)
         
-        self.radio_select_mode = QRadioButton("Selection Mode")
+        self.radio_select_mode = QRadioButton(self.tr("Selection Mode"))
         self.custom_mode_button_group.addButton(self.radio_select_mode, 1)
         custom_mode_layout.addWidget(self.radio_select_mode)
         
@@ -267,12 +267,12 @@ class DatasetResplitDialog(QDialog):
         layout.setContentsMargins(0, 0, 0, 0)
         
         # 数量设置
-        count_group = QGroupBox("Sample Count")
+        count_group = QGroupBox(self.tr("Sample Count"))
         count_layout = QVBoxLayout(count_group)
         
         # Train 数量
         train_layout = QHBoxLayout()
-        train_layout.addWidget(QLabel("Train:"))
+        train_layout.addWidget(QLabel(self.tr("Train:")))
         self.spin_train_count = QSpinBox()
         self.spin_train_count.setRange(0, self.total_samples)
         self.spin_train_count.setValue(self.current_train)
@@ -283,7 +283,7 @@ class DatasetResplitDialog(QDialog):
         
         # Val 数量
         val_layout = QHBoxLayout()
-        val_layout.addWidget(QLabel("Val:"))
+        val_layout.addWidget(QLabel(self.tr("Val:")))
         self.spin_val_count = QSpinBox()
         self.spin_val_count.setRange(0, self.total_samples)
         self.spin_val_count.setValue(self.current_val)
@@ -294,7 +294,7 @@ class DatasetResplitDialog(QDialog):
         
         # Test 数量
         test_layout = QHBoxLayout()
-        test_layout.addWidget(QLabel("Test:"))
+        test_layout.addWidget(QLabel(self.tr("Test:")))
         self.spin_test_count = QSpinBox()
         self.spin_test_count.setRange(0, self.total_samples)
         self.spin_test_count.setValue(self.current_test)
@@ -312,17 +312,17 @@ class DatasetResplitDialog(QDialog):
         
         # 快速设置按钮
         quick_layout = QHBoxLayout()
-        quick_layout.addWidget(QLabel("Quick Set:"))
+        quick_layout.addWidget(QLabel(self.tr("Quick Set:")))
         
-        btn_7_2_1 = QPushButton("7:2:1")
+        btn_7_2_1 = QPushButton(self.tr("7:2:1"))
         btn_7_2_1.clicked.connect(lambda: self._quick_set_custom(0.7, 0.2, 0.1))
         quick_layout.addWidget(btn_7_2_1)
         
-        btn_8_1_1 = QPushButton("8:1:1")
+        btn_8_1_1 = QPushButton(self.tr("8:1:1"))
         btn_8_1_1.clicked.connect(lambda: self._quick_set_custom(0.8, 0.1, 0.1))
         quick_layout.addWidget(btn_8_1_1)
         
-        btn_6_2_2 = QPushButton("6:2:2")
+        btn_6_2_2 = QPushButton(self.tr("6:2:2"))
         btn_6_2_2.clicked.connect(lambda: self._quick_set_custom(0.6, 0.2, 0.2))
         quick_layout.addWidget(btn_6_2_2)
         
@@ -351,9 +351,7 @@ class DatasetResplitDialog(QDialog):
         layout.setContentsMargins(0, 0, 0, 0)
         
         # 说明
-        desc_label = QLabel(
-            "Select samples from the left and assign them to a dataset in the table on the right."
-        )
+        desc_label = QLabel(self.tr("Select samples from the left and assign them to a dataset in the table on the right."))
         desc_label.setWordWrap(True)
         desc_label.setStyleSheet("color: gray; font-size: 11px;")
         layout.addWidget(desc_label)
@@ -366,7 +364,7 @@ class DatasetResplitDialog(QDialog):
         left_layout = QVBoxLayout(left_widget)
         left_layout.setContentsMargins(5, 5, 5, 5)
         
-        left_layout.addWidget(QLabel("Available Samples:"))
+        left_layout.addWidget(QLabel(self.tr("Available Samples:")))
         
         self.tree_available_samples = QTreeWidget()
         self.tree_available_samples.setHeaderLabels(["Sample Name", "Current Split"])
@@ -375,11 +373,11 @@ class DatasetResplitDialog(QDialog):
         
         # 添加样本按钮
         add_buttons_layout = QHBoxLayout()
-        self.btn_add_selected = QPushButton("Add Selected →")
+        self.btn_add_selected = QPushButton(self.tr("Add Selected →"))
         self.btn_add_selected.clicked.connect(self._add_selected_samples)
         add_buttons_layout.addWidget(self.btn_add_selected)
         
-        self.btn_add_all = QPushButton("Add All →")
+        self.btn_add_all = QPushButton(self.tr("Add All →"))
         self.btn_add_all.clicked.connect(self._add_all_samples)
         add_buttons_layout.addWidget(self.btn_add_all)
         
@@ -394,24 +392,24 @@ class DatasetResplitDialog(QDialog):
         
         # 批量操作工具栏
         toolbar_layout = QHBoxLayout()
-        toolbar_layout.addWidget(QLabel("Batch Assign:"))
+        toolbar_layout.addWidget(QLabel(self.tr("Batch Assign:")))
         
         self.combo_batch_target = QComboBox()
         self.combo_batch_target.addItems(["Train", "Val", "Test"])
         toolbar_layout.addWidget(self.combo_batch_target)
         
-        self.btn_assign_selected = QPushButton("Assign Selected")
+        self.btn_assign_selected = QPushButton(self.tr("Assign Selected"))
         self.btn_assign_selected.clicked.connect(self._assign_selected_samples)
         toolbar_layout.addWidget(self.btn_assign_selected)
         
-        self.btn_remove_selected = QPushButton("← Remove Selected")
+        self.btn_remove_selected = QPushButton(self.tr("← Remove Selected"))
         self.btn_remove_selected.clicked.connect(self._remove_selected_samples)
         toolbar_layout.addWidget(self.btn_remove_selected)
         
         toolbar_layout.addStretch()
         middle_layout.addLayout(toolbar_layout)
         
-        middle_layout.addWidget(QLabel("Sample Assignment:"))
+        middle_layout.addWidget(QLabel(self.tr("Sample Assignment:")))
         
         # Samples分配表格
         self.table_sample_assignment = QTableWidget()
@@ -439,7 +437,7 @@ class DatasetResplitDialog(QDialog):
         right_layout.setContentsMargins(5, 5, 5, 5)
         
         # 实时统计
-        stats_group = QGroupBox("Assignment Stats")
+        stats_group = QGroupBox(self.tr("Assignment Stats"))
         stats_group_layout = QVBoxLayout(stats_group)
         
         self.label_assignment_stats = QLabel()
@@ -452,25 +450,25 @@ class DatasetResplitDialog(QDialog):
         right_layout.addWidget(stats_group)
         
         # 快速操作
-        quick_group = QGroupBox("Quick Actions")
+        quick_group = QGroupBox(self.tr("Quick Actions"))
         quick_layout = QVBoxLayout(quick_group)
         
-        self.btn_auto_assign_721 = QPushButton("Auto Assign 7:2:1")
+        self.btn_auto_assign_721 = QPushButton(self.tr("Auto Assign 7:2:1"))
         self.btn_auto_assign_721.clicked.connect(lambda: self._auto_assign_ratio(0.7, 0.2, 0.1))
         quick_layout.addWidget(self.btn_auto_assign_721)
         
-        self.btn_auto_assign_811 = QPushButton("Auto Assign 8:1:1")
+        self.btn_auto_assign_811 = QPushButton(self.tr("Auto Assign 8:1:1"))
         self.btn_auto_assign_811.clicked.connect(lambda: self._auto_assign_ratio(0.8, 0.1, 0.1))
         quick_layout.addWidget(self.btn_auto_assign_811)
         
-        self.btn_clear_all = QPushButton("Clear Assignments")
+        self.btn_clear_all = QPushButton(self.tr("Clear Assignments"))
         self.btn_clear_all.clicked.connect(self._clear_all_assignments)
         quick_layout.addWidget(self.btn_clear_all)
         
         right_layout.addWidget(quick_group)
         
         # 变更日志
-        log_group = QGroupBox("Action Log")
+        log_group = QGroupBox(self.tr("Action Log"))
         log_layout = QVBoxLayout(log_group)
         
         self.text_assignment_log = QTextEdit()
@@ -620,7 +618,7 @@ class DatasetResplitDialog(QDialog):
         self.table_sample_assignment.setCellWidget(row, 1, split_combo)
         
         # 移除按钮
-        remove_btn = QPushButton("Remove")
+        remove_btn = QPushButton(self.tr("Remove"))
         remove_btn.clicked.connect(lambda checked, name=sample_name: self._remove_sample_assignment(name))
         self.table_sample_assignment.setCellWidget(row, 2, remove_btn)
     
@@ -639,7 +637,7 @@ class DatasetResplitDialog(QDialog):
             selected_rows.add(item.row())
         
         if not selected_rows:
-            QMessageBox.information(self, "Tip", "Please select samples to assign first.")
+            QMessageBox.information(self, self.tr("Tip"), self.tr("Please select samples to assign first."))
             return
         
         target_split = self.combo_batch_target.currentText()
@@ -658,7 +656,7 @@ class DatasetResplitDialog(QDialog):
             selected_rows.append(item.row())
         
         if not selected_rows:
-            QMessageBox.information(self, "Tip", "Please select samples to remove first.")
+            QMessageBox.information(self, self.tr("Tip"), self.tr("Please select samples to remove first."))
             return
         
         # 按行号倒序排列，避免删除时索引变化
@@ -697,7 +695,7 @@ class DatasetResplitDialog(QDialog):
     def _auto_assign_ratio(self, train_ratio, val_ratio, test_ratio):
         """按比例自动分配样本"""
         if not self.sample_assignments:
-            QMessageBox.information(self, "Tip", "Please add samples to the assignment list first.")
+            QMessageBox.information(self, self.tr("Tip"), self.tr("Please add samples to the assignment list first."))
             return
         
         import random
@@ -924,13 +922,13 @@ class DatasetResplitDialog(QDialog):
             else:
                 # 选择模式
                 if not hasattr(self, 'assignment_counts') or not self.sample_assignments:
-                    QMessageBox.warning(self, "Error", "Please add samples and complete assignments first.")
+                    QMessageBox.warning(self, self.tr("Error"), self.tr("Please add samples and complete assignments first."))
                     return
                 
                 # 检查是否所有样本都已分配
                 total_assigned = len(self.sample_assignments)
                 if total_assigned == 0:
-                    QMessageBox.warning(self, "Error", "Please assign at least one sample.")
+                    QMessageBox.warning(self, self.tr("Error"), self.tr("Please assign at least one sample."))
                     return
                 
                 # Confirm分配

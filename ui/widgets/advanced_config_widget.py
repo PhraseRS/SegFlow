@@ -48,11 +48,11 @@ class AdvancedConfigWidget(QWidget):
         main_layout.setSpacing(6)
 
         self._expert_dialog = None
-        self.button_open_expert_card = QPushButton("🛠️ Enable Expert Settings")
+        self.button_open_expert_card = QPushButton(self.tr("🛠️ Enable Expert Settings"))
         self.button_open_expert_card.setStyleSheet(
             "font-weight: bold; color: #424242; text-align: left; padding: 6px;"
         )
-        self.button_open_expert_card.setToolTip("打开独立卡片，调整 MMSegmentation 的底层或较不常用的超参数")
+        self.button_open_expert_card.setToolTip(self.tr("打开独立卡片，调整 MMSegmentation 的底层或较不常用的超参数"))
         self.button_open_expert_card.clicked.connect(self._show_expert_card)
         main_layout.addWidget(self.button_open_expert_card)
 
@@ -69,7 +69,7 @@ class AdvancedConfigWidget(QWidget):
         card_layout.setContentsMargins(0, 0, 0, 0)
         card_layout.setSpacing(6)
 
-        title_label = QLabel("🛠️ Expert Settings")
+        title_label = QLabel(self.tr("🛠️ Expert Settings"))
         title_label.setStyleSheet("font-weight: bold; color: #424242; padding: 4px 4px 0 4px;")
         card_layout.addWidget(title_label)
 
@@ -165,12 +165,12 @@ class AdvancedConfigWidget(QWidget):
         override_layout = QVBoxLayout()
         override_layout.setContentsMargins(12, 4, 4, 8)
 
-        lbl_info = QLabel("Enter parameters to forcefully override here (JSON format):\nExample: {\"model.decode_head.dropout_ratio\": 0.2}")
+        lbl_info = QLabel(self.tr("Enter parameters to forcefully override here (JSON format):\nExample: {\"model.decode_head.dropout_ratio\": 0.2}"))
         lbl_info.setStyleSheet("color: #757575; font-size: 11px;")
         override_layout.addWidget(lbl_info)
 
         self.text_override = QPlainTextEdit()
-        self.text_override.setPlaceholderText("{\n    \n}")
+        self.text_override.setPlaceholderText(self.tr("{\n    \n}"))
         self.text_override.setMaximumHeight(100)
         self.text_override.setStyleSheet("font-family: Consolas, monospace; background-color: #FAFAFA;")
 
@@ -179,7 +179,7 @@ class AdvancedConfigWidget(QWidget):
 
         override_layout.addWidget(self.text_override)
 
-        self.lbl_json_error = QLabel("")
+        self.lbl_json_error = QLabel(self.tr(""))
         self.lbl_json_error.setStyleSheet("color: #D32F2F; font-size: 11px;")
         self.lbl_json_error.setVisible(False)
         override_layout.addWidget(self.lbl_json_error)

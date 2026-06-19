@@ -117,28 +117,28 @@ class WeightSelectionWidget(QWidget):
         tab_public_layout.setContentsMargins(6, 6, 6, 6)
         tab_public_layout.setSpacing(4)
 
-        self.check_use_pretrained = QCheckBox("Use Pretrained Weights")
+        self.check_use_pretrained = QCheckBox(self.tr("Use Pretrained Weights"))
         self.check_use_pretrained.setChecked(True)
         tab_public_layout.addWidget(self.check_use_pretrained)
 
         pretrained_row = QHBoxLayout()
-        pretrained_row.addWidget(QLabel("Pretrained Model:"))
+        pretrained_row.addWidget(QLabel(self.tr("Pretrained Model:")))
         self.combo_pretrained_model = QComboBox()
         self.combo_pretrained_model.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
         pretrained_row.addWidget(self.combo_pretrained_model)
-        self.btn_download = QPushButton("⬇ Download")
+        self.btn_download = QPushButton(self.tr("⬇ Download"))
         self.btn_download.setMinimumWidth(85)
-        self.btn_download.setToolTip("下载所选预训练权重到 pretrain/ 目录")
+        self.btn_download.setToolTip(self.tr("下载所选预训练权重到 pretrain/ 目录"))
         pretrained_row.addWidget(self.btn_download)
         
-        self.btn_pause = QPushButton("⏸ Pause")
+        self.btn_pause = QPushButton(self.tr("⏸ Pause"))
         self.btn_pause.setMinimumWidth(80)
         self.btn_pause.setVisible(False)
         pretrained_row.addWidget(self.btn_pause)
         
-        self.btn_cancel = QPushButton("⏹ Cancel")
+        self.btn_cancel = QPushButton(self.tr("⏹ Cancel"))
         self.btn_cancel.setMinimumWidth(80)
         self.btn_cancel.setVisible(False)
         pretrained_row.addWidget(self.btn_cancel)
@@ -158,19 +158,19 @@ class WeightSelectionWidget(QWidget):
         tab_custom_layout.setContentsMargins(6, 6, 6, 6)
         tab_custom_layout.setSpacing(4)
 
-        self.check_use_custom_weight = QCheckBox("Use Custom Weights (.pth)")
+        self.check_use_custom_weight = QCheckBox(self.tr("Use Custom Weights (.pth)"))
         tab_custom_layout.addWidget(self.check_use_custom_weight)
 
         weight_row = QHBoxLayout()
         self.line_custom_weight = QLineEdit()
-        self.line_custom_weight.setPlaceholderText("Select .pth 权重文件...")
+        self.line_custom_weight.setPlaceholderText(self.tr("Select .pth 权重文件..."))
         self.line_custom_weight.setReadOnly(True)
-        self.btn_browse_weight = QPushButton("Browse...")
+        self.btn_browse_weight = QPushButton(self.tr("Browse..."))
         weight_row.addWidget(self.line_custom_weight)
         weight_row.addWidget(self.btn_browse_weight)
         tab_custom_layout.addLayout(weight_row)
 
-        self.lbl_local_hint = QLabel("")
+        self.lbl_local_hint = QLabel(self.tr(""))
         self.lbl_local_hint.setStyleSheet("color: #E65100; font-size: 11px;")
         tab_custom_layout.addWidget(self.lbl_local_hint)
 
@@ -195,7 +195,7 @@ class WeightSelectionWidget(QWidget):
         self.combo_pretrained_model.clear()
         models = PRETRAINED_MODELS.get(backbone_name, [])
         self.combo_pretrained_model.addItems(models)
-        self.lbl_local_hint.setText("")
+        self.lbl_local_hint.setText(self.tr(""))
         self._scan_local_pretrain(backbone_name)
         self.config_changed.emit()
 
@@ -211,7 +211,7 @@ class WeightSelectionWidget(QWidget):
             if keyword in fname.lower() and fname.endswith('.pth'):
                 full_path = os.path.join(pretrain_dir, fname)
                 self.line_custom_weight.setText(full_path)
-                self.lbl_local_hint.setText("⚡ Matched weights found locally, check to use")
+                self.lbl_local_hint.setText(self.tr("⚡ Matched weights found locally, check to use"))
                 # 移除强制 setChecked(True) 避免覆盖用户意图
                 self.config_changed.emit()
                 return
@@ -254,7 +254,7 @@ class WeightSelectionWidget(QWidget):
         self.btn_download.setVisible(False)
         self.btn_pause.setVisible(True)
         self.btn_cancel.setVisible(True)
-        self.btn_pause.setText("⏸ Pause")
+        self.btn_pause.setText(self.tr("⏸ Pause"))
         self.progress_download.setValue(0)
         self.progress_download.setVisible(True)
 
@@ -270,17 +270,17 @@ class WeightSelectionWidget(QWidget):
         self.btn_cancel.setVisible(False)
         self.progress_download.setVisible(False)
         self.progress_download.setValue(0)
-        self.btn_pause.setText("⏸ Pause")
+        self.btn_pause.setText(self.tr("⏸ Pause"))
 
     def _on_pause_resume_download(self):
         if not self._download_worker:
             return
         if self._download_worker._paused:
             self._download_worker.resume()
-            self.btn_pause.setText("⏸ Pause")
+            self.btn_pause.setText(self.tr("⏸ Pause"))
         else:
             self._download_worker.pause()
-            self.btn_pause.setText("▶ Resume")
+            self.btn_pause.setText(self.tr("▶ Resume"))
 
     def _on_cancel_download(self):
         if self._download_worker:

@@ -49,7 +49,7 @@ class ClassConfigWidget(QWidget):
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(4)
 
-        hint = QLabel("定义数据集的Class Name和可视化Color（第 0 行通常为背景类）")
+        hint = QLabel(self.tr("定义数据集的Class Name和可视化Color（第 0 行通常为背景类）"))
         hint.setStyleSheet("color: #555; font-size: 11px;")
         layout.addWidget(hint)
 
@@ -66,8 +66,8 @@ class ClassConfigWidget(QWidget):
         layout.addWidget(self.table)
 
         btn_row = QHBoxLayout()
-        self.btn_add = QPushButton("+ Add Class")
-        self.btn_del = QPushButton("- Delete Selected")
+        self.btn_add = QPushButton(self.tr("+ Add Class"))
+        self.btn_del = QPushButton(self.tr("- Delete Selected"))
         btn_row.addWidget(self.btn_add)
         btn_row.addWidget(self.btn_del)
         btn_row.addStretch()
@@ -127,7 +127,7 @@ class ClassConfigWidget(QWidget):
 
     def _del_row(self):
         if self.table.rowCount() <= 2:
-            QMessageBox.information(self, "Delete Class", "Keep at least 2 classes.")
+            QMessageBox.information(self, self.tr("Delete Class"), self.tr("Keep at least 2 classes."))
             return
         rows = sorted({idx.row() for idx in self.table.selectedIndexes()}, reverse=True)
         for r in rows:

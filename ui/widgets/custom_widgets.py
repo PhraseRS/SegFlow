@@ -193,7 +193,7 @@ class ParamRow(QWidget):
         self._recommend_reason = reason
 
         # 显示 💡 图标
-        self._recommend_btn.setText("💡")
+        self._recommend_btn.setText(self.tr("💡"))
         self._recommend_btn.setVisible(True)
         self._recommend_btn.setToolTip(
             f"Recommended value: {value}\n{reason}\n\n🔹 Click to apply this recommendation"
@@ -210,7 +210,7 @@ class ParamRow(QWidget):
         # 填入推荐值
         self.set_value(self._recommended_value)
         # 图标切为 ✅
-        self._recommend_btn.setText("✅")
+        self._recommend_btn.setText(self.tr("✅"))
         self._recommend_btn.setToolTip(
             f"已应用Recommended value: {self._recommended_value}\n{self._recommend_reason}"
         )

@@ -120,7 +120,7 @@ class PipelineBlueprintWidget(QWidget):
         for i, key in enumerate(keys):
             layout.addWidget(self.nodes[key], 1)
             if i < len(keys) - 1:
-                arrow = QLabel("➡️")
+                arrow = QLabel(self.tr("➡️"))
                 arrow.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 arrow.setStyleSheet("color: #ADB5BD; font-size: 14px;")
                 layout.addWidget(arrow, 0)
@@ -151,7 +151,7 @@ class AugmentationPreviewStrip(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        title = QLabel("Live Augmentation Preview")
+        title = QLabel(self.tr("Live Augmentation Preview"))
         title.setStyleSheet("font-weight: bold; color: #495057;")
         layout.addWidget(title)
 
@@ -325,7 +325,7 @@ class ConfigHealthBar(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        title = QLabel("Configuration Health Score")
+        title = QLabel(self.tr("Configuration Health Score"))
         title.setStyleSheet("font-weight: bold; color: #495057;")
         layout.addWidget(title)
 
@@ -439,7 +439,7 @@ class TaskConfigBlueprintWidget(QWidget):
         layout.setSpacing(24)
 
         # 标题区
-        header = QLabel("Task Configuration Dashboard")
+        header = QLabel(self.tr("Task Configuration Dashboard"))
         header.setStyleSheet("font-size: 18px; font-weight: bold; color: #212529;")
         layout.addWidget(header)
 
@@ -638,7 +638,7 @@ class LossCurvePlaceholder(QWidget):
         """)
         frame_layout = QVBoxLayout(self.frame)
         
-        label = QLabel("Reserved for Dynamic Loss Chart Integration")
+        label = QLabel(self.tr("Reserved for Dynamic Loss Chart Integration"))
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         label.setStyleSheet("color: #ADB5BD; font-size: 14px; font-weight: bold;")
         
@@ -653,7 +653,7 @@ class PredictionEvolutionStrip(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         
-        title = QLabel("Live Prediction Evolution")
+        title = QLabel(self.tr("Live Prediction Evolution"))
         title.setStyleSheet("font-weight: bold; color: #495057;")
         layout.addWidget(title)
         
@@ -827,9 +827,9 @@ class PredictionEvolutionStrip(QWidget):
                     pix = QPixmap.fromImage(qimg).scaled(IMG_SIZE, IMG_SIZE, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
                     img_lbl.setPixmap(pix)
                 else:
-                    img_lbl.setText("Img")
+                    img_lbl.setText(self.tr("Img"))
             else:
-                img_lbl.setText("No Img")
+                img_lbl.setText(self.tr("No Img"))
 
             # --- Ground Truth ---
             gt_lbl = QLabel()
@@ -840,7 +840,7 @@ class PredictionEvolutionStrip(QWidget):
             if not gt_pix.isNull():
                 gt_lbl.setPixmap(gt_pix)
             else:
-                gt_lbl.setText("GT")
+                gt_lbl.setText(self.tr("GT"))
 
             # --- Prediction ---
             pred_lbl = QLabel()
@@ -851,7 +851,7 @@ class PredictionEvolutionStrip(QWidget):
             if not pred_pix.isNull():
                 pred_lbl.setPixmap(pred_pix)
             else:
-                pred_lbl.setText("Pred")
+                pred_lbl.setText(self.tr("Pred"))
 
             panels_layout.addLayout(_make_panel("Input", img_lbl))
             panels_layout.addLayout(_make_panel("GT", gt_lbl))
@@ -906,7 +906,7 @@ class TrainingExecutionDashboard(QWidget):
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(16)
         
-        header = QLabel("Live Training Center")
+        header = QLabel(self.tr("Live Training Center"))
         header.setStyleSheet("font-size: 18px; font-weight: bold; color: #212529;")
         layout.addWidget(header)
         

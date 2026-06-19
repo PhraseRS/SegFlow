@@ -36,7 +36,7 @@ class AdvisorConfigWidget(QWidget):
         layout.setSpacing(8)
 
         # 生成推荐按钮 (默认状态下显示)
-        self.btn_generate = QPushButton("✨ Get Data-Driven Recommendations")
+        self.btn_generate = QPushButton(self.tr("✨ Get Data-Driven Recommendations"))
         self.btn_generate.setStyleSheet("""
             QPushButton {
                 background-color: #F3E5F5;
@@ -54,7 +54,7 @@ class AdvisorConfigWidget(QWidget):
         layout.addWidget(self.btn_generate)
 
         # 状态标签 (加载时显示)
-        self.label_status = QLabel("⏳ Generating recommended config based on analysis...")
+        self.label_status = QLabel(self.tr("⏳ Generating recommended config based on analysis..."))
         self.label_status.setStyleSheet("color: #666; font-style: italic; padding: 4px;")
         self.label_status.setVisible(False)
         layout.addWidget(self.label_status)
@@ -69,7 +69,7 @@ class AdvisorConfigWidget(QWidget):
         layout.addWidget(self.widget_summary)
 
         # 一键应用按钮
-        self.btn_apply_all = QPushButton("✅ Apply All")
+        self.btn_apply_all = QPushButton(self.tr("✅ Apply All"))
         self.btn_apply_all.setStyleSheet("""
             QPushButton {
                 background-color: #E3F2FD;
@@ -107,7 +107,7 @@ class AdvisorConfigWidget(QWidget):
         
         # 分析并添加摘要项
         if 'in_channels' in params:
-            lbl = QLabel(f"· <b>In Channels</b>: Recommend <b>{params['in_channels']}</b> <span style='color: #666;'>(Affected by image bands)</span>")
+            lbl = QLabel(f"· <b>{self.tr('In Channels')}</b>: {self.tr('Recommend')} <b>{params['in_channels']}</b> <span style='color: #666;'>({self.tr('Affected by image bands')})</span>")
             lbl.setTextFormat(Qt.RichText)
             self.layout_summary.addWidget(lbl)
             num_items += 1
@@ -115,29 +115,29 @@ class AdvisorConfigWidget(QWidget):
         if 'crop_size' in params:
             crop = params['crop_size']
             crop_val = crop[0] if isinstance(crop, (list, tuple)) else crop
-            lbl = QLabel(f"· <b>Crop Size</b>: Recommend <b>{crop_val}</b> <span style='color: #666;'>(Based on min image width × 0.8)</span>")
+            lbl = QLabel(f"· <b>{self.tr('Crop Size')}</b>: {self.tr('Recommend')} <b>{crop_val}</b> <span style='color: #666;'>({self.tr('Based on min image width × 0.8')})</span>")
             lbl.setTextFormat(Qt.RichText)
             self.layout_summary.addWidget(lbl)
             num_items += 1
             
         if 'class_weight' in params and params['class_weight']:
-            lbl = QLabel(f"· <b>Loss Weighting</b>: Recommend <b>Enable</b> <span style='color: #666;'>(For class imbalance)</span>")
+            lbl = QLabel(f"· <b>{self.tr('Loss Weighting')}</b>: {self.tr('Recommend')} <b>{self.tr('Enable')}</b> <span style='color: #666;'>({self.tr('For class imbalance')})</span>")
             lbl.setTextFormat(Qt.RichText)
             self.layout_summary.addWidget(lbl)
             num_items += 1
             
         if 'loss_config' in params and params['loss_config'] and 'type' in params['loss_config']:
-            lbl = QLabel(f"· <b>Loss Function</b>: Recommend <b>{params['loss_config']['type']}</b> <span style='color: #666;'>({params['loss_config'].get('_reason', '')})</span>")
+            lbl = QLabel(f"· <b>{self.tr('Loss Function')}</b>: {self.tr('Recommend')} <b>{params['loss_config']['type']}</b> <span style='color: #666;'>({self.tr(params['loss_config'].get('_reason', ''))})</span>")
             lbl.setTextFormat(Qt.RichText)
             self.layout_summary.addWidget(lbl)
             num_items += 1
 
         if num_items > 0:
-            header = QLabel(f"💡 Based on dataset features, generated <b>{num_items}</b> recommendations waiting to be applied:")
+            header = QLabel(f"💡 {self.tr('Based on dataset features, generated')} <b>{num_items}</b> {self.tr('recommendations waiting to be applied:')}")
             header.setTextFormat(Qt.RichText)
             self.layout_summary.insertWidget(0, header)
             
-            note = QLabel("⚠ Recommendations will be distributed to respective fields (marked with 💡)\nYou can also click the lightbulb icons individually to apply.")
+            note = QLabel(self.tr("⚠ Recommendations will be distributed to respective fields (marked with 💡)\nYou can also click the lightbulb icons individually to apply."))
             note.setStyleSheet("color: #888; font-size: 11px;")
             self.layout_summary.addWidget(note)
 

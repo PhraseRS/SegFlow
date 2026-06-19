@@ -457,6 +457,57 @@ class MainWindow(QMainWindow):
         self.ui.verticalLayout_actions.addWidget(self.btn_send_to_inference)
         self.btn_send_to_inference.clicked.connect(self._on_send_to_inference_clicked)
         self._last_work_dir = None
+        
+        # 语言切换菜单
+        self._setup_language_menu()
+
+    def _setup_language_menu(self):
+        from utils.i18n_manager import I18nManager
+        from PySide6.QtWidgets import QMenu, QMessageBox
+        from PySide6.QtGui import QActionGroup
+        
+        # 创建 Language 菜单
+        self.menu_language = QMenu("Language", self)
+        
+        # 获取当前语言
+        current_lang = I18nManager.get_current_language()
+        
+        # 动作组，确保单选
+        lang_group = QActionGroup(self)
+        
+        action_en = QAction("English", self, checkable=True)
+        if current_lang == "en":
+            action_en.setChecked(True)
+        action_en.triggered.connect(lambda: self._change_language("en"))
+        lang_group.addAction(action_en)
+        self.menu_language.addAction(action_en)
+        
+        action_zh = QAction("简体中文", self, checkable=True)
+        if current_lang == "zh_CN":
+            action_zh.setChecked(True)
+        action_zh.triggered.connect(lambda: self._change_language("zh_CN"))
+        lang_group.addAction(action_zh)
+        self.menu_language.addAction(action_zh)
+        
+        # 插入到 menu_tools 下
+        if hasattr(self.ui, 'menu_tools'):
+            self.ui.menu_tools.addMenu(self.menu_language)
+
+    def _change_language(self, lang_code: str):
+        from utils.i18n_manager import I18nManager
+        from PySide6.QtWidgets import QMessageBox
+        
+        if I18nManager.get_current_language() == lang_code:
+            return
+            
+        I18nManager.set_language(lang_code)
+        
+        QMessageBox.information(
+            self, 
+            "Language Changed" if lang_code == "en" else "语言已更改", 
+            "Language has been changed. Please restart the application to take effect.\n\n"
+            "语言已更改，请重启应用程序生效。"
+        )
 
     def _setup_project_actions(self):
         self.action_new_project = QAction("新建工程", self)

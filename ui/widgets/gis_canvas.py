@@ -112,13 +112,13 @@ class GISCanvasWidget(QWidget):
         """为 Sidebar 的添加按钮设置菜单"""
         menu = QMenu(button)
         
-        action_base = QAction("📂 Set Base Image...", menu)
+        action_base = QAction(self.tr("📂 Set Base Image..."), menu)
         action_base.triggered.connect(self.on_set_base_image)
         menu.addAction(action_base)
         
         menu.addSeparator()
         
-        action_overlay = QAction("➕ Add Overlay Raster...", menu)
+        action_overlay = QAction(self.tr("➕ Add Overlay Raster..."), menu)
         action_overlay.triggered.connect(self.on_add_overlay)
         menu.addAction(action_overlay)
         
@@ -266,7 +266,7 @@ class GISCanvasWidget(QWidget):
     def on_add_overlay(self) -> None:
         """添加叠加层"""
         if self._base_profile is None:
-            QMessageBox.warning(self, "Tip", "请先设置基础图像")
+            QMessageBox.warning(self, self.tr("Tip"), self.tr("请先设置基础图像"))
             return
             
         file_path, _ = QFileDialog.getOpenFileName(

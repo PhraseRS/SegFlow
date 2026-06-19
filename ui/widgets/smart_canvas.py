@@ -725,19 +725,19 @@ class SmartCanvas(QGraphicsView):
         self._context_menu = QMenu(self)
 
         # Zoom Full - 适应窗口
-        self._action_zoom_full = QAction("🔲 Zoom Full", self)
+        self._action_zoom_full = QAction(self.tr("🔲 Zoom Full"), self)
         self._action_zoom_full.triggered.connect(self._on_zoom_full)
         self._context_menu.addAction(self._action_zoom_full)
 
         # Zoom to Native Resolution - 原始分辨率 (1:1)
-        self._action_zoom_native = QAction("🔍 Native Resolution (1:1)", self)
+        self._action_zoom_native = QAction(self.tr("🔍 Native Resolution (1:1)"), self)
         self._action_zoom_native.triggered.connect(self._on_zoom_native)
         self._context_menu.addAction(self._action_zoom_native)
 
         self._context_menu.addSeparator()
 
         # Zoom to Last - 恢复上次缩放
-        self._action_zoom_last = QAction("↩️ Zoom to Last", self)
+        self._action_zoom_last = QAction(self.tr("↩️ Zoom to Last"), self)
         self._action_zoom_last.triggered.connect(self._on_zoom_last)
         self._action_zoom_last.setEnabled(False)  # 初始禁用
         self._context_menu.addAction(self._action_zoom_last)

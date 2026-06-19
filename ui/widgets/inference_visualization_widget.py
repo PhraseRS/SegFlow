@@ -32,7 +32,7 @@ class InferenceVisualizationWidget(QWidget):
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
 
-        self.image_label = QLabel("暂无可视化结果")
+        self.image_label = QLabel(self.tr("暂无可视化结果"))
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.image_label.setScaledContents(False)
 
@@ -98,7 +98,7 @@ class InferenceVisualizationWidget(QWidget):
         self._cached_mask = None
         self._cached_source = None
         self.image_label.clear()
-        self.image_label.setText("暂无可视化结果")
+        self.image_label.setText(self.tr("暂无可视化结果"))
 
     def _render_from_cache(
         self,
@@ -107,7 +107,7 @@ class InferenceVisualizationWidget(QWidget):
         alpha: float,
     ):
         if self._cached_image is None or self._cached_mask is None:
-            self.image_label.setText("暂无可视化结果")
+            self.image_label.setText(self.tr("暂无可视化结果"))
             return
 
         try:

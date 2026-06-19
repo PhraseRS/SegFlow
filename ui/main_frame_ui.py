@@ -213,16 +213,16 @@ class Ui_MainWindow(object):
         self.analysis_panel.setObjectName(u"analysis_panel")
         
         # === 顶部：数据集概览（永远可见）===
-        self.panel_datasetOverview = CollapsiblePanel("Dataset Overview", expanded=True)
+        self.panel_datasetOverview = CollapsiblePanel(QCoreApplication.translate("MainWindow", "Dataset Overview", None), expanded=True)
         self.widget_datasetOverview = DatasetOverviewWidget()
         self.widget_datasetOverview.setObjectName(u"widget_datasetOverview")
         self.panel_datasetOverview.add_widget(self.widget_datasetOverview)
         # 添加 Resplit 按钮到 Header（蓝色强调）
         self.btn_resplit = self.panel_datasetOverview.add_header_action(
-            text="Resplit",
+            text=QCoreApplication.translate("MainWindow", "Resplit", None),
             icon_name='fa5s.sync-alt',
             icon_color='#2196F3',
-            tooltip="Resplit Dataset (Train/Val/Test)"
+            tooltip=QCoreApplication.translate("MainWindow", "Resplit Dataset (Train/Val/Test)", None)
         )
         self.btn_resplit.setEnabled(False)  # 默认禁用，有数据时启用
         self.analysis_panel.set_overview_widget(self.panel_datasetOverview)
@@ -232,7 +232,7 @@ class Ui_MainWindow(object):
         self.collapsible_dataProfile.setObjectName(u"collapsible_dataProfile")
         
         # 面板1: 类别分布 (Class Distribution)
-        self.panel_classDistribution = self.collapsible_dataProfile.add_panel("Class Distribution", expanded=True)
+        self.panel_classDistribution = self.collapsible_dataProfile.add_panel(QCoreApplication.translate("MainWindow", "Class Distribution", None), expanded=True)
         self.widget_classDistribution = ClassDistributionWidget()
         self.widget_classDistribution.setObjectName(u"widget_classDistribution")
         self.panel_classDistribution.add_widget(self.widget_classDistribution)
@@ -240,13 +240,13 @@ class Ui_MainWindow(object):
         self.panel_classDistribution.add_header_widget(self.widget_classDistribution.get_header_button())
         
         # 面板2: 覆盖率分析 (Coverage Analysis)
-        self.panel_coverageAnalysis = self.collapsible_dataProfile.add_panel("Coverage Analysis", expanded=False)
+        self.panel_coverageAnalysis = self.collapsible_dataProfile.add_panel(QCoreApplication.translate("MainWindow", "Coverage Analysis", None), expanded=False)
         self.widget_coverageAnalysis = CoverageAnalysisCard()
         self.widget_coverageAnalysis.setObjectName(u"widget_coverageAnalysis")
         self.panel_coverageAnalysis.add_widget(self.widget_coverageAnalysis)
         
         # 面板3: 健康检查 (Health Check)
-        self.panel_healthCheck = self.collapsible_dataProfile.add_panel("Health Check", expanded=False)
+        self.panel_healthCheck = self.collapsible_dataProfile.add_panel(QCoreApplication.translate("MainWindow", "Health Check", None), expanded=False)
         self.widget_healthCheck = HealthCheckCard()
         self.widget_healthCheck.setObjectName(u"widget_healthCheck")
         self.panel_healthCheck.add_widget(self.widget_healthCheck)
@@ -517,8 +517,7 @@ class Ui_MainWindow(object):
         self.menu_view.addAction(self.action_zoomIn)
         self.menu_view.addAction(self.action_zoomOut)
         self.menu_view.addAction(self.action_fitToWindow)
-        self.menu_tools.addAction(self.action_train)
-        self.menu_tools.addAction(self.action_inference)
+
         self.menu_help.addAction(self.action_about)
         self.toolBar.addAction(self.action_open)
         self.toolBar.addAction(self.action_save)

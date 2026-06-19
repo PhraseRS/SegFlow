@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QPainter, QColor, QFont, QPen
@@ -82,7 +82,7 @@ class DatasetOverviewWidget(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
-        self.label_total = QLabel("0")
+        self.label_total = QLabel(self.tr("0"))
         self.label_total.setObjectName("label_total_samples")
         font = self.label_total.font()
         font.setPointSize(24)
@@ -90,7 +90,7 @@ class DatasetOverviewWidget(QWidget):
         self.label_total.setFont(font)
         self.label_total.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.label_total)
-        self.label_total_desc = QLabel("Total Samples")
+        self.label_total_desc = QLabel(self.tr("Total Samples"))
         self.label_total_desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.label_total_desc.setStyleSheet("color: gray; font-size: 10px;")
         layout.addWidget(self.label_total_desc)
@@ -98,11 +98,11 @@ class DatasetOverviewWidget(QWidget):
         layout.addWidget(self.stacked_bar)
         legend_layout = QHBoxLayout()
         legend_layout.setSpacing(12)
-        self.legend_train = self._create_legend_item("Train", StackedBarWidget.COLORS['train'])
+        self.legend_train = self._create_legend_item(self.tr("Train"), StackedBarWidget.COLORS['train'])
         legend_layout.addWidget(self.legend_train)
-        self.legend_val = self._create_legend_item("Val", StackedBarWidget.COLORS['val'])
+        self.legend_val = self._create_legend_item(self.tr("Val"), StackedBarWidget.COLORS['val'])
         legend_layout.addWidget(self.legend_val)
-        self.legend_test = self._create_legend_item("Test", StackedBarWidget.COLORS['test'])
+        self.legend_test = self._create_legend_item(self.tr("Test"), StackedBarWidget.COLORS['test'])
         legend_layout.addWidget(self.legend_test)
         legend_layout.addStretch()
         layout.addLayout(legend_layout)
@@ -133,9 +133,9 @@ class DatasetOverviewWidget(QWidget):
             train_pct = train_count / total * 100
             val_pct = val_count / total * 100
             test_pct = test_count / total * 100
-            detail_text = f"Train: {train_count:,} ({train_pct:.1f}%) | Val: {val_count:,} ({val_pct:.1f}%) | Test: {test_count:,} ({test_pct:.1f}%)"
+            detail_text = f"{self.tr('Train')}: {train_count:,} ({train_pct:.1f}%) | {self.tr('Val')}: {val_count:,} ({val_pct:.1f}%) | {self.tr('Test')}: {test_count:,} ({test_pct:.1f}%)"
         else:
-            detail_text = "No data"
+            detail_text = self.tr("No Data")
         self.label_detail.setText(detail_text)
 
     def clear(self):

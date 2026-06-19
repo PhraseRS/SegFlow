@@ -99,58 +99,58 @@ class HyperparamTabsWidget(QWidget):
         self.spin_num_classes = QSpinBox()
         self.spin_num_classes.setRange(2, 256)
         self.spin_num_classes.setValue(2)
-        self.spin_num_classes.setToolTip("Total number of classes (including background), must match actual classes in mask")
+        self.spin_num_classes.setToolTip(self.tr("Total number of classes (including background), must match actual classes in mask"))
         self._add_rec_row(form, "Num Classes:", self.spin_num_classes, "num_classes")
 
         self.spin_in_channels = QSpinBox()
         self.spin_in_channels.setRange(1, 256)
         self.spin_in_channels.setValue(3)
-        self.spin_in_channels.setToolTip("Input image channels (RGB is usually 3)")
+        self.spin_in_channels.setToolTip(self.tr("Input image channels (RGB is usually 3)"))
         self._add_rec_row(form, "In Channels:", self.spin_in_channels, "in_channels")
 
         self.spin_crop_size = QSpinBox()
         self.spin_crop_size.setRange(16, 4096)
         self.spin_crop_size.setSingleStep(32)
         self.spin_crop_size.setValue(512)
-        self.spin_crop_size.setToolTip("Random crop size during training")
+        self.spin_crop_size.setToolTip(self.tr("Random crop size during training"))
         self._add_rec_row(form, "Crop Size:", self.spin_crop_size, "crop_size")
 
         self.spin_batch_size = QSpinBox()
         self.spin_batch_size.setRange(1, 64)
         self.spin_batch_size.setValue(2)
-        self.spin_batch_size.setToolTip("Number of samples per batch, limited by GPU memory")
+        self.spin_batch_size.setToolTip(self.tr("Number of samples per batch, limited by GPU memory"))
         self._add_rec_row(form, "Batch Size:", self.spin_batch_size, "batch_size")
 
         self.spin_max_iters = QSpinBox()
         self.spin_max_iters.setRange(1000, 500000)
         self.spin_max_iters.setSingleStep(1000)
         self.spin_max_iters.setValue(40000)
-        self.spin_max_iters.setToolTip("Maximum training iterations")
+        self.spin_max_iters.setToolTip(self.tr("Maximum training iterations"))
         self._add_rec_row(form, "Max Iters:", self.spin_max_iters, "max_iters")
 
         self.spin_num_workers = QSpinBox()
         self.spin_num_workers.setRange(0, 16)
         self.spin_num_workers.setValue(4)
-        self.spin_num_workers.setToolTip("Data loading parallel threads (0 = main thread)")
+        self.spin_num_workers.setToolTip(self.tr("Data loading parallel threads (0 = main thread)"))
         self._add_rec_row(form, "Num Workers:", self.spin_num_workers, "num_workers")
 
         self.spin_val_interval = QSpinBox()
         self.spin_val_interval.setRange(100, 50000)
         self.spin_val_interval.setSingleStep(500)
         self.spin_val_interval.setValue(4000)
-        self.spin_val_interval.setToolTip("Run validation every N iterations")
+        self.spin_val_interval.setToolTip(self.tr("Run validation every N iterations"))
         self._add_rec_row(form, "Val Interval:", self.spin_val_interval, "val_interval")
 
         self.combo_img_suffix = QComboBox()
         self.combo_img_suffix.setEditable(True)
         self.combo_img_suffix.addItems(['.jpg', '.jpeg', '.png', '.tif', '.tiff', '.bmp'])
-        self.combo_img_suffix.setToolTip("Image file suffix (auto-detected or manually specified)")
+        self.combo_img_suffix.setToolTip(self.tr("Image file suffix (auto-detected or manually specified)"))
         self._add_rec_row(form, "Image Suffix:", self.combo_img_suffix, "img_suffix")
 
         self.combo_seg_map_suffix = QComboBox()
         self.combo_seg_map_suffix.setEditable(True)
         self.combo_seg_map_suffix.addItems(['.png', '.tif', '.tiff'])
-        self.combo_seg_map_suffix.setToolTip("Mask file suffix (auto-detected or manually specified)")
+        self.combo_seg_map_suffix.setToolTip(self.tr("Mask file suffix (auto-detected or manually specified)"))
         self._add_rec_row(form, "Mask Suffix:", self.combo_seg_map_suffix, "seg_map_suffix")
 
         self.tabs.addTab(tab, "General")
@@ -164,16 +164,16 @@ class HyperparamTabsWidget(QWidget):
 
         self.combo_loss_type = QComboBox()
         self.combo_loss_type.addItems(['CrossEntropyLoss', 'FocalLoss', 'DiceLoss'])
-        self.combo_loss_type.setToolTip("Main backbone loss function type")
+        self.combo_loss_type.setToolTip(self.tr("Main backbone loss function type"))
         self._add_rec_row(form, "Loss Type:", self.combo_loss_type, "loss_type")
 
-        self.chk_use_class_weight = QCheckBox("Enable Class Weighting")
-        self.chk_use_class_weight.setToolTip("Automatically adjust cross-entropy weights based on class distribution to mitigate long-tail issues")
+        self.chk_use_class_weight = QCheckBox(self.tr("Enable Class Weighting"))
+        self.chk_use_class_weight.setToolTip(self.tr("Automatically adjust cross-entropy weights based on class distribution to mitigate long-tail issues"))
         self._add_rec_row(form, "Class Weight:", self.chk_use_class_weight, "class_weight")
 
         self.combo_optimizer = QComboBox()
         self.combo_optimizer.addItems(['AdamW', 'SGD', 'Adam', 'RAdam'])
-        self.combo_optimizer.setToolTip("Optimizer type")
+        self.combo_optimizer.setToolTip(self.tr("Optimizer type"))
         self._add_rec_row(form, "Optimizer:", self.combo_optimizer, "optimizer")
 
         self.dspin_lr = QDoubleSpinBox()
@@ -181,7 +181,7 @@ class HyperparamTabsWidget(QWidget):
         self.dspin_lr.setDecimals(6)
         self.dspin_lr.setSingleStep(0.0001)
         self.dspin_lr.setValue(0.0001)
-        self.dspin_lr.setToolTip("Initial Learning Rate")
+        self.dspin_lr.setToolTip(self.tr("Initial Learning Rate"))
         self._add_rec_row(form, "Learning Rate (LR):", self.dspin_lr, "lr")
 
         self.dspin_weight_decay = QDoubleSpinBox()
@@ -189,7 +189,7 @@ class HyperparamTabsWidget(QWidget):
         self.dspin_weight_decay.setDecimals(5)
         self.dspin_weight_decay.setSingleStep(0.001)
         self.dspin_weight_decay.setValue(0.01)
-        self.dspin_weight_decay.setToolTip("Weight Decay (L2 Regularization)")
+        self.dspin_weight_decay.setToolTip(self.tr("Weight Decay (L2 Regularization)"))
         self._add_rec_row(form, "Weight Decay:", self.dspin_weight_decay, "weight_decay")
 
         self.dspin_momentum = QDoubleSpinBox()
@@ -197,7 +197,7 @@ class HyperparamTabsWidget(QWidget):
         self.dspin_momentum.setDecimals(3)
         self.dspin_momentum.setSingleStep(0.01)
         self.dspin_momentum.setValue(0.9)
-        self.dspin_momentum.setToolTip("SGD Momentum (only for SGD/RMSprop)")
+        self.dspin_momentum.setToolTip(self.tr("SGD Momentum (only for SGD/RMSprop)"))
         self._add_rec_row(form, "Momentum:", self.dspin_momentum, "momentum")
 
         line = QFrame()
@@ -207,7 +207,7 @@ class HyperparamTabsWidget(QWidget):
 
         self.combo_lr_schedule = QComboBox()
         self.combo_lr_schedule.addItems(['PolyLR', 'StepLR', 'CosineAnnealingLR'])
-        self.combo_lr_schedule.setToolTip("Learning rate decay schedule")
+        self.combo_lr_schedule.setToolTip(self.tr("Learning rate decay schedule"))
         self._add_rec_row(form, "LR Schedule:", self.combo_lr_schedule, "lr_schedule")
 
         self.tabs.addTab(tab, "Optimizer")
@@ -223,16 +223,16 @@ class HyperparamTabsWidget(QWidget):
         self.spin_save_interval.setRange(100, 50000)
         self.spin_save_interval.setSingleStep(500)
         self.spin_save_interval.setValue(4000)
-        self.spin_save_interval.setToolTip("Save checkpoint every N iterations")
+        self.spin_save_interval.setToolTip(self.tr("Save checkpoint every N iterations"))
         self._add_rec_row(form, "Save Interval:", self.spin_save_interval, "save_interval")
 
         self.spin_max_keep = QSpinBox()
         self.spin_max_keep.setRange(1, 50)
         self.spin_max_keep.setValue(3)
-        self.spin_max_keep.setToolTip("Maximum number of recent checkpoints to keep")
+        self.spin_max_keep.setToolTip(self.tr("Maximum number of recent checkpoints to keep"))
         self._add_rec_row(form, "Max Keep Ckpts:", self.spin_max_keep, "max_keep_ckpts")
 
-        self.check_save_best = QCheckBox("Save Best Model (Best mIoU)")
+        self.check_save_best = QCheckBox(self.tr("Save Best Model (Best mIoU)"))
         self.check_save_best.setChecked(True)
         self._add_rec_row(form, None, self.check_save_best, "save_best")
 
@@ -245,23 +245,23 @@ class HyperparamTabsWidget(QWidget):
         form.setSpacing(4)
         form.setContentsMargins(6, 6, 6, 6)
 
-        self.check_random_flip = QCheckBox("RandomFlip")
+        self.check_random_flip = QCheckBox(self.tr("RandomFlip"))
         self.check_random_flip.setChecked(True)
         self._add_rec_row(form, None, self.check_random_flip, "aug_random_flip")
 
-        self.check_photo_distortion = QCheckBox("PhotoMetricDistortion")
+        self.check_photo_distortion = QCheckBox(self.tr("PhotoMetricDistortion"))
         self.check_photo_distortion.setChecked(True)
         self._add_rec_row(form, None, self.check_photo_distortion, "aug_photo_distortion")
 
-        self.check_random_rotate = QCheckBox("RandomRotate")
+        self.check_random_rotate = QCheckBox(self.tr("RandomRotate"))
         self.check_random_rotate.setChecked(False)
         self._add_rec_row(form, None, self.check_random_rotate, "aug_random_rotate")
 
-        self.check_random_scale = QCheckBox("MultiScaleFlipAug")
+        self.check_random_scale = QCheckBox(self.tr("MultiScaleFlipAug"))
         self.check_random_scale.setChecked(False)
         self._add_rec_row(form, None, self.check_random_scale, "aug_multi_scale")
 
-        note = QLabel("💡 More augmentations are recommended by ConfigAdvisor")
+        note = QLabel(self.tr("💡 More augmentations are recommended by ConfigAdvisor"))
         note.setStyleSheet("color: #888; font-size: 10px; font-style: italic;")
         note.setWordWrap(True)
         form.addRow(note)
@@ -309,7 +309,7 @@ class HyperparamTabsWidget(QWidget):
                 self._rec_applied[key] = False
                 
                 btn = self._rec_btns[key]
-                btn.setText("💡")
+                btn.setText(self.tr("💡"))
                 btn.setVisible(True)
                 btn.setToolTip(f"Recommended value: {val}\n{reason}\n\n🔹 Click to apply this recommendation")
                 self._set_widget_color(self._rec_widgets[key], self.COLOR_DEFAULT)
@@ -354,7 +354,7 @@ class HyperparamTabsWidget(QWidget):
         
         # 切换按钮
         btn = self._rec_btns[key]
-        btn.setText("✅")
+        btn.setText(self.tr("✅"))
         btn.setToolTip(f"Applied recommended value: {val}\n{self._rec_reasons[key]}")
         
         # 切换Color为来源Confirm

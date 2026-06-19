@@ -221,18 +221,18 @@ class IssueRow(QWidget):
         # 问题描述
         config = ISSUE_TYPES.get(self._issue_type)
         name = config.name if config else self._issue_type
-        self.name_label = QLabel(name)
+        self.name_label = QLabel(self.tr(name))
         name_font = self.name_label.font()
         name_font.setPointSize(FONT_SIZE_PX)
         self.name_label.setFont(name_font)
         self._set_label_color(self.name_label, COLOR_LABEL)
         self.name_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         if config:
-            self.name_label.setToolTip(config.description)
+            self.name_label.setToolTip(self.tr(config.description))
         layout.addWidget(self.name_label, 1)
         
         # 数量
-        self.count_label = QLabel(f"[ {self._count} items ]")
+        self.count_label = QLabel(f"[ {self._count} {self.tr('items')} ]")
         self.count_label.setFixedWidth(COUNT_WIDTH_PX)
         self.count_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         count_font = self.count_label.font()
@@ -242,7 +242,7 @@ class IssueRow(QWidget):
         layout.addWidget(self.count_label)
         
         # 箭头
-        self.arrow_label = QLabel(">")
+        self.arrow_label = QLabel(self.tr(">"))
         arrow_font = self.arrow_label.font()
         arrow_font.setPointSize(FONT_SIZE_PX)
         self.arrow_label.setFont(arrow_font)
@@ -302,22 +302,22 @@ class IssueRow(QWidget):
     
     def update_count(self, count: int) -> None:
         self._count = count
-        self.count_label.setText(f"[ {count} items ]")
+        self.count_label.setText(f"[ {count} {self.tr('items')} ]")
     
     def _show_context_menu(self, pos) -> None:
         menu = QMenu(self)
         
-        action_reveal = QAction("📂 Show in File Manager", self)
+        action_reveal = QAction(self.tr("📂 Show in File Manager"), self)
         action_reveal.triggered.connect(lambda: self.revealRequested.emit(self._issue_type))
         menu.addAction(action_reveal)
         
-        action_copy = QAction("📋 Copy Path", self)
+        action_copy = QAction(self.tr("📋 Copy Path"), self)
         action_copy.triggered.connect(lambda: self.copyPathRequested.emit(self._issue_type))
         menu.addAction(action_copy)
         
         menu.addSeparator()
         
-        action_export = QAction("📄 Export Issue Log", self)
+        action_export = QAction(self.tr("📄 Export Issue Log"), self)
         action_export.triggered.connect(lambda: self.exportLogRequested.emit(self._issue_type))
         menu.addAction(action_export)
         
@@ -654,7 +654,7 @@ class HealthCheckCard(QWidget):
         if export_issues_to_csv(export_data, save_path, self._data_root):
             QMessageBox.information(self, "Export Success", f"Exported {len(export_data)} records to:\n{save_path}")
         else:
-            QMessageBox.warning(self, "Export Failed", "导出 CSV 文件时发生Error")
+            QMessageBox.warning(self, self.tr("Export Failed"), self.tr("导出 CSV 文件时发生Error"))
     
     def export_all_issues(self) -> None:
         all_issues = []
@@ -670,7 +670,7 @@ class HealthCheckCard(QWidget):
                     })
         
         if not all_issues:
-            QMessageBox.information(self, "Tip", "No issues to export")
+            QMessageBox.information(self, self.tr("Tip"), self.tr("No issues to export"))
             return
         
         save_path, _ = QFileDialog.getSaveFileName(
@@ -683,4 +683,4 @@ class HealthCheckCard(QWidget):
         if export_issues_to_csv(all_issues, save_path, self._data_root):
             QMessageBox.information(self, "Export Success", f"Exported {len(all_issues)} records to:\n{save_path}")
         else:
-            QMessageBox.warning(self, "Export Failed", "导出 CSV 文件时发生Error")
+            QMessageBox.warning(self, self.tr("Export Failed"), self.tr("导出 CSV 文件时发生Error"))

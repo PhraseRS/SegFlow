@@ -72,7 +72,7 @@ class AnalysisControlWidget(QWidget):
         button_layout.addWidget(self.hint_label)
         
         # 开始分析按钮
-        self.start_button = QPushButton("📊 Start Deep Analysis")
+        self.start_button = QPushButton(self.tr("📊 Start Deep Analysis"))
         self.start_button.setMinimumHeight(36)
         self.start_button.setMaximumHeight(36)
         self.start_button.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -109,7 +109,7 @@ class AnalysisControlWidget(QWidget):
         progress_layout.setSpacing(2)
         
         # 状态文字
-        self.status_label = QLabel("Preparing...")
+        self.status_label = QLabel(self.tr("Preparing..."))
         self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.status_label.setStyleSheet("color: gray; font-size: 11px;")
         progress_layout.addWidget(self.status_label)
@@ -136,7 +136,7 @@ class AnalysisControlWidget(QWidget):
         progress_layout.addWidget(self.progress_bar)
 
         # 取消按钮
-        self.cancel_button = QPushButton("✕ Cancel Analysis")
+        self.cancel_button = QPushButton(self.tr("✕ Cancel Analysis"))
         self.cancel_button.setMaximumHeight(28)
         self.cancel_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.cancel_button.setStyleSheet("""
@@ -169,7 +169,7 @@ class AnalysisControlWidget(QWidget):
         completed_layout.addWidget(self.completed_hint)
         
         # 完成状态标签（与按钮同高）
-        self.completed_label = QLabel("✅ Analysis Completed")
+        self.completed_label = QLabel(self.tr("✅ Analysis Completed"))
         self.completed_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.completed_label.setMinimumHeight(36)
         self.completed_label.setMaximumHeight(36)
@@ -193,7 +193,7 @@ class AnalysisControlWidget(QWidget):
         # 默认显示按钮（Disable状态，等待加载样本）
         self.stacked.setCurrentIndex(0)
         self.start_button.setEnabled(False)
-        self.hint_label.setText("Please load dataset first")
+        self.hint_label.setText(self.tr("Please load dataset first"))
     
     def set_sample_count(self, count: int, is_large: bool) -> None:
         """Settings样本数量"""
@@ -202,7 +202,7 @@ class AnalysisControlWidget(QWidget):
         
         if count == 0:
             # 无样本，Disable按钮
-            self.hint_label.setText("Please load dataset first")
+            self.hint_label.setText(self.tr("Please load dataset first"))
             self.start_button.setEnabled(False)
         elif is_large:
             self.hint_label.setText(
@@ -210,7 +210,7 @@ class AnalysisControlWidget(QWidget):
             )
             self.start_button.setEnabled(True)
         else:
-            self.hint_label.setText("")
+            self.hint_label.setText(self.tr(""))
             self.start_button.setEnabled(True)
         self.hint_label.setVisible(True)  # 保持占位
     
@@ -222,7 +222,7 @@ class AnalysisControlWidget(QWidget):
     def show_progress(self) -> None:
         """显示进度状态"""
         self.progress_bar.setValue(0)
-        self.status_label.setText("Preparing...")
+        self.status_label.setText(self.tr("Preparing..."))
         self.stacked.setCurrentIndex(1)
     
     def set_progress(self, current: int, total: int, message: str = "") -> None:
@@ -238,9 +238,9 @@ class AnalysisControlWidget(QWidget):
     def set_completed(self, from_cache: bool = False) -> None:
         """Settings为完成状态"""
         if from_cache:
-            self.completed_hint.setText("已从缓存加载统计数据")
+            self.completed_hint.setText(self.tr("已从缓存加载统计数据"))
         else:
-            self.completed_hint.setText("")
+            self.completed_hint.setText(self.tr(""))
         self.stacked.setCurrentIndex(2)
     
     def hide_control(self) -> None:
