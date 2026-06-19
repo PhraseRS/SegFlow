@@ -38,7 +38,7 @@ class ModelSelectionWidget(QWidget):
     模型选择组件
 
     布局：
-    - 顶部：框架选择 + Backbone 选择（框架列表从 FrameworkRegistry 动态读取）
+    - 顶部：框架Select + Backbone 选择（框架列表从 FrameworkRegistry 动态读取）
 
     Signals:
         config_changed():               任何配置项变更时触发
@@ -58,7 +58,7 @@ class ModelSelectionWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
 
-        # ====== 框架与 Backbone 选择 ======
+        # ====== 框架与 Backbone Select ======
         top_form = QFormLayout()
         top_form.setSpacing(4)
 
@@ -66,8 +66,8 @@ class ModelSelectionWidget(QWidget):
         # 从注册表动态读取框架列表
         framework_names = get_all_display_names()
         self.combo_framework.addItems(framework_names)
-        self.combo_framework.setToolTip("选择底层训练框架")
-        top_form.addRow("框架:", self.combo_framework)
+        self.combo_framework.setToolTip("Select training framework")
+        top_form.addRow("Framework:", self.combo_framework)
 
         self.combo_method = QComboBox()
         # 按分组结构填充算法下拉框，用分隔标题项区分组别
@@ -83,14 +83,14 @@ class ModelSelectionWidget(QWidget):
             # 添加该组内的算法项
             for method in methods:
                 self.combo_method.addItem(method)
-        self.combo_method.setToolTip("选择分割算法/架构")
+        self.combo_method.setToolTip("Select segmentation algorithm/architecture")
         # 默认选中第一个 Transformer 算法（跳过分隔项）
         self.combo_method.setCurrentText('Mask2Former')
-        top_form.addRow("算法:", self.combo_method)
+        top_form.addRow("Algorithm:", self.combo_method)
 
         self.combo_backbone = QComboBox()
         self.combo_backbone.setEnabled(False)
-        self.combo_backbone.setToolTip("选择模型的 Backbone 架构")
+        self.combo_backbone.setToolTip("Select model's Backbone architecture")
         top_form.addRow("Backbone:", self.combo_backbone)
 
         layout.addLayout(top_form)

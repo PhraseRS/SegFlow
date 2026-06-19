@@ -56,12 +56,12 @@ class ConfigParser:
             try:
                 self._parse_classes_and_palette(content)
             except Exception as e:
-                print(f"类别和调色板解析警告: {e}")
+                print(f"Classes and palette parse warning: {e}")
             
             return self.classes, self.palette
             
         except Exception as e:
-            print(f"配置文件解析失败: {e}")
+            print(f"Config parse failed: {e}")
             return None, None
     
     def extract_model_name(self, config_path: str) -> str:
@@ -452,7 +452,7 @@ def parse_mmseg_config(config_path: str) -> Dict[str, Any]:
             'palette': palette
         }
     except Exception as e:
-        print(f"配置文件解析失败: {e}")
+        print(f"Config parse failed: {e}")
         return {
             'config_path': config_path,
             'model_name': None,

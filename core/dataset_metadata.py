@@ -53,7 +53,7 @@ def _worker_process(db_path, samples_queue, progress_queue, stop_event, total_sa
     processed = 0
     last_report = 0
     
-    # 计算报告间隔：每处理 1% 或至少 50 个样本报告一次，最少间隔 100 个
+    # 计算报告间隔：每处理 1% 或至少 50 samples报告一次，最少间隔 100 个
     report_interval = max(50, min(100, total_samples // 100))
     
     while not stop_event.is_set():
@@ -98,7 +98,7 @@ def _worker_process(db_path, samples_queue, progress_queue, stop_event, total_sa
             
             processed += 1
             
-            # 降频报告进度：每 report_interval 个样本报告一次
+            # 降频报告进度：每 report_interval samples报告一次
             if processed - last_report >= report_interval:
                 last_report = processed
                 progress_queue.put({
@@ -580,7 +580,7 @@ class DatasetMetadataManager:
         labels_dir = labels_dir or self.labels_dir
         
         if not images_dir or not labels_dir:
-            print("⚠️ 未设置图像或标签目录")
+            print("⚠️ Image or label directory not set")
             return
         
         # 检查哪些样本需要计算
@@ -613,12 +613,12 @@ class DatasetMetadataManager:
             samples_to_process.append((sample_id, dataset_type, image_path, label_path))
         
         if not samples_to_process:
-            print("✅ 所有样本已缓存，无需计算")
+            print("✅ All samples cached, no computation needed")
             self.signals.finished.emit()
             return
         
         self._total_samples = len(samples_to_process)
-        print(f"🔄 启动后台进程分析 {self._total_samples} 个样本...")
+        print(f"🔄 Starting background process to analyze {self._total_samples} samples...")
         
         # 创建进程间通信对象
         self._samples_queue = multiprocessing.Queue()
@@ -658,11 +658,11 @@ class DatasetMetadataManager:
             elif msg['type'] == 'done':
                 self._poll_timer.stop()
                 self._cleanup_process()
-                print(f"✅ 全能分析完成，共处理 {msg['processed']} 个样本")
+                print(f"✅ Analysis complete, processed {msg['processed']} samples")
                 self.signals.finished.emit()
                 break
             elif msg['type'] == 'error':
-                print(f"⚠️ 分析错误: {msg['message']}")
+                print(f"⚠️ Analysis error: {msg['message']}")
                 self.signals.error.emit(msg['message'])
     
     def stop_calculation(self):

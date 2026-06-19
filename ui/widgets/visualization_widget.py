@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 可视化设置组件 (Visualization Widget)
-提供语义分割结果的颜色和透明度配置界面
+提供语义分割结果的Color和Alpha配置界面
 """
 
 from PySide6.QtWidgets import (
@@ -17,14 +17,14 @@ from typing import Dict, List, Optional
 class VisualizationWidget(QWidget):
     """
     可视化设置组件
-    允许用户自定义语义分割结果的颜色和透明度
+    允许用户自定义语义分割结果的Color和Alpha
     """
 
     # 信号定义
     palette_changed = Signal(dict)  # 调色板变化: {class_id: [R, G, B], ...}
-    alpha_changed = Signal(float)   # 透明度变化: 0.0-1.0
-    apply_requested = Signal()      # 请求应用到预览
-    reset_requested = Signal()      # 请求重置为默认
+    alpha_changed = Signal(float)   # Alpha变化: 0.0-1.0
+    apply_requested = Signal()      # 请求Apply to Preview
+    reset_requested = Signal()      # 请求Reset to Default
 
     def __init__(self, class_names: List[str], default_palette: Dict[int, list],
                  default_alpha: float = 0.5, parent=None):
@@ -32,9 +32,9 @@ class VisualizationWidget(QWidget):
         初始化可视化设置组件
 
         Args:
-            class_names: 类别名称列表 ['背景', '建筑', '道路', ...]
+            class_names: Class Name列表 ['背景', '建筑', '道路', ...]
             default_palette: 默认调色板 {0: [0,0,0], 1: [255,0,0], ...}
-            default_alpha: 默认透明度 0.0-1.0
+            default_alpha: 默认Alpha 0.0-1.0
             parent: 父组件
         """
         super().__init__(parent)
@@ -43,7 +43,7 @@ class VisualizationWidget(QWidget):
         self.current_palette = default_palette.copy()
         self.default_alpha = default_alpha
 
-        self.color_buttons = {}  # 存储颜色按钮引用
+        self.color_buttons = {}  # 存储Color按钮引用
 
         self.init_ui()
 
@@ -53,11 +53,11 @@ class VisualizationWidget(QWidget):
         main_layout.setContentsMargins(10, 10, 10, 10)
         main_layout.setSpacing(10)
 
-        # === 透明度控制区域 ===
+        # === Alpha控制区域 ===
         alpha_group = self._create_alpha_control()
         main_layout.addWidget(alpha_group)
 
-        # === 类别颜色配置区域 ===
+        # === 类别Color配置区域 ===
         color_group = self._create_color_control()
         main_layout.addWidget(color_group)
 
@@ -69,11 +69,11 @@ class VisualizationWidget(QWidget):
         main_layout.addStretch()
 
     def _create_alpha_control(self) -> QGroupBox:
-        """创建透明度控制组件"""
-        alpha_group = QGroupBox("透明度")
+        """创建Alpha控制组件"""
+        alpha_group = QGroupBox("Alpha")
         alpha_layout = QHBoxLayout()
 
-        # 透明度滑块
+        # Alpha滑块
         self.alpha_slider = QSlider(Qt.Horizontal)
         self.alpha_slider.setRange(0, 100)
         self.alpha_slider.setValue(int(self.default_alpha * 100))
@@ -81,7 +81,7 @@ class VisualizationWidget(QWidget):
         self.alpha_slider.setTickInterval(10)
         self.alpha_slider.valueChanged.connect(self._on_alpha_changed)
 
-        # 透明度标签
+        # Alpha标签
         self.alpha_label = QLabel(f"{int(self.default_alpha * 100)}%")
         self.alpha_label.setMinimumWidth(40)
         self.alpha_label.setAlignment(Qt.AlignCenter)
@@ -93,7 +93,7 @@ class VisualizationWidget(QWidget):
         return alpha_group
 
     def _create_color_control(self) -> QScrollArea:
-        """创建类别颜色配置组件"""
+        """创建类别Color配置组件"""
         # 创建滚动区域
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -107,11 +107,11 @@ class VisualizationWidget(QWidget):
         content_layout.setSpacing(8)
 
         # 标题
-        title_label = QLabel("类别颜色配置")
+        title_label = QLabel("类别Color配置")
         title_label.setStyleSheet("font-weight: bold; font-size: 11pt;")
         content_layout.addWidget(title_label)
 
-        # 为每个类别创建颜色选择行
+        # 为每个类别创建Color选择行
         for class_id, class_name in enumerate(self.class_names):
             row_widget = self._create_color_row(class_id, class_name)
             content_layout.addWidget(row_widget)
@@ -123,37 +123,37 @@ class VisualizationWidget(QWidget):
 
     def _create_color_row(self, class_id: int, class_name: str) -> QWidget:
         """
-        创建单个类别的颜色选择行
+        创建单个类别的Color选择行
 
         Args:
             class_id: 类别ID
-            class_name: 类别名称
+            class_name: Class Name
 
         Returns:
-            颜色选择行组件
+            Color选择行组件
         """
         row_widget = QWidget()
         row_layout = QHBoxLayout(row_widget)
         row_layout.setContentsMargins(0, 0, 0, 0)
         row_layout.setSpacing(10)
 
-        # 颜色预览按钮
+        # Color预览按钮
         color_button = QPushButton()
         color_button.setFixedSize(40, 30)
-        color_button.setToolTip(f"点击修改 {class_name} 的颜色")
+        color_button.setToolTip(f"Click to edit {class_name} 的Color")
 
-        # 设置初始颜色
+        # 设置初始Color
         color = self.current_palette.get(class_id, [128, 128, 128])
         self._update_button_color(color_button, color)
 
         # 连接点击事件
         color_button.clicked.connect(lambda: self._choose_color(class_id))
 
-        # 类别名称标签
+        # Class Name标签
         name_label = QLabel(class_name)
         name_label.setMinimumWidth(80)
 
-        # 颜色值标签 (显示RGB)
+        # Color值标签 (显示RGB)
         self.color_value_label = QLabel(f"RGB({color[0]}, {color[1]}, {color[2]})")
         self.color_value_label.setStyleSheet("color: gray; font-size: 9pt;")
 
@@ -172,11 +172,11 @@ class VisualizationWidget(QWidget):
 
     def _update_button_color(self, button: QPushButton, color: list):
         """
-        更新按钮的背景颜色
+        更新按钮的背景Color
 
         Args:
             button: 按钮组件
-            color: RGB颜色 [R, G, B]
+            color: RGBColor [R, G, B]
         """
         button.setStyleSheet(
             f"QPushButton {{ background-color: rgb({color[0]}, {color[1]}, {color[2]}); "
@@ -190,12 +190,12 @@ class VisualizationWidget(QWidget):
         button_layout.setSpacing(10)
 
         # 重置按钮
-        reset_btn = QPushButton("重置为默认")
-        reset_btn.setToolTip("恢复默认的颜色和透明度设置")
+        reset_btn = QPushButton("Reset to Default")
+        reset_btn.setToolTip("恢复默认的Color和Alpha设置")
         reset_btn.clicked.connect(self._on_reset_clicked)
 
         # 应用按钮
-        apply_btn = QPushButton("应用到预览")
+        apply_btn = QPushButton("Apply to Preview")
         apply_btn.setToolTip("将当前设置应用到推理结果预览")
         apply_btn.setStyleSheet("QPushButton { font-weight: bold; }")
         apply_btn.clicked.connect(self.apply_requested.emit)
@@ -207,7 +207,7 @@ class VisualizationWidget(QWidget):
 
     def _on_alpha_changed(self, value: int):
         """
-        透明度滑块变化回调
+        Alpha滑块变化回调
 
         Args:
             value: 滑块值 0-100
@@ -218,20 +218,20 @@ class VisualizationWidget(QWidget):
 
     def _choose_color(self, class_id: int):
         """
-        打开颜色选择对话框
+        打开Color选择对话框
 
         Args:
             class_id: 类别ID
         """
-        # 获取当前颜色
+        # 获取当前Color
         current_color = self.current_palette.get(class_id, [128, 128, 128])
         qcolor = QColor(current_color[0], current_color[1], current_color[2])
 
-        # 打开颜色选择对话框
+        # 打开Color选择对话框
         color = QColorDialog.getColor(
             qcolor,
             self,
-            f"选择 {self.class_names[class_id]} 的颜色"
+            f"Select {self.class_names[class_id]} 的Color"
         )
 
         if color.isValid():
@@ -252,14 +252,14 @@ class VisualizationWidget(QWidget):
         # 重置调色板
         self.current_palette = self.default_palette.copy()
 
-        # 更新所有颜色按钮
+        # 更新所有Color按钮
         for class_id, color in self.default_palette.items():
             if class_id in self.color_buttons:
                 button_info = self.color_buttons[class_id]
                 self._update_button_color(button_info['button'], color)
                 button_info['label'].setText(f"RGB({color[0]}, {color[1]}, {color[2]})")
 
-        # 重置透明度
+        # 重置Alpha
         self.alpha_slider.setValue(int(self.default_alpha * 100))
 
         # 发射信号
@@ -280,10 +280,10 @@ class VisualizationWidget(QWidget):
 
     def get_current_alpha(self) -> float:
         """
-        获取当前透明度
+        获取当前Alpha
 
         Returns:
-            透明度值 0.0-1.0
+            Alpha值 0.0-1.0
         """
         return self.alpha_slider.value() / 100.0
 
@@ -305,10 +305,10 @@ class VisualizationWidget(QWidget):
 
     def set_alpha(self, alpha: float):
         """
-        设置透明度
+        设置Alpha
 
         Args:
-            alpha: 透明度值 0.0-1.0
+            alpha: Alpha值 0.0-1.0
         """
         value = int(alpha * 100)
         self.alpha_slider.setValue(value)

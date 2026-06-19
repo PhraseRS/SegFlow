@@ -26,7 +26,7 @@ class WeightDownloadWorker(QThread):
     """后台下载预训练权重文件。"""
     progress = Signal(int)       # 0~100
     finished_ok = Signal(str)    # 下载完成，携带本地路径
-    failed = Signal(str)         # 下载失败，携带错误信息
+    failed = Signal(str)         # Download failed，携带ErrorInfo
 
     def __init__(self, url: str, save_path: str, parent=None):
         super().__init__(parent)
@@ -60,7 +60,7 @@ class WeightDownloadWorker(QThread):
             if self._cancelled:
                 if os.path.exists(self._save_path):
                     os.remove(self._save_path)
-                self.failed.emit("已取消下载")
+                self.failed.emit("Download cancelled")
             else:
                 self.progress.emit(100)
                 self.finished_ok.emit(self._save_path)
@@ -75,7 +75,7 @@ class WeightSelectionWidget(QWidget):
     布局：
     - QTabWidget：
         - Tab 1 "公共预训练": ImageNet/COCO 预训练复选框 + 模型下拉列表 + 下载按钮
-        - Tab 2 "自有遥感权重": 文件选择器选择 .pth 文件
+        - Tab 2 "自有遥感权重": 文件选择器Select .pth 文件
 
     Signals:
         config_changed(): 任何配置项变更时触发
@@ -105,18 +105,18 @@ class WeightSelectionWidget(QWidget):
         tab_public_layout.setContentsMargins(6, 6, 6, 6)
         tab_public_layout.setSpacing(4)
 
-        self.check_use_pretrained = QCheckBox("使用预训练权重 (Use Pretrained)")
+        self.check_use_pretrained = QCheckBox("Use Pretrained Weights")
         self.check_use_pretrained.setChecked(True)
         tab_public_layout.addWidget(self.check_use_pretrained)
 
         pretrained_row = QHBoxLayout()
-        pretrained_row.addWidget(QLabel("预训练模型:"))
+        pretrained_row.addWidget(QLabel("Pretrained Model:"))
         self.combo_pretrained_model = QComboBox()
         self.combo_pretrained_model.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
         pretrained_row.addWidget(self.combo_pretrained_model)
-        self.btn_download = QPushButton("⬇ 下载")
+        self.btn_download = QPushButton("⬇ Download")
         self.btn_download.setFixedWidth(64)
         self.btn_download.setToolTip("下载所选预训练权重到 pretrain/ 目录")
         pretrained_row.addWidget(self.btn_download)
@@ -127,7 +127,7 @@ class WeightSelectionWidget(QWidget):
         self.progress_download.setMaximumHeight(12)
         tab_public_layout.addWidget(self.progress_download)
 
-        self.tab_pretrained.addTab(tab_public, "公共预训练 (Public)")
+        self.tab_pretrained.addTab(tab_public, "Public Pretrained")
 
         # --- Tab 2: 自有遥感权重 ---
         tab_custom = QWidget()
@@ -135,14 +135,14 @@ class WeightSelectionWidget(QWidget):
         tab_custom_layout.setContentsMargins(6, 6, 6, 6)
         tab_custom_layout.setSpacing(4)
 
-        self.check_use_custom_weight = QCheckBox("使用自有权重 (Custom .pth)")
+        self.check_use_custom_weight = QCheckBox("Use Custom Weights (.pth)")
         tab_custom_layout.addWidget(self.check_use_custom_weight)
 
         weight_row = QHBoxLayout()
         self.line_custom_weight = QLineEdit()
-        self.line_custom_weight.setPlaceholderText("选择 .pth 权重文件...")
+        self.line_custom_weight.setPlaceholderText("Select .pth 权重文件...")
         self.line_custom_weight.setReadOnly(True)
-        self.btn_browse_weight = QPushButton("浏览...")
+        self.btn_browse_weight = QPushButton("Browse...")
         weight_row.addWidget(self.line_custom_weight)
         weight_row.addWidget(self.btn_browse_weight)
         tab_custom_layout.addLayout(weight_row)
@@ -151,7 +151,7 @@ class WeightSelectionWidget(QWidget):
         self.lbl_local_hint.setStyleSheet("color: #E65100; font-size: 11px;")
         tab_custom_layout.addWidget(self.lbl_local_hint)
 
-        self.tab_pretrained.addTab(tab_custom, "自有业务权重 (Custom)")
+        self.tab_pretrained.addTab(tab_custom, "Custom Weights")
         layout.addWidget(self.tab_pretrained)
 
         # UI-09：阻止鼠标悬停时滚轮误改 ComboBox 的选项
@@ -186,7 +186,7 @@ class WeightSelectionWidget(QWidget):
             if keyword in fname.lower() and fname.endswith('.pth'):
                 full_path = os.path.join(pretrain_dir, fname)
                 self.line_custom_weight.setText(full_path)
-                self.lbl_local_hint.setText("⚡ 已在本地发现匹配权重，可手动勾选使用")
+                self.lbl_local_hint.setText("⚡ Matched weights found locally, check to use")
                 # 移除强制 setChecked(True) 避免覆盖用户意图
                 self.config_changed.emit()
                 return
@@ -197,8 +197,8 @@ class WeightSelectionWidget(QWidget):
 
     def _on_browse_weight(self):
         path, _ = QFileDialog.getOpenFileName(
-            self, "选择权重文件", "",
-            "PyTorch 权重 (*.pth);;所有文件 (*)"
+            self, "Select Weight File", "",
+            "PyTorch Weights (*.pth);;All Files (*)"
         )
         if path:
             self.line_custom_weight.setText(path)
@@ -210,8 +210,8 @@ class WeightSelectionWidget(QWidget):
         dataset = self.combo_pretrained_model.currentText()
         url = WEIGHT_URL_MAP.get((self._current_backbone, dataset))
         if not url:
-            QMessageBox.information(self, "下载权重",
-                f"暂无 {self._current_backbone} / {dataset} 的自动下载链接。\n"
+            QMessageBox.information(self, "Download Weights",
+                f"No {self._current_backbone} / {dataset} 的自动下载链接。\n"
                 "请前往 OpenMMLab 官方仓库手动下载后放入 pretrain/ 目录。")
             return
 
@@ -220,7 +220,7 @@ class WeightSelectionWidget(QWidget):
         save_path = os.path.join(project_root, 'pretrain', fname)
 
         if os.path.exists(save_path):
-            QMessageBox.information(self, "下载权重", f"权重文件已存在：\n{save_path}")
+            QMessageBox.information(self, "Download Weights", f"Weight file already exists:\n{save_path}")
             self.line_custom_weight.setText(save_path)
             self.check_use_custom_weight.setChecked(True)
             self.tab_pretrained.setCurrentIndex(1)
@@ -247,7 +247,7 @@ class WeightSelectionWidget(QWidget):
     def _on_download_failed(self, error: str):
         self.progress_download.setVisible(False)
         self.btn_download.setEnabled(True)
-        QMessageBox.warning(self, "下载失败", f"权重下载失败：\n{error}")
+        QMessageBox.warning(self, "Download failed", f"权重Download failed：\n{error}")
 
     def get_params(self) -> dict:
         return {

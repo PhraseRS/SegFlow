@@ -62,7 +62,7 @@ class TrainingThread(QThread):
 
             process = self._trainer.get_process()
             if process is None:
-                self.training_error.emit("训练进程启动失败：无法获取进程对象")
+                self.training_error.emit("Training process start failed: unable to get process object")
                 self.training_finished.emit(-1)
                 return
 
@@ -98,13 +98,13 @@ class TrainingThread(QThread):
             self.training_finished.emit(exit_code)
 
         except FileNotFoundError as e:
-            self.training_error.emit(f"文件未找到: {e}")
+            self.training_error.emit(f"File not found: {e}")
             self.training_finished.emit(-1)
         except RuntimeError as e:
-            self.training_error.emit(f"运行时错误: {e}")
+            self.training_error.emit(f"Runtime error: {e}")
             self.training_finished.emit(-1)
         except Exception as e:
-            self.training_error.emit(f"未知错误: {e}")
+            self.training_error.emit(f"Unknown error: {e}")
             self.training_finished.emit(-1)
 
     def stop(self):

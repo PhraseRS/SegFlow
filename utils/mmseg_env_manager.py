@@ -224,6 +224,6 @@ class MMSegEnvManager:
                 op, bound_str = match.group(1), match.group(2)
                 bound = parse_version(bound_str)
                 if not check_single(ver, op, bound):
-                    mismatches.append(f"{pkg} {detected} (需要 {constraint_str})")
+                    mismatches.append(f"{pkg} {detected} (Needs {constraint_str})")
                     break
         return mismatches

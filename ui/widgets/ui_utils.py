@@ -21,12 +21,12 @@ except ImportError:
     print("⚠️ qtawesome 未安装，将使用文本替代图标")
 
 
-# ==================== 图标颜色预设 ====================
+# ==================== 图标Color预设 ====================
 ICON_COLORS = {
     'default': '#666666',      # 默认灰色
     'primary': '#2196F3',      # 主色调蓝色
     'success': '#4CAF50',      # 成功绿色
-    'warning': '#FF9800',      # 警告橙色
+    'warning': '#FF9800',      # Warning橙色
     'danger': '#F44336',       # 危险红色
     'muted': '#9E9E9E',        # 弱化灰色
 }
@@ -42,7 +42,7 @@ def create_qta_icon(
     
     Args:
         icon_name: 图标名称，如 'fa5s.sync-alt'
-        color: 颜色名称（预设）或十六进制颜色值
+        color: Color名称（预设）或十六进制Color值
         size: 图标尺寸
     
     Returns:
@@ -51,7 +51,7 @@ def create_qta_icon(
     if not HAS_QTAWESOME:
         return None
     
-    # 解析颜色
+    # 解析Color
     if color in ICON_COLORS:
         color_value = ICON_COLORS[color]
     else:
@@ -85,8 +85,8 @@ def create_flat_button(
     Args:
         text: 按钮文字
         icon_name: qtawesome 图标名称，如 'fa5s.sync-alt'
-        icon_color: 图标颜色（预设名或十六进制）
-        tooltip: 工具提示
+        icon_color: 图标Color（预设名或十六进制）
+        tooltip: 工具Tip
         parent: 父控件
         on_clicked: 点击回调函数
         checkable: 是否可切换状态
@@ -116,7 +116,7 @@ def create_flat_button(
             else:
                 btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
     
-    # 设置工具提示
+    # 设置工具Tip
     if tooltip:
         btn.setToolTip(tooltip)
     
@@ -154,8 +154,8 @@ def create_header_action_button(
     Args:
         text: 按钮文字
         icon_name: qtawesome 图标名称
-        icon_color: 图标颜色
-        tooltip: 工具提示
+        icon_color: 图标Color
+        tooltip: 工具Tip
         parent: 父控件
         on_clicked: 点击回调
     

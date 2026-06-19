@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-推理可视化面板 (Inference Visualization Panel)
-负责管理推理配置、模型加载、推理执行和结果导出
+Inference Visualization Panel (Inference Visualization Panel)
+负责管理推理配置、Model Load、推理执行和结果Export
 """
 
 from __future__ import annotations
@@ -523,13 +523,13 @@ class InferenceWorker(QThread):
         self._cancel_requested = False
 
     def request_cancel(self):
-        """请求取消推理"""
+        """Request cancel inference"""
         self._cancel_requested = True
         if self._engine:
             self._engine.request_cancel()
         if self._process and self._process.poll() is None:
             self._terminate_process_tree(self._process)
-        self.log.emit("🛑 已发送取消请求...")
+        self.log.emit("🛑 Cancellation request sent...")
 
     def _on_engine_progress(self, current, total):
         """推理引擎进度回调"""
@@ -539,49 +539,49 @@ class InferenceWorker(QThread):
 
     def run(self):
         try:
-            self.log.emit("🔄 开始执行后台推理...")
-            self.log.emit(f"   图像路径: {self.image_path}")
-            self.log.emit(f"   推理策略: {self.strategy}")
+            self.log.emit("🔄 Starting background inference...")
+            self.log.emit(f"   Image Path: {self.image_path}")
+            self.log.emit(f"   Strategy: {self.strategy}")
 
             # 导入推理引擎 (延迟导入避免循环依赖)
             runtime_python = resolve_training_python(self.inference_model.get("python_path", ""))
             self.log.emit(f"Python: {runtime_python}")
             if not is_current_python(runtime_python):
                 self.log.emit(
-                    "正在使用训练环境 Python 启动推理子进程..."
+                    "Starting inference subprocess using training env..."
                 )
                 result = self._run_subprocess_inference(runtime_python)
                 self.progress.emit(90)
                 if self._cancel_requested:
-                    self.log.emit("推理已取消")
+                    self.log.emit("推理Cancelled")
                     self.cancelled.emit()
                     return
                 if result is None:
-                    raise RuntimeError("推理返回结果为空")
+                    raise RuntimeError("Inference result is empty")
                 self.finished.emit(self.image_path, result, self.inference_params)
                 return
 
             from core.inference_engine import InferenceEngine
 
             # 创建推理引擎
-            self.log.emit("🔧 初始化推理引擎...")
+            self.log.emit("🔧 Initializing inference engine...")
             self._engine = InferenceEngine(self.inference_model)
 
-            # 设置进度回调
+            # Settings进度回调
             self._engine.set_progress_callback(self._on_engine_progress)
 
             self.progress.emit(10)
 
             # 执行推理
-            self.log.emit(f"⚙️  正在运行 {self.strategy} 推理...")
+            self.log.emit(f"⚙️  Running {self.strategy} Inference...")
 
             result = None
             if self.strategy == 'large_image_block':
                 # 大图分块推理
                 if not self.output_path:
-                    raise ValueError("大图分块推理需要指定输出路径")
+                    raise ValueError("Tile inference requires output path")
 
-                self.log.emit(f"📁 输出路径: {self.output_path}")
+                self.log.emit(f"📁 Output Path: {self.output_path}")
 
                 result = self._engine.large_image_block_inference(
                     self.image_path,
@@ -592,7 +592,7 @@ class InferenceWorker(QThread):
                 )
 
             elif self.strategy == 'sliding_window':
-                # 滑窗推理
+                # Sliding Window
                 result = self._engine.sliding_window_inference(
                     self.image_path,
                     crop_size=self.inference_params['crop_size'],
@@ -602,32 +602,32 @@ class InferenceWorker(QThread):
                 )
 
             elif self.strategy == 'resize':
-                # 全图缩放推理
+                # Full Image Scale推理
                 result = self._engine.resize_inference(
                     self.image_path,
                     enable_tta=self.inference_params['enable_tta']
                 )
 
             else:
-                raise ValueError(f"未知的推理策略: {self.strategy}")
+                raise ValueError(f"Unknown inference strategy: {self.strategy}")
 
             self.progress.emit(90)
 
             # 检查是否被取消
             if self._cancel_requested:
-                self.log.emit("🛑 推理已取消")
+                self.log.emit("🛑 推理Cancelled")
                 self.cancelled.emit()
                 return
 
             if result is None:
-                raise RuntimeError("推理返回结果为空")
+                raise RuntimeError("Inference result is empty")
 
             self.finished.emit(self.image_path, result, self.inference_params)
 
         except Exception as e:
             import traceback
             error_details = traceback.format_exc()
-            self.log.emit(f"❌ 后台推理异常: {str(e)}")
+            self.log.emit(f"❌ Background inference error: {str(e)}")
             self.error.emit(f"{str(e)}\n\n{error_details}")
         finally:
             if self._engine and hasattr(self._engine, "close"):
@@ -805,7 +805,7 @@ class ModelTestWorker(QThread):
         self._cancel_requested = True
         if self._runner:
             self._runner.cancel()
-        self.log.emit("已请求取消测试，正在终止测试进程...")
+        self.log.emit("Cancellation requested, terminating...")
 
     def run(self):
         try:
@@ -904,12 +904,12 @@ class ModelTestWorker(QThread):
 
 
 class InferencePanel(QWidget):
-    """推理可视化面板"""
+    """Inference Visualization Panel"""
 
     # 信号定义
-    model_loaded = Signal(dict)  # 模型加载完成信号
+    model_loaded = Signal(dict)  # Model Load完成信号
     inference_started = Signal()  # 推理开始信号
-    inference_finished = Signal(dict)  # 推理完成信号
+    inference_finished = Signal(dict)  # Inference Complete信号
     inference_error = Signal(str)  # 推理错误信号
     log_message = Signal(str)  # 日志消息信号
 
@@ -917,7 +917,7 @@ class InferencePanel(QWidget):
     # 用于同步到左侧 GIS 图层控制
     input_path_selected = Signal(str)  # 参数: 选择的图像文件路径
 
-    # 新增：预测初始化信号 (用于通知左侧图层列表显示占位符)
+    # 新增：Predict初始化信号 (用于通知左侧图层列表显示占位符)
     # 参数: (input_path, output_filename_with_extension)
     prediction_initializing = Signal(str, str)
 
@@ -955,19 +955,19 @@ class InferencePanel(QWidget):
         self._refresh_model_test_state()
 
     def _setup_ui(self):
-        """设置UI布局"""
+        """SettingsUI布局"""
         layout = QVBoxLayout(self)
         layout.setContentsMargins(3, 3, 3, 3)  # 压缩边距
         layout.setSpacing(4)  # 压缩组件间距
 
-        # 模型加载区
+        # Model Load区
         self._create_model_config_group(layout)
         self._create_model_test_group(layout)
 
         # 推理策略区
         self._create_inference_strategy_group(layout)
 
-        # 执行与导出区
+        # 执行与Export区
         self._create_action_export_group(layout)
 
         # 推理结果显示区
@@ -983,21 +983,21 @@ class InferencePanel(QWidget):
         self._on_strategy_mode_changed()
     
     def _create_model_config_group(self, parent_layout):
-        """创建模型加载区"""
-        self.groupBox_modelConfig = QGroupBox("模型加载区 (Model Configuration)")
+        """创建Model Load区"""
+        self.groupBox_modelConfig = QGroupBox("Model Configuration")
         form_layout = QFormLayout(self.groupBox_modelConfig)
         form_layout.setSpacing(3)  # 压缩行间距
         form_layout.setContentsMargins(6, 6, 6, 6)  # 压缩边距
 
         # === 新增：模型库选择区 ===
-        self.label_modelRegistry = QLabel("已训练模型库:")
+        self.label_modelRegistry = QLabel("Trained Model Repo:")
         registry_layout = QHBoxLayout()
         self.comboBox_modelRegistry = QComboBox()
-        self.comboBox_modelRegistry.addItem("请选择历史训练模型...", userData=None)
+        self.comboBox_modelRegistry.addItem("Please select trained model...", userData=None)
 
-        self.pushButton_refreshRegistry = QPushButton("🔄 刷新")
+        self.pushButton_refreshRegistry = QPushButton("🔄 Refresh")
         self.pushButton_refreshRegistry.setMaximumWidth(60)
-        self.pushButton_refreshRegistry.setToolTip("需要先在 Tab1 加载数据集才能扫描 work_dirs 中的训练记录")
+        self.pushButton_refreshRegistry.setToolTip("Need to load dataset in Tab1 to scan work_dirs")
 
         registry_layout.addWidget(self.comboBox_modelRegistry)
         registry_layout.addWidget(self.pushButton_refreshRegistry)
@@ -1010,48 +1010,48 @@ class InferencePanel(QWidget):
         form_layout.addRow(line_reg)
 
         # 配置文件
-        self.label_configFile = QLabel("配置文件:")
+        self.label_configFile = QLabel("Config File:")
         config_layout = QHBoxLayout()
         self.lineEdit_configFile = QLineEdit()
-        self.lineEdit_configFile.setPlaceholderText("选择 MMSeg 配置文件 (.py)")
-        self.pushButton_browseConfig = QPushButton("浏览...")
+        self.lineEdit_configFile.setPlaceholderText("Select MMSeg Config (.py)")
+        self.pushButton_browseConfig = QPushButton("Browse...")
         config_layout.addWidget(self.lineEdit_configFile)
         config_layout.addWidget(self.pushButton_browseConfig)
         form_layout.addRow(self.label_configFile, config_layout)
 
         # 模型名称（自动解析）
-        self.label_modelName = QLabel("模型名称:")
-        self.label_modelNameValue = QLabel("未加载配置")
+        self.label_modelName = QLabel("Model Name:")
+        self.label_modelNameValue = QLabel("Config Not Loaded")
         self.label_modelNameValue.setStyleSheet("color: #888; font-style: italic;")
         form_layout.addRow(self.label_modelName, self.label_modelNameValue)
 
         # 权重文件
-        self.label_checkpointFile = QLabel("权重文件:")
+        self.label_checkpointFile = QLabel("Weight File:")
         checkpoint_layout = QHBoxLayout()
         self.lineEdit_checkpointFile = QLineEdit()
-        self.lineEdit_checkpointFile.setPlaceholderText("选择模型权重文件 (.pth)")
-        self.pushButton_browseCheckpoint = QPushButton("浏览...")
+        self.lineEdit_checkpointFile.setPlaceholderText("Select Model Weight File (.pth)")
+        self.pushButton_browseCheckpoint = QPushButton("Browse...")
         checkpoint_layout.addWidget(self.lineEdit_checkpointFile)
         checkpoint_layout.addWidget(self.pushButton_browseCheckpoint)
         form_layout.addRow(self.label_checkpointFile, checkpoint_layout)
 
         # 计算设备
-        self.label_device = QLabel("计算设备:")
+        self.label_device = QLabel("Device:")
         self.comboBox_device = QComboBox()
         self.comboBox_device.addItems(["Auto", "CUDA:0", "CPU"])
         form_layout.addRow(self.label_device, self.comboBox_device)
 
         # 加载按钮和状态
         load_layout = QHBoxLayout()
-        self.pushButton_loadModel = QPushButton("加载模型")
-        self.label_modelStatus = QLabel("未加载")
+        self.pushButton_loadModel = QPushButton("Load Model")
+        self.label_modelStatus = QLabel("Not Loaded")
         load_layout.addWidget(self.pushButton_loadModel)
         load_layout.addWidget(self.label_modelStatus)
         load_layout.addStretch()
         form_layout.addRow("", load_layout)
 
-        # 类别图例
-        self.label_classesLegend = QLabel("类别图例:")
+        # Class图例
+        self.label_classesLegend = QLabel("Class图例:")
         self.scrollArea_classesLegend = QScrollArea()
         self.scrollArea_classesLegend.setWidgetResizable(True)
         self.scrollArea_classesLegend.setMaximumHeight(150)
@@ -1068,56 +1068,56 @@ class InferencePanel(QWidget):
 
     def _create_model_test_group(self, parent_layout):
         """Create model test/evaluation controls."""
-        self.groupBox_modelTest = QGroupBox("模型测试验证 (Model Test / Evaluation)")
+        self.groupBox_modelTest = QGroupBox("Model Test / Evaluation")
         form_layout = QFormLayout(self.groupBox_modelTest)
         form_layout.setSpacing(3)
         form_layout.setContentsMargins(6, 6, 6, 6)
 
-        self.label_testDataset = QLabel("测试数据:")
-        self.label_testDatasetInfo = QLabel("未加载")
+        self.label_testDataset = QLabel("Test Data:")
+        self.label_testDatasetInfo = QLabel("Not Loaded")
         self.label_testDatasetInfo.setWordWrap(True)
         form_layout.addRow(self.label_testDataset, self.label_testDatasetInfo)
 
         button_layout = QHBoxLayout()
-        self.pushButton_testModel = QPushButton("测试模型")
-        self.pushButton_cancelModelTest = QPushButton("取消测试")
+        self.pushButton_testModel = QPushButton("Test Model")
+        self.pushButton_cancelModelTest = QPushButton("Cancel Test")
         self.pushButton_cancelModelTest.setEnabled(False)
         button_layout.addWidget(self.pushButton_testModel)
         button_layout.addWidget(self.pushButton_cancelModelTest)
         button_layout.addStretch()
         form_layout.addRow("", button_layout)
 
-        self.label_testProgress = QLabel("测试进度:")
+        self.label_testProgress = QLabel("测试Progress:")
         progress_layout = QHBoxLayout()
         self.progressBar_modelTest = QProgressBar()
         self.progressBar_modelTest.setValue(0)
         progress_layout.addWidget(self.progressBar_modelTest)
         form_layout.addRow(self.label_testProgress, progress_layout)
 
-        self.label_testStatus = QLabel("未测试")
-        form_layout.addRow("测试状态:", self.label_testStatus)
+        self.label_testStatus = QLabel("Not Tested")
+        form_layout.addRow("Test Status:", self.label_testStatus)
 
         self.comboBox_testSamples = QComboBox()
-        self.comboBox_testSamples.addItem("暂无样本", userData=None)
+        self.comboBox_testSamples.addItem("No Samples", userData=None)
         self.comboBox_testSamples.setEnabled(False)
-        form_layout.addRow("样本预览:", self.comboBox_testSamples)
+        form_layout.addRow("Sample Preview:", self.comboBox_testSamples)
 
         parent_layout.addWidget(self.groupBox_modelTest)
 
     def _create_inference_strategy_group(self, parent_layout):
         """创建推理策略区"""
-        self.groupBox_inferenceStrategy = QGroupBox("推理策略区 (Inference Strategy)")
+        self.groupBox_inferenceStrategy = QGroupBox("Inference Strategy")
         form_layout = QFormLayout(self.groupBox_inferenceStrategy)
         form_layout.setSpacing(3)  # 压缩行间距
         form_layout.setContentsMargins(6, 6, 6, 6)  # 压缩边距
 
         # 推理模式选择（单图/批量）
-        self.label_inferenceMode = QLabel("推理模式:")
+        self.label_inferenceMode = QLabel("Inference Mode:")
         mode_layout = QHBoxLayout()
-        self.radioButton_singleImage = QRadioButton("单图推理")
+        self.radioButton_singleImage = QRadioButton("Single Inference")
         self.radioButton_singleImage.setChecked(True)
-        self.radioButton_batchInference = QRadioButton("批量推理")
-        self.radioButton_batchInference.setVisible(False)  # P0-3: 隐藏批量推理
+        self.radioButton_batchInference = QRadioButton("Batch Inference")
+        self.radioButton_batchInference.setVisible(False)  # P0-3: 隐藏Batch Inference
         mode_layout.addWidget(self.radioButton_singleImage)
         mode_layout.addWidget(self.radioButton_batchInference)
         mode_layout.addStretch()
@@ -1127,25 +1127,25 @@ class InferencePanel(QWidget):
         form_layout.addRow(self.label_inferenceMode, mode_layout)
 
         # 输入影像选择（支持从 GIS 图层同步）
-        self.label_inputPath = QLabel("输入影像:")
+        self.label_inputPath = QLabel("Input Image:")
         input_layout = QHBoxLayout()
         self.lineEdit_inputPath = QLineEdit()
-        self.lineEdit_inputPath.setPlaceholderText("选择图像文件或从 GIS 图层同步")
+        self.lineEdit_inputPath.setPlaceholderText("Select image file or sync from GIS layer")
         self.lineEdit_inputPath.setReadOnly(True)  # 只读，防止手动输入
-        self.pushButton_browseInput = QPushButton("浏览...")
+        self.pushButton_browseInput = QPushButton("Browse...")
         input_layout.addWidget(self.lineEdit_inputPath)
         input_layout.addWidget(self.pushButton_browseInput)
         form_layout.addRow(self.label_inputPath, input_layout)
 
         # 输出路径选择（自动保存预览PNG）
-        self.label_outputPath = QLabel("输出路径 (预览PNG):")
+        self.label_outputPath = QLabel("Output Path (Preview PNG):")
         output_layout = QHBoxLayout()
         self.lineEdit_outputPath = QLineEdit()
-        self.lineEdit_outputPath.setPlaceholderText("推理完成后自动保存预览PNG的路径（默认为输入图像所在目录）")
+        self.lineEdit_outputPath.setPlaceholderText("Inference Complete后自动保存预览PNG的路径（默认为输入图像所在目录）")
         self.lineEdit_outputPath.setReadOnly(True)  # 只读，防止手动输入
-        self.lineEdit_outputPath.setToolTip("推理完成后会自动保存一个PNG格式的预览图到此路径")
-        self.pushButton_browseOutputPath = QPushButton("浏览...")
-        self.pushButton_browseOutputPath.setToolTip("选择自动保存预览PNG的文件夹")
+        self.lineEdit_outputPath.setToolTip("Inference Complete后会自动保存一个PNG格式的预览图到此路径")
+        self.pushButton_browseOutputPath = QPushButton("Browse...")
+        self.pushButton_browseOutputPath.setToolTip("Select folder for auto-saving preview PNG")
         output_layout.addWidget(self.lineEdit_outputPath)
         output_layout.addWidget(self.pushButton_browseOutputPath)
         form_layout.addRow(self.label_outputPath, output_layout)
@@ -1156,15 +1156,15 @@ class InferencePanel(QWidget):
         line1.setFrameShadow(QFrame.Sunken)
         form_layout.addRow(line1)
         
-        # 推理策略模式选择（大图分块/滑窗/全图缩放）
-        self.label_strategyMode = QLabel("策略模式:")
+        # 推理策略模式选择（大图分块/滑窗/Full Image Scale）
+        self.label_strategyMode = QLabel("Strategy:")
         strategy_layout = QHBoxLayout()
         # 注意：调整布局顺序，把"大图分块"放第一位并默认选中
         # 对象名保持原命名，避免破坏 _on_strategy_mode_changed() 等已有信号槽
-        self.radioButton_largeImageBlock = QRadioButton("大图分块 (GDAL)")
+        self.radioButton_largeImageBlock = QRadioButton("Large Image Tile (GDAL)")
         self.radioButton_largeImageBlock.setChecked(True)
-        self.radioButton_slidingWindow = QRadioButton("滑窗推理")
-        self.radioButton_resize = QRadioButton("全图缩放")
+        self.radioButton_slidingWindow = QRadioButton("Sliding Window")
+        self.radioButton_resize = QRadioButton("Full Image Scale")
         strategy_layout.addWidget(self.radioButton_largeImageBlock)
         strategy_layout.addWidget(self.radioButton_slidingWindow)
         strategy_layout.addWidget(self.radioButton_resize)
@@ -1178,15 +1178,15 @@ class InferencePanel(QWidget):
         # 策略说明（与 RadioButton 显示顺序一致）
         self.label_strategyNote = QLabel(
             "• 大图分块：图像 > 20000 像素超大影像（需 GDAL，推荐）\n"
-            "• 滑窗推理：图像 2000–20000 像素范围，标准推理\n"
-            "• 全图缩放：图像 ≤ 2000×2000 像素，快速预览"
+            "• Sliding Window：图像 2000–20000 像素范围，标准推理\n"
+            "• Full Image Scale：图像 ≤ 2000×2000 像素，快速预览"
         )
         self.label_strategyNote.setWordWrap(True)
         self.label_strategyNote.setStyleSheet("color: #666; font-size: 10px; font-style: italic;")
         form_layout.addRow("", self.label_strategyNote)
 
         # 滑窗参数 - 窗口大小
-        self.label_cropSize = QLabel("窗口大小 (Crop Size):")
+        self.label_cropSize = QLabel("Crop Size:")
         self.spinBox_cropSize = QSpinBox()
         self.spinBox_cropSize.setMinimum(256)
         self.spinBox_cropSize.setMaximum(2048)
@@ -1195,14 +1195,14 @@ class InferencePanel(QWidget):
         form_layout.addRow(self.label_cropSize, self.spinBox_cropSize)
 
         # 滑窗参数 - 步长 / 大图分块参数 - 重叠率
-        self.label_stride = QLabel("步长 (Stride):")
+        self.label_stride = QLabel("Stride:")
         stride_layout = QHBoxLayout()
         self.spinBox_stride = QSpinBox()
         self.spinBox_stride.setMinimum(64)
         self.spinBox_stride.setMaximum(2048)
         self.spinBox_stride.setSingleStep(64)
         self.spinBox_stride.setValue(512)
-        self.label_strideHint = QLabel("建议为窗口大小的50%-75%")
+        self.label_strideHint = QLabel("Recommended: 50%-75% of crop size")
         self.label_strideHint.setStyleSheet("color: #888; font-size: 10px;")
         stride_layout.addWidget(self.spinBox_stride)
         stride_layout.addWidget(self.label_strideHint)
@@ -1210,7 +1210,7 @@ class InferencePanel(QWidget):
         form_layout.addRow(self.label_stride, stride_layout)
 
         # 大图分块 - 重叠率
-        self.label_overlapRate = QLabel("重叠率 (Overlap Rate):")
+        self.label_overlapRate = QLabel("Overlap Rate:")
         overlap_layout = QHBoxLayout()
         self.doubleSpinBox_overlapRate = QDoubleSpinBox()
         self.doubleSpinBox_overlapRate.setMinimum(0.0)
@@ -1227,13 +1227,13 @@ class InferencePanel(QWidget):
         form_layout.addRow(self.label_overlapRate, overlap_layout)
 
         # 滑窗参数 - 批大小
-        self.label_batchSize = QLabel("批大小 (Batch Size):")
+        self.label_batchSize = QLabel("Batch Size:")
         batch_size_layout = QHBoxLayout()
         self.spinBox_batchSize = QSpinBox()
         self.spinBox_batchSize.setMinimum(1)
         self.spinBox_batchSize.setMaximum(32)
         self.spinBox_batchSize.setValue(1)
-        self.label_batchSizeHint = QLabel("根据GPU显存调整")
+        self.label_batchSizeHint = QLabel("Adjust based on GPU VRAM")
         self.label_batchSizeHint.setStyleSheet("color: #888; font-size: 10px;")
         batch_size_layout.addWidget(self.spinBox_batchSize)
         batch_size_layout.addWidget(self.label_batchSizeHint)
@@ -1247,7 +1247,7 @@ class InferencePanel(QWidget):
         form_layout.addRow(line2)
 
         # TTA增强选项
-        self.checkBox_enableTTA = QCheckBox("启用多尺度翻转增强 (Enable TTA)")
+        self.checkBox_enableTTA = QCheckBox("Enable TTA")
         form_layout.addRow("", self.checkBox_enableTTA)
 
         # 分隔线
@@ -1257,43 +1257,43 @@ class InferencePanel(QWidget):
         form_layout.addRow(line3)
 
         # 置信度阈值
-        self.label_confThreshold = QLabel("置信度阈值:")
+        self.label_confThreshold = QLabel("Confidence Threshold:")
         self.doubleSpinBox_confThreshold = QDoubleSpinBox()
         self.doubleSpinBox_confThreshold.setMinimum(0.0)
         self.doubleSpinBox_confThreshold.setMaximum(1.0)
         self.doubleSpinBox_confThreshold.setSingleStep(0.05)
         self.doubleSpinBox_confThreshold.setValue(0.5)
-        self.doubleSpinBox_confThreshold.setToolTip("置信度阈值，仅对支持置信度输出的模型有效")
+        self.doubleSpinBox_confThreshold.setToolTip("Confidence threshold, only valid for models supporting confidence output")
         form_layout.addRow(self.label_confThreshold, self.doubleSpinBox_confThreshold)
 
         parent_layout.addWidget(self.groupBox_inferenceStrategy)
 
     def _create_action_export_group(self, parent_layout):
-        """创建执行与导出区"""
-        self.groupBox_actionExport = QGroupBox("执行与导出 (Action & Export)")
+        """创建执行与Export区"""
+        self.groupBox_actionExport = QGroupBox("Action & Export")
         form_layout = QFormLayout(self.groupBox_actionExport)
         form_layout.setSpacing(3)  # 压缩行间距
         form_layout.setContentsMargins(6, 6, 6, 6)  # 压缩边距
 
         # 运行推理按钮
-        self.pushButton_runInference = QPushButton("运行推理 (Run Inference)")
+        self.pushButton_runInference = QPushButton("Run Inference")
         form_layout.addRow(self.pushButton_runInference)
 
-        # 批量推理按钮
-        self.pushButton_batchInference = QPushButton("批量推理 (Batch Inference)")
-        self.pushButton_batchInference.setVisible(False)  # P0-3: 隐藏批量推理
+        # Batch Inference按钮
+        self.pushButton_batchInference = QPushButton("Batch Inference")
+        self.pushButton_batchInference.setVisible(False)  # P0-3: 隐藏Batch Inference
         form_layout.addRow(self.pushButton_batchInference)
 
         # 进度条
-        self.label_inferenceProgress = QLabel("进度:")
+        self.label_inferenceProgress = QLabel("Progress:")
         progress_layout = QHBoxLayout()
         self.progressBar_inference = QProgressBar()
         self.progressBar_inference.setValue(0)
 
         # 取消按钮
-        self.pushButton_cancelInference = QPushButton("❌ 取消")
+        self.pushButton_cancelInference = QPushButton("❌ Cancel")
         self.pushButton_cancelInference.setToolTip("取消当前正在进行的推理任务")
-        self.pushButton_cancelInference.setEnabled(False)  # 初始禁用
+        self.pushButton_cancelInference.setEnabled(False)  # 初始Disable
         self.pushButton_cancelInference.setMaximumWidth(80)
 
         progress_layout.addWidget(self.progressBar_inference)
@@ -1306,65 +1306,65 @@ class InferencePanel(QWidget):
         line.setFrameShadow(QFrame.Sunken)
         form_layout.addRow(line)
 
-        # 导出说明
+        # Export说明
         self.label_exportNote = QLabel(
-            "💡 提示：推理完成后会自动保存预览PNG。\n"
-            "   如需其他格式或正式存档，请使用下方的导出功能。"
+            "💡 提示：Inference Complete后会自动保存预览PNG。\n"
+            "   如需其他格式或正式存档，请使用下方的Export功能。"
         )
         self.label_exportNote.setWordWrap(True)
         self.label_exportNote.setStyleSheet("color: #0066cc; font-size: 10px; padding: 5px; background-color: #e6f2ff; border-radius: 3px;")
         form_layout.addRow("", self.label_exportNote)
 
-        # 导出格式（语义分割常用格式）
-        self.label_exportFormat = QLabel("导出格式:")
+        # Export格式（语义分割常用格式）
+        self.label_exportFormat = QLabel("Export Format:")
         export_format_layout = QHBoxLayout()
         self.checkBox_exportTIF = QCheckBox("GeoTIFF (.tif)")
         self.checkBox_exportTIF.setChecked(True)
-        self.checkBox_exportTIF.setToolTip("导出GeoTIFF格式，保留地理坐标信息（语义分割标准格式）")
+        self.checkBox_exportTIF.setToolTip("Export GeoTIFF, retain geo info (standard format)")
         self.checkBox_exportPNG = QCheckBox("PNG")
-        self.checkBox_exportPNG.setToolTip("导出PNG格式的分类结果（无地理信息）")
+        self.checkBox_exportPNG.setToolTip("Export PNG format (no geo info)")
         self.checkBox_exportNumpy = QCheckBox("NumPy (.npy)")
-        self.checkBox_exportNumpy.setToolTip("导出NumPy数组格式，便于后续处理")
+        self.checkBox_exportNumpy.setToolTip("Export NumPy array format for further processing")
         export_format_layout.addWidget(self.checkBox_exportTIF)
         export_format_layout.addWidget(self.checkBox_exportPNG)
         export_format_layout.addWidget(self.checkBox_exportNumpy)
         export_format_layout.addStretch()
         form_layout.addRow(self.label_exportFormat, export_format_layout)
 
-        # 导出目录
-        self.label_exportDir = QLabel("导出目录 (正式存档):")
+        # Export目录
+        self.label_exportDir = QLabel("Export Directory:")
         export_dir_layout = QHBoxLayout()
         self.lineEdit_exportDir = QLineEdit()
-        self.lineEdit_exportDir.setPlaceholderText("选择正式导出目录（可选，默认使用输出路径）")
-        self.lineEdit_exportDir.setToolTip("手动导出时使用的目录，用于正式存档")
-        self.pushButton_browseExportDir = QPushButton("浏览...")
-        self.pushButton_browseExportDir.setToolTip("选择导出目录")
+        self.lineEdit_exportDir.setPlaceholderText("Select export directory (optional, default: output path)")
+        self.lineEdit_exportDir.setToolTip("手动Export时使用的目录，用于正式存档")
+        self.pushButton_browseExportDir = QPushButton("Browse...")
+        self.pushButton_browseExportDir.setToolTip("Select Export Directory")
         export_dir_layout.addWidget(self.lineEdit_exportDir)
         export_dir_layout.addWidget(self.pushButton_browseExportDir)
         form_layout.addRow(self.label_exportDir, export_dir_layout)
 
-        # 导出结果按钮
-        self.pushButton_exportResults = QPushButton("📤 导出结果（多格式）")
-        self.pushButton_exportResults.setToolTip("将推理结果导出为选定的格式（PNG/NumPy/JSON）")
+        # Export结果按钮
+        self.pushButton_exportResults = QPushButton("📤 Export Results")
+        self.pushButton_exportResults.setToolTip("Export inference results to selected formats (PNG/NumPy/JSON)")
         form_layout.addRow(self.pushButton_exportResults)
 
         parent_layout.addWidget(self.groupBox_actionExport)
 
     def _create_inference_result_group(self, parent_layout):
         """创建推理结果显示区"""
-        self.groupBox_inferenceResult = QGroupBox("推理结果 (Inference Result)")
+        self.groupBox_inferenceResult = QGroupBox("Inference Result")
         layout = QVBoxLayout(self.groupBox_inferenceResult)
         layout.setSpacing(3)  # 压缩行间距
         layout.setContentsMargins(6, 6, 6, 6)  # 压缩边距
 
-        self.label_inferenceResult = QLabel("暂无推理结果\n\n请加载模型并运行推理，结果将显示在此处。")
+        self.label_inferenceResult = QLabel("No inference results\n\nPlease load model and run inference.")
         self.label_inferenceResult.setWordWrap(True)
         self.label_inferenceResult.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         self.label_inferenceResult.setMinimumHeight(100)
         layout.addWidget(self.label_inferenceResult)
 
         self.table_modelTestMetrics = QTableWidget(0, 3)
-        self.table_modelTestMetrics.setHorizontalHeaderLabels(["指标", "数值", "来源"])
+        self.table_modelTestMetrics.setHorizontalHeaderLabels(["Metrics", "数值", "Source"])
         self.table_modelTestMetrics.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table_modelTestMetrics.verticalHeader().setVisible(False)
         self.table_modelTestMetrics.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
@@ -1373,7 +1373,7 @@ class InferencePanel(QWidget):
         layout.addWidget(self.table_modelTestMetrics)
 
         self.table_modelTestClassMetrics = QTableWidget(0, 4)
-        self.table_modelTestClassMetrics.setHorizontalHeaderLabels(["类别", "IoU", "Acc", "Dice"])
+        self.table_modelTestClassMetrics.setHorizontalHeaderLabels(["Class", "IoU", "Acc", "Dice"])
         self.table_modelTestClassMetrics.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table_modelTestClassMetrics.verticalHeader().setVisible(False)
         self.table_modelTestClassMetrics.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
@@ -1381,7 +1381,7 @@ class InferencePanel(QWidget):
         self.table_modelTestClassMetrics.setVisible(False)
         layout.addWidget(self.table_modelTestClassMetrics)
 
-        # 类别颜色配置组件（推理完成后显示）
+        # Class颜色配置组件（Inference Complete后显示）
         self.visualization_settings = VisualizationSettingsWidget()
         self.visualization_settings.setVisible(False)
         layout.addWidget(self.visualization_settings)
@@ -1399,7 +1399,7 @@ class InferencePanel(QWidget):
         self.comboBox_modelRegistry.currentIndexChanged.connect(self._on_model_registry_changed)
         self.pushButton_refreshRegistry.clicked.connect(self._manual_refresh_registry)
 
-        # 模型加载区
+        # Model Load区
         self.pushButton_browseConfig.clicked.connect(self._browse_config_file)
         self.pushButton_browseCheckpoint.clicked.connect(self._browse_checkpoint_file)
         self.lineEdit_configFile.textChanged.connect(self._on_config_file_changed)
@@ -1422,7 +1422,7 @@ class InferencePanel(QWidget):
         # 输出路径浏览
         self.pushButton_browseOutputPath.clicked.connect(self._browse_output_path)
 
-        # 导出目录浏览
+        # Export目录浏览
         self.pushButton_browseExportDir.clicked.connect(self._browse_export_dir)
 
         # 推理执行
@@ -1430,10 +1430,10 @@ class InferencePanel(QWidget):
         self.pushButton_batchInference.clicked.connect(self._run_batch_inference)
         self.pushButton_cancelInference.clicked.connect(self._cancel_inference)
 
-        # 导出结果
+        # Export结果
         self.pushButton_exportResults.clicked.connect(self._export_results)
 
-        # 可视化设置信号（由 MainWindow 外部连接到 GIS 画布，此处不再内部连接预览渲染）
+        # 可视化Settings信号（由 MainWindow 外部连接到 GIS 画布，此处不再内部连接预览渲染）
 
     def set_data_root(self, data_root: str):
         """由 MainWindow 在 Tab1 加载数据集后调用（BUG-INFER-02 修复）。
@@ -1515,7 +1515,7 @@ class InferencePanel(QWidget):
         data_root = context.get("data_root") or self._current_data_root
         splits = context.get("splits", {})
         if not data_root:
-            self.label_testDatasetInfo.setText("未加载")
+            self.label_testDatasetInfo.setText("Not Loaded")
             self.pushButton_testModel.setEnabled(False)
             return
 
@@ -1523,7 +1523,7 @@ class InferencePanel(QWidget):
         samples = list(splits.get(split, []))
         labelled_count = sum(1 for sample in samples if sample.get("label_path"))
         self.label_testDatasetInfo.setText(
-            f"划分: {split.upper()} | 样本: {len(samples)} | 标注: {labelled_count}"
+            f"Split: {split.upper()} | Sample: {len(samples)} | Label: {labelled_count}"
         )
         self.pushButton_testModel.setEnabled(bool(samples) and bool(self.inference_model) and not self._is_model_testing)
 
@@ -1537,7 +1537,7 @@ class InferencePanel(QWidget):
         work_dirs_path = os.path.join(self._current_data_root, 'work_dirs')
         if not os.path.exists(work_dirs_path):
             self._emit_log(
-                f"ℹ️ 扫描路径下未发现 work_dirs/ 子目录: {self._current_data_root}"
+                f"ℹ️ No work_dirs/ found at: {self._current_data_root}"
             )
             return
 
@@ -1545,7 +1545,7 @@ class InferencePanel(QWidget):
 
         self.comboBox_modelRegistry.blockSignals(True)
         self.comboBox_modelRegistry.clear()
-        self.comboBox_modelRegistry.addItem("请选择历史训练模型或者手动指定下方文件...", userData=None)
+        self.comboBox_modelRegistry.addItem("Select history trained model or specify file below...", userData=None)
 
         try:
             dirs = [d for d in os.listdir(work_dirs_path) if os.path.isdir(os.path.join(work_dirs_path, d))]
@@ -1565,13 +1565,13 @@ class InferencePanel(QWidget):
                 self.comboBox_modelRegistry.addItem(f"📦 {d}", userData=dir_path)
 
         except Exception as e:
-            self._emit_log(f"⚠️  扫描模型库失败: {e}")
+            self._emit_log(f"⚠️  Scan model repo failed: {e}")
 
         self.comboBox_modelRegistry.blockSignals(False)
 
         # P1-1: 扫描结束后若只有默认项，更新提示文字
         if self.comboBox_modelRegistry.count() == 1:
-            self.comboBox_modelRegistry.setItemText(0, "（未找到训练记录，请先在「数据洞察」标签页加载数据集，或手动指定下方配置文件）")
+            self.comboBox_modelRegistry.setItemText(0, "(No training records found, please load dataset in 'Data Profile' or specify config below)")
 
         if current_data:
             index = self.comboBox_modelRegistry.findData(current_data)
@@ -1589,10 +1589,10 @@ class InferencePanel(QWidget):
             # 回退：使用项目当前工作目录（main.py 启动目录，通常含 work_dirs/）
             candidate = os.getcwd()
             self._emit_log(
-                f"ℹ️ 未关联「数据洞察」数据集，回退到项目根目录扫描：{candidate}"
+                f"ℹ️ Dataset not linked, fallback to project root scan: {candidate}"
             )
         self.scan_trained_models(candidate)
-        self._emit_log("🔄 已刷新已训练模型库")
+        self._emit_log("🔄 Refreshed trained model repo")
             
     def _on_model_registry_changed(self, index):
         """模型下拉框选择改变时触发"""
@@ -1622,7 +1622,7 @@ class InferencePanel(QWidget):
         if best_pth:
             self.lineEdit_checkpointFile.setText(os.path.join(dir_path, best_pth))
 
-        self._emit_log(f"✅ 从库中自动填充了模型配置: {os.path.basename(dir_path)}")
+        self._emit_log(f"✅ Auto-filled model config from repo: {os.path.basename(dir_path)}")
 
     def select_model_by_dir(self, work_dir):
         """外部调用：强制下拉框选中指定的目录"""
@@ -1643,16 +1643,16 @@ class InferencePanel(QWidget):
 
         if cuda_available:
             self.comboBox_device.setCurrentIndex(0)  # Auto
-            self._emit_log("🎮 [推理配置] CUDA 可用，默认设备: Auto")
+            self._emit_log("🎮 [Inference] CUDA available, default device: Auto")
         else:
             self.comboBox_device.setCurrentIndex(2)  # CPU
-            # 禁用 CUDA:0 选项
+            # Disable CUDA:0 选项
             model = self.comboBox_device.model()
             item = model.item(1)
             if item:
                 item.setEnabled(False)
-                item.setToolTip("CUDA 不可用")
-            self._emit_log("⚠️  [推理配置] CUDA 不可用，默认设备: CPU")
+                item.setToolTip("CUDA Not Available")
+            self._emit_log("⚠️  [推理配置] CUDA Not Available，默认设备: CPU")
 
     def _check_cuda_available(self) -> bool:
         """检测 CUDA 是否可用"""
@@ -1674,10 +1674,10 @@ class InferencePanel(QWidget):
             pass
 
     def _browse_config_file(self):
-        """浏览并选择MMSeg配置文件"""
+        """Browse and select MMSeg config"""
         file_path, _ = QFileDialog.getOpenFileName(
             self,
-            "选择 MMSegmentation 配置文件",
+            "Select MMSegmentation Config",
             "",
             "Python Files (*.py);;All Files (*.*)"
         )
@@ -1693,24 +1693,24 @@ class InferencePanel(QWidget):
         # 尝试解析模型名称
         try:
             config_info = self._parse_config_file(file_path)
-            model_name = config_info.get('model_name', '未知模型')
+            model_name = config_info.get('model_name', 'Unknown Model')
 
             self.label_modelNameValue.setText(model_name)
             self.label_modelNameValue.setStyleSheet("color: #000; font-style: normal; font-weight: bold;")
 
-            self._emit_log(f"✅ [推理配置] 已加载配置文件: {os.path.basename(file_path)}")
-            self._emit_log(f"   📝 模型名称: {model_name}")
+            self._emit_log(f"✅ [推理配置] 已加载Config File: {os.path.basename(file_path)}")
+            self._emit_log(f"   📝 Model Name: {model_name}")
 
             # 智能推荐权重文件
             self._suggest_checkpoint_file(file_path, model_name)
 
         except Exception as e:
-            self.label_modelNameValue.setText("解析失败")
+            self.label_modelNameValue.setText("Parse Failed")
             self.label_modelNameValue.setStyleSheet("color: #f00; font-style: italic;")
-            self._emit_log(f"❌ [推理配置] 配置文件解析失败: {e}")
+            self._emit_log(f"❌ [推理配置] 配置文件Parse Failed: {e}")
 
     def _validate_config_file(self, file_path: str) -> bool:
-        """验证配置文件格式"""
+        """Validate config format"""
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
@@ -1721,7 +1721,7 @@ class InferencePanel(QWidget):
             if not has_keywords:
                 QMessageBox.warning(
                     self,
-                    "配置文件格式错误",
+                    "Config Format Error",
                     "所选文件可能不是有效的 MMSegmentation 配置文件。\n\n"
                     "有效的配置文件应包含 'model' 定义。"
                 )
@@ -1732,8 +1732,8 @@ class InferencePanel(QWidget):
         except Exception as e:
             QMessageBox.critical(
                 self,
-                "文件读取错误",
-                f"无法读取配置文件。\n\n错误信息: {e}"
+                "File Read Error",
+                f"Cannot read config file.\n\nError msg: {e}"
             )
             return False
 
@@ -1760,8 +1760,8 @@ class InferencePanel(QWidget):
             return config_info
 
         except Exception as e:
-            # 优雅降级 - 不影响模型加载
-            self._emit_log(f"⚠️  配置解析警告: {e}")
+            # 优雅降级 - 不影响Model Load
+            self._emit_log(f"⚠️  Config parse warning: {e}")
             return {
                 'model_name': os.path.splitext(os.path.basename(file_path))[0],
                 'model_type': None,
@@ -1801,8 +1801,8 @@ class InferencePanel(QWidget):
 
             reply = QMessageBox.question(
                 self,
-                "发现匹配的权重文件",
-                f"找到与模型 '{model_name}' 匹配的权重文件：\n\n"
+                "Found matched weight file",
+                f"Found with model '{model_name}' matching weight files:\n\n"
                 f"{os.path.basename(latest_checkpoint)}\n\n"
                 f"是否使用此权重文件？",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
@@ -1811,10 +1811,10 @@ class InferencePanel(QWidget):
 
             if reply == QMessageBox.StandardButton.Yes:
                 self.lineEdit_checkpointFile.setText(latest_checkpoint)
-                self._emit_log(f"💡 [推理配置] 自动选择权重文件: {os.path.basename(latest_checkpoint)}")
+                self._emit_log(f"💡 [推理配置] 自动选择Weight File: {os.path.basename(latest_checkpoint)}")
 
     def _browse_checkpoint_file(self):
-        """浏览并选择模型权重文件"""
+        """浏览并Select Model Weight File"""
         start_dir = ""
         config_path = self.lineEdit_configFile.text()
         if config_path and os.path.exists(config_path):
@@ -1822,7 +1822,7 @@ class InferencePanel(QWidget):
 
         file_path, _ = QFileDialog.getOpenFileName(
             self,
-            "选择模型权重文件",
+            "Select Model Weight File",
             start_dir,
             "PyTorch Checkpoint (*.pth *.pt);;All Files (*.*)"
         )
@@ -1833,13 +1833,13 @@ class InferencePanel(QWidget):
             file_size = os.path.getsize(file_path)
             size_mb = file_size / (1024 * 1024)
 
-            self._emit_log(f"✅ [推理配置] 已选择权重文件: {os.path.basename(file_path)}")
-            self._emit_log(f"   📦 文件大小: {size_mb:.2f} MB")
+            self._emit_log(f"✅ [推理配置] 已选择Weight File: {os.path.basename(file_path)}")
+            self._emit_log(f"   📦 File Size: {size_mb:.2f} MB")
 
     def _on_config_file_changed(self, text):
         """配置文件路径变化时触发"""
         if not text:
-            self.label_modelNameValue.setText("未加载配置")
+            self.label_modelNameValue.setText("Config Not Loaded")
             self.label_modelNameValue.setStyleSheet("color: #888; font-style: italic;")
 
         self._refresh_model_test_state()
@@ -1847,7 +1847,7 @@ class InferencePanel(QWidget):
     def _on_inference_mode_changed(self, checked):
         """推理模式切换"""
         # 批量模式时，输入影像框应该支持选择目录，但我们统一使用程序化控制
-        # 因此此处不再禁用/启用控件
+        # 因此此处不再Disable/Enable控件
         pass
 
     def _on_strategy_mode_changed(self):
@@ -1871,18 +1871,18 @@ class InferencePanel(QWidget):
             self.label_stride.setVisible(is_sliding_window)
             self.label_overlapRate.setVisible(False)
 
-        # 窗口大小和批大小对全图缩放模式不可用
+        # 窗口大小和批大小对Full Image Scale模式不可用
         is_resize = self.radioButton_resize.isChecked()
         self.spinBox_cropSize.setEnabled(not is_resize)
         self.spinBox_batchSize.setEnabled(is_sliding_window)
 
     def _browse_input_image(self):
-        """浏览选择输入影像"""
+        """Browse input image"""
         if self.is_single_image_mode():
             # 单图模式：选择文件
             file_path, _ = QFileDialog.getOpenFileName(
                 self,
-                "选择要推理的图像",
+                "Select image to infer",
                 "",
                 "Image Files (*.png *.jpg *.jpeg *.tif *.tiff *.bmp);;All Files (*.*)"
             )
@@ -1903,7 +1903,7 @@ class InferencePanel(QWidget):
             # 批量模式：选择目录
             dir_path = QFileDialog.getExistingDirectory(
                 self,
-                "选择批量推理图像目录",
+                "Select Batch Inference Image Directory",
                 "",
                 QFileDialog.Option.ShowDirsOnly
             )
@@ -1914,32 +1914,32 @@ class InferencePanel(QWidget):
         """根据图像尺寸自动推荐推理策略并更新说明文字"""
         if w * h <= 2000 * 2000:
             self.radioButton_resize.setChecked(True)
-            tag = ("【推荐】", "", "")
+            tag = ("[Recommended]", "", "")
         elif w * h <= 20000 * 20000:
             self.radioButton_slidingWindow.setChecked(True)
-            tag = ("", "【推荐】", "")
+            tag = ("", "[Recommended]", "")
         else:
             self.radioButton_largeImageBlock.setChecked(True)
-            tag = ("", "", "【推荐】")
+            tag = ("", "", "[Recommended]")
 
         self.label_strategyNote.setText(
-            f"• 全图缩放 {tag[0]}：图像 ≤ 2000×2000 像素，快速预览\n"
-            f"• 滑窗推理 {tag[1]}：图像 2000–20000 像素范围，标准推理\n"
-            f"• 大图分块 {tag[2]}：图像 > 20000 像素超大影像（需 GDAL）"
+            f"• Full Image Scale {tag[0]}：图像 ≤ 2000×2000 像素，快速预览\n"
+            f"• Sliding Window {tag[1]}：图像 2000–20000 像素范围，标准推理\n"
+            f"• 大图分块 {tag[2]}: image > 20000 pixels (requires GDAL)"
         )
-        self._emit_log(f"💡 已根据图像尺寸（{w}×{h}）自动推荐推理策略")
+        self._emit_log(f"💡 Auto-selected strategy based on image size ({w}×{h})")
 
     def _browse_output_path(self):
-        """浏览选择输出路径（自动保存预览PNG）"""
+        """Browse output path (auto-save preview PNG)"""
         dir_path = QFileDialog.getExistingDirectory(
             self,
-            "选择自动保存预览PNG的文件夹",
+            "Select folder for auto-saving preview PNG",
             "",
             QFileDialog.Option.ShowDirsOnly
         )
         if dir_path:
             self.lineEdit_outputPath.setText(dir_path)
-            self._emit_log(f"✅ [推理配置] 预览PNG输出路径已设置: {dir_path}")
+            self._emit_log(f"✅ [Inference] Preview PNG output path set: {dir_path}")
 
     def _generate_output_filename(self, input_path: str) -> str:
         """
@@ -1960,10 +1960,10 @@ class InferencePanel(QWidget):
         return output_filename
 
     def _browse_export_dir(self):
-        """浏览导出目录"""
+        """Browse Export Directory"""
         dir_path = QFileDialog.getExistingDirectory(
             self,
-            "选择导出目录",
+            "Select Export Directory",
             "",
             QFileDialog.Option.ShowDirsOnly
         )
@@ -1976,23 +1976,23 @@ class InferencePanel(QWidget):
         checkpoint_path = self.lineEdit_checkpointFile.text().strip()
 
         if not config_path:
-            self._emit_log("⚠️  请先选择配置文件")
-            QMessageBox.warning(self, "缺少配置文件", "请先选择 MMSegmentation 配置文件。")
+            self._emit_log("⚠️  Please select config file first")
+            QMessageBox.warning(self, "Missing Config File", "请先Select MMSegmentation Config。")
             return
 
         if not checkpoint_path:
-            self._emit_log("⚠️  请先选择权重文件")
-            QMessageBox.warning(self, "缺少权重文件", "请先选择模型权重文件。")
+            self._emit_log("⚠️  Please select weight file first")
+            QMessageBox.warning(self, "Missing Weight File", "请先Select Model Weight File。")
             return
 
         if not os.path.exists(config_path):
-            self._emit_log(f"❌ 配置文件不存在: {config_path}")
-            QMessageBox.critical(self, "配置文件不存在", f"配置文件不存在:\n{config_path}")
+            self._emit_log(f"❌ 配置File Not Found: {config_path}")
+            QMessageBox.critical(self, "配置File Not Found", f"Config file does not exist:\n{config_path}")
             return
 
         if not os.path.exists(checkpoint_path):
-            self._emit_log(f"❌ 权重文件不存在: {checkpoint_path}")
-            QMessageBox.critical(self, "权重文件不存在", f"权重文件不存在:\n{checkpoint_path}")
+            self._emit_log(f"❌ 权重File Not Found: {checkpoint_path}")
+            QMessageBox.critical(self, "权重File Not Found", f"权重File Not Found:\n{checkpoint_path}")
             return
 
         device_text = self.comboBox_device.currentText()
@@ -2003,20 +2003,20 @@ class InferencePanel(QWidget):
             device = "cpu"
 
         self.pushButton_loadModel.setEnabled(False)
-        self._emit_log("🔄 正在加载模型...")
+        self._emit_log("🔄 Loading model...")
 
         QApplication.processEvents()
         QTimer.singleShot(100, lambda: self._do_load_inference_model(config_path, checkpoint_path, device))
 
     def _do_load_inference_model(self, config_path: str, checkpoint_path: str, device: str):
-        """实际执行模型加载 - 增强版本"""
+        """实际执行Model Load - 增强版本"""
         try:
             # 解析配置文件 - 使用健壮解析器
             config_info = self._parse_config_file_robust(config_path)
 
-            # 即使配置解析失败，也继续模型加载
+            # 即使配置Parse Failed，也继续Model Load
             if config_info.get('classes') is None:
-                self._emit_log("⚠️  未找到类别信息，将使用默认设置")
+                self._emit_log("⚠️  未找到Class信息，将使用默认Settings")
 
             # 保存模型信息（实际项目中应使用 MMSegmentation API 加载真实模型）
             runtime_python = resolve_training_python()
@@ -2033,16 +2033,16 @@ class InferencePanel(QWidget):
             }
 
             self.pushButton_loadModel.setEnabled(True)
-            self.label_modelStatus.setText("模型已就绪")
+            self.label_modelStatus.setText("Model Ready")
             self.label_modelStatus.setStyleSheet("color: #28a745; font-weight: bold;")
 
-            # 显示类别图例 - 安全版本
+            # 显示Class图例 - 安全版本
             try:
                 self._display_classes_legend_safe(config_info.get('classes'), config_info.get('palette'))
             except Exception as legend_error:
-                self._emit_log(f"⚠️  类别图例显示警告: {legend_error}")
+                self._emit_log(f"⚠️  Class legend warning: {legend_error}")
 
-            self._emit_log("✅ 模型已就绪 (Model Ready)")
+            self._emit_log("✅ Model Ready (Model Ready)")
             self._emit_log(f"Python: {runtime_python}")
             for module_file in custom_module_files:
                 self._emit_log(f"Custom module: {module_file}")
@@ -2069,7 +2069,7 @@ class InferencePanel(QWidget):
             }
         except Exception as e:
             # 记录警告但不抛出异常
-            self._emit_log(f"⚠️  配置解析失败: {e}")
+            self._emit_log(f"⚠️  Config parse failed: {e}")
             return {
                 'classes': None,
                 'palette': None,
@@ -2078,11 +2078,11 @@ class InferencePanel(QWidget):
             }
 
     def _display_classes_legend_safe(self, classes, palette):
-        """安全的类别图例显示"""
+        """安全的Class图例显示"""
         try:
             self._display_classes_legend(classes, palette)
         except Exception as e:
-            self._emit_log(f"⚠️  类别图例显示失败: {e}")
+            self._emit_log(f"⚠️  Class图例显示失败: {e}")
             # 隐藏图例区域但不影响其他功能
             try:
                 self.scrollArea_classesLegend.setVisible(False)
@@ -2090,20 +2090,20 @@ class InferencePanel(QWidget):
                 pass
 
     def _handle_model_loading_error(self, error: Exception):
-        """处理模型加载错误"""
+        """处理Model Load错误"""
         self.pushButton_loadModel.setEnabled(True)
-        self.label_modelStatus.setText("加载失败")
+        self.label_modelStatus.setText("Load Failed")
         self.label_modelStatus.setStyleSheet("color: #dc3545; font-weight: bold;")
 
         import traceback
         error_details = traceback.format_exc()
-        self._emit_log(f"❌ 模型加载失败: {error}")
-        self._emit_log(f"详细错误:\n{error_details}")
+        self._emit_log(f"❌ Model load failed: {error}")
+        self._emit_log(f"Detailed error:\n{error_details}")
 
-        QMessageBox.critical(self, "模型加载失败", f"模型加载过程中发生错误。\n\n错误信息:\n{str(error)}")
+        QMessageBox.critical(self, "Model Load Failed", f"Error occurred during model load.\n\nError msg:\n{str(error)}")
 
     def _display_classes_legend(self, classes, palette):
-        """显示类别图例"""
+        """显示Class图例"""
         try:
             layout = self.verticalLayout_classes
             while layout.count():
@@ -2118,7 +2118,7 @@ class InferencePanel(QWidget):
 
             if not classes or not palette:
                 self.scrollArea_classesLegend.setVisible(False)
-                self._emit_log("⚠️  配置文件中未找到 CLASSES 或 PALETTE 信息")
+                self._emit_log("⚠️  CLASSES or PALETTE not found in config")
                 return
 
             self.scrollArea_classesLegend.setVisible(True)
@@ -2147,16 +2147,16 @@ class InferencePanel(QWidget):
 
                     layout.addWidget(class_label)
                 except Exception as label_error:
-                    self._emit_log(f"⚠️  创建类别标签 {idx} 失败: {label_error}")
+                    self._emit_log(f"⚠️  创建Class标签 {idx} Failed: {label_error}")
                     continue
 
             layout.addStretch()
 
             if classes:
-                self._emit_log(f"📊 已加载 {len(classes)} 个类别")
+                self._emit_log(f"📊 Loaded {len(classes)} 个Class")
 
         except Exception as e:
-            self._emit_log(f"⚠️  类别图例显示失败: {e}")
+            self._emit_log(f"⚠️  Class图例显示失败: {e}")
             try:
                 self.scrollArea_classesLegend.setVisible(False)
             except:
@@ -2179,7 +2179,7 @@ class InferencePanel(QWidget):
 
     def _run_model_test(self):
         if not self.inference_model:
-            QMessageBox.warning(self, "模型未加载", "请先加载模型。")
+            QMessageBox.warning(self, "Model Not Loaded", "Please load model first.")
             return
         module_warnings = validate_custom_module_files(
             self.inference_model.get("custom_module_files", [])
@@ -2190,14 +2190,14 @@ class InferencePanel(QWidget):
             QMessageBox.critical(self, "自定义模块路径失效", message)
             return
         if not self._dataset_context or not self._dataset_context.get("data_root"):
-            QMessageBox.warning(self, "数据集未加载", "请先在数据洞察中加载数据集。")
+            QMessageBox.warning(self, "Dataset not loaded", "Please load dataset in Data Profile first.")
             return
         if self._is_model_testing:
             return
 
         self._set_model_test_running(True)
         self._clear_model_test_tables()
-        self._emit_log("模型测试开始")
+        self._emit_log("Model Test Started")
         self.progressBar_modelTest.setValue(0)
         self._clear_test_sample_selector()
 
@@ -2216,25 +2216,25 @@ class InferencePanel(QWidget):
         if self._model_test_worker:
             self._model_test_worker.request_cancel()
             self.pushButton_cancelModelTest.setEnabled(False)
-            self.label_testStatus.setText("取消中")
+            self.label_testStatus.setText("Cancelling")
 
     def _on_model_test_finished(self, result: dict):
         self._model_test_summary = result.get("summary", {})
         self._model_test_results = result.get("samples", [])
-        self.label_testStatus.setText("测试完成")
+        self.label_testStatus.setText("Test Complete")
         self._clear_model_test_tables()
         self._clear_test_sample_selector()
         self._log_model_test_result(self._model_test_summary, result.get("metrics", {}))
 
     def _on_model_test_error(self, error_msg: str):
         self.progressBar_modelTest.setValue(0)
-        self.label_testStatus.setText("测试失败")
-        self._emit_log(f"模型测试失败: {error_msg}")
+        self.label_testStatus.setText("Test Failed")
+        self._emit_log(f"Model test failed: {error_msg}")
 
     def _on_model_test_cancelled(self):
         self.progressBar_modelTest.setValue(0)
-        self.label_testStatus.setText("已取消")
-        self._emit_log("模型测试已取消")
+        self.label_testStatus.setText("Cancelled")
+        self._emit_log("模型测试Cancelled")
 
     def _cleanup_model_test_worker(self):
         self._set_model_test_running(False)
@@ -2247,16 +2247,16 @@ class InferencePanel(QWidget):
         self.pushButton_testModel.setEnabled(not is_running)
         self.pushButton_cancelModelTest.setEnabled(is_running)
         if is_running:
-            self.label_testStatus.setText("测试中")
+            self.label_testStatus.setText("Testing")
         else:
             self._refresh_model_test_state()
 
     def _format_model_test_summary(self, summary: dict) -> str:
         return (
-            f"模型测试完成\n"
-            f"划分: {str(summary.get('split', '')).upper()}\n"
+            f"模型Test Complete\n"
+            f"Split: {str(summary.get('split', '')).upper()}\n"
             f"样本: {summary.get('sample_count', 0)}\n"
-            f"标注: {summary.get('labelled_count', 0)}\n"
+            f"Label: {summary.get('labelled_count', 0)}\n"
             f"输出: {summary.get('work_dir', '')}"
         )
 
@@ -2269,22 +2269,22 @@ class InferencePanel(QWidget):
     def _clear_test_sample_selector(self):
         self.comboBox_testSamples.blockSignals(True)
         self.comboBox_testSamples.clear()
-        self.comboBox_testSamples.addItem("暂无样本", userData=None)
+        self.comboBox_testSamples.addItem("No Samples", userData=None)
         self.comboBox_testSamples.setEnabled(False)
         self.comboBox_testSamples.blockSignals(False)
 
     def _log_model_test_result(self, summary: dict, metrics: dict):
-        self._emit_log("模型测试完成")
-        self._emit_log(f"划分: {str(summary.get('split', '')).upper()}")
+        self._emit_log("模型Test Complete")
+        self._emit_log(f"Split: {str(summary.get('split', '')).upper()}")
         self._emit_log(f"样本: {summary.get('sample_count', 0)}")
-        self._emit_log(f"标注: {summary.get('labelled_count', 0)}")
-        self._emit_log(f"测试日志、临时运行状态与评估记录目录 已保存到 {summary.get('work_dir', '')}")
+        self._emit_log(f"Label: {summary.get('labelled_count', 0)}")
+        self._emit_log(f"Test logs and evaluation records saved to {summary.get('work_dir', '')}")
         show_dir = summary.get("show_dir", "")
         out_dir = summary.get("out_dir", "")
         if show_dir:
-            self._emit_log(f"官方可视化预测图输出目录 已保存到 {show_dir}")
+            self._emit_log(f"Official visualization output saved to {show_dir}")
         if out_dir:
-            self._emit_log(f"原始预测结果输出目录 已保存到 {out_dir}")
+            self._emit_log(f"Raw prediction output saved to {out_dir}")
 
     def _update_model_test_tables(self, metrics: dict):
         metric_items = []
@@ -2328,11 +2328,11 @@ class InferencePanel(QWidget):
         self.comboBox_testSamples.blockSignals(True)
         self.comboBox_testSamples.clear()
         if not samples:
-            self.comboBox_testSamples.addItem("暂无样本", userData=None)
+            self.comboBox_testSamples.addItem("No Samples", userData=None)
             self.comboBox_testSamples.setEnabled(False)
         else:
             for sample in samples:
-                label_state = "有标签" if sample.get("label_path") else "无标签"
+                label_state = "Has Label" if sample.get("label_path") else "No Label"
                 self.comboBox_testSamples.addItem(f"{sample.get('sample_id', '')} ({label_state})", userData=sample)
             self.comboBox_testSamples.setEnabled(True)
             self.comboBox_testSamples.setCurrentIndex(0)
@@ -2353,7 +2353,7 @@ class InferencePanel(QWidget):
             if not prediction_path:
                 self.visualization_widget.clear()
                 self.visualization_widget.setVisible(True)
-                self.visualization_widget.image_label.setText("预测结果未找到")
+                self.visualization_widget.image_label.setText("Prediction result not found")
                 return
             prediction = self._read_preview_image(prediction_path, as_mask=False)
             self.visualization_settings.setVisible(False)
@@ -2361,7 +2361,7 @@ class InferencePanel(QWidget):
             self.visualization_widget.render_test_images(image=image, prediction=prediction, label=label)
         except Exception as e:
             self.visualization_widget.setVisible(True)
-            self.visualization_widget.image_label.setText(f"样本预览失败: {e}")
+            self.visualization_widget.image_label.setText(f"Sample preview failed: {e}")
 
     def _read_preview_image(self, path: str, as_mask: bool = False):
         if not path or not os.path.exists(path):
@@ -2374,11 +2374,11 @@ class InferencePanel(QWidget):
         return np.array(image.convert("RGB"))
 
     def _run_inference(self):
-        """运行单图推理"""
+        """Run Single Inference"""
         # 1. 检查模型是否已加载
         if not self.inference_model:
-            self._emit_log("⚠️  模型未加载，无法执行推理")
-            QMessageBox.warning(self, "模型未加载", "请先加载推理模型。")
+            self._emit_log("⚠️  Model not loaded, cannot infer")
+            QMessageBox.warning(self, "Model Not Loaded", "Please load inference model first.")
             return
 
         module_warnings = validate_custom_module_files(
@@ -2394,18 +2394,18 @@ class InferencePanel(QWidget):
         image_path = self.lineEdit_inputPath.text().strip()
 
         if not image_path:
-            self._emit_log("⚠️  未选择图像文件")
+            self._emit_log("⚠️  No image selected文件")
             QMessageBox.warning(
                 self,
-                "未选择图像",
-                "请先在'输入影像'中选择要推理的图像，\n或从 GIS 图层中同步图像。"
+                "No image selected",
+                "请先在'输入影像'中Select image to infer，\n或从 GIS 图层中同步图像。"
             )
             return
 
         # 3. 读取选择的图片（验证）
         if not os.path.exists(image_path):
-            self._emit_log(f"❌ 图像文件不存在: {image_path}")
-            QMessageBox.critical(self, "文件不存在", f"图像文件不存在:\n{image_path}")
+            self._emit_log(f"❌ 图像File Not Found: {image_path}")
+            QMessageBox.critical(self, "File Not Found", f"图像File Not Found:\n{image_path}")
             return
 
         try:
@@ -2419,65 +2419,65 @@ class InferencePanel(QWidget):
             img_width, img_height = img.size
             img_size_mb = os.path.getsize(image_path) / (1024 * 1024)
 
-            self._emit_log(f"📷 已加载图像: {os.path.basename(image_path)}")
-            self._emit_log(f"   尺寸: {img_width} x {img_height} ({img_width * img_height / 1000000:.1f}M 像素)")
-            self._emit_log(f"   文件大小: {img_size_mb:.2f} MB")
+            self._emit_log(f"📷 Loaded Image: {os.path.basename(image_path)}")
+            self._emit_log(f"   Size: {img_width} x {img_height} ({img_width * img_height / 1000000:.1f}M pixels)")
+            self._emit_log(f"   File Size: {img_size_mb:.2f} MB")
 
             # 对于超大图像给出警告和建议
             if img_width * img_height > 100000000:  # 超过1亿像素
-                self._emit_log(f"⚠️  检测到超大尺寸图像，建议使用大图分块推理")
+                self._emit_log(f"⚠️  Detected large image, recommend Tile (GDAL) mode")
 
-                # 如果当前选择的是全图缩放或滑窗推理，强烈建议切换
+                # 如果当前选择的是Full Image Scale或Sliding Window，强烈建议切换
                 if self.radioButton_resize.isChecked():
                     reply = QMessageBox.question(
                         self,
-                        "超大图像警告",
-                        f"检测到超大尺寸图像 ({img_width} x {img_height})。\n\n"
-                        f"当前选择的是'全图缩放'模式，可能导致内存不足。\n"
-                        f"建议切换到'大图分块 (GDAL)'模式。\n\n"
-                        f"是否继续使用全图缩放模式？",
+                        "Large Image Warning",
+                        f"Detected large image ({img_width} x {img_height})。\n\n"
+                        f"当前选择的是'Full Image Scale'模式，可能导致内存不足。\n"
+                        f"建议切换到'Large Image Tile (GDAL)'模式。\n\n"
+                        f"是否继续使用Full Image Scale模式？",
                         QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                         QMessageBox.StandardButton.No
                     )
 
                     if reply == QMessageBox.StandardButton.No:
-                        self._emit_log("⚠️  用户取消推理")
+                        self._emit_log("⚠️  User cancelled inference")
                         return
 
                 elif self.radioButton_slidingWindow.isChecked():
                     reply = QMessageBox.warning(
                         self,
-                        "超大图像警告",
-                        f"检测到超大尺寸图像 ({img_width} x {img_height} = {img_width*img_height/1000000:.1f}M像素)。\n\n"
+                        "Large Image Warning",
+                        f"Detected large image ({img_width} x {img_height} = {img_width*img_height/1000000:.1f}M像素)。\n\n"
                         f"⚠️ 重要提示：\n"
-                        f"'滑窗推理'模式需要在内存中创建完整的结果掩码，\n"
+                        f"'Sliding Window'模式需要在内存中创建完整的结果掩码，\n"
                         f"对于如此大的图像会导致内存溢出！\n\n"
                         f"系统将跳过实际推理以保护内存。\n\n"
                         f"✅ 强烈建议：\n"
-                        f"请切换到'大图分块 (GDAL)'模式进行真正的推理！\n\n"
+                        f"请切换到'Large Image Tile (GDAL)'模式进行真正的推理！\n\n"
                         f"是否继续（将不会进行实际推理）？",
                         QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                         QMessageBox.StandardButton.No
                     )
 
                     if reply == QMessageBox.StandardButton.No:
-                        self._emit_log("⚠️  用户取消推理，建议切换到大图分块模式")
+                        self._emit_log("⚠️  User cancelled inference，建议切换到大图分块模式")
                         return
 
         except Exception as e:
-            self._emit_log(f"❌ 图像读取失败: {e}")
-            QMessageBox.critical(self, "图像读取失败", f"无法读取图像文件。\n\n错误信息:\n{str(e)}")
+            self._emit_log(f"❌ Image read failed: {e}")
+            QMessageBox.critical(self, "Image Read Failed", f"Cannot read image file.\n\nError msg:\n{str(e)}")
             return
 
         # 发送推理开始信号
         self.inference_started.emit()
-        self._emit_log("🚀 开始单图推理...")
+        self._emit_log("🚀 Start single inference...")
 
         # 发送同步信号到左侧 GIS 图层控制（如果未被抑制）
         if not self._suppress_sync:
             self.input_path_selected.emit(image_path)
 
-        # 禁用推理按钮，防止重复点击
+        # Disable推理按钮，防止重复点击
         self.pushButton_runInference.setEnabled(False)
         self.progressBar_inference.setValue(0)
 
@@ -2498,15 +2498,15 @@ class InferencePanel(QWidget):
             'conf_threshold': self.doubleSpinBox_confThreshold.value()
         }
 
-        self._emit_log(f"   策略模式: {strategy}")
+        self._emit_log(f"   Strategy: {strategy}")
         if strategy == 'sliding_window':
-            self._emit_log(f"   窗口大小: {inference_params['crop_size']}")
-            self._emit_log(f"   步长: {inference_params['stride']}")
-            self._emit_log(f"   批大小: {inference_params['batch_size']}")
+            self._emit_log(f"   Window Size: {inference_params['crop_size']}")
+            self._emit_log(f"   Stride: {inference_params['stride']}")
+            self._emit_log(f"   Batch Size: {inference_params['batch_size']}")
         elif strategy == 'large_image_block':
-            self._emit_log(f"   窗口大小: {inference_params['crop_size']}")
-            self._emit_log(f"   重叠率: {inference_params['overlap_rate']}")
-        self._emit_log(f"   TTA增强: {'启用' if inference_params['enable_tta'] else '禁用'}")
+            self._emit_log(f"   Window Size: {inference_params['crop_size']}")
+            self._emit_log(f"   Overlap Rate: {inference_params['overlap_rate']}")
+        self._emit_log(f"   TTA: {'Enable' if inference_params['enable_tta'] else 'Disable'}")
 
         # ========== 新增：通知图层列表添加占位符 ==========
         # 1. 确定输出文件名和扩展名
@@ -2520,7 +2520,7 @@ class InferencePanel(QWidget):
 
         # 2. 发送信号
         self.prediction_initializing.emit(image_path, expected_output_filename)
-        self._emit_log(f"⏳ 预留图层位置: {expected_output_filename}")
+        self._emit_log(f"⏳ Reserved layer position: {expected_output_filename}")
         # ===============================================
 
         # 使用 QThread 异步执行推理
@@ -2535,7 +2535,7 @@ class InferencePanel(QWidget):
             output_dir = self.lineEdit_outputPath.text().strip()
             if not output_dir:
                 output_dir = os.path.dirname(image_path)
-                self._emit_log(f"⚠️  未设置输出路径，使用默认路径: {output_dir}")
+                self._emit_log(f"⚠️  Output path not set, using default: {output_dir}")
 
             # 生成文件名
             output_filename = self._generate_output_filename(image_path)
@@ -2560,7 +2560,7 @@ class InferencePanel(QWidget):
         self._inference_worker.error.connect(self._cleanup_worker)
         self._inference_worker.cancelled.connect(self._cleanup_worker)
 
-        # 启用取消按钮
+        # Enable取消按钮
         self._is_inferencing = True
         self.pushButton_cancelInference.setEnabled(True)
 
@@ -2568,16 +2568,16 @@ class InferencePanel(QWidget):
         self._inference_worker.start()
 
     def _on_worker_finished(self, image_path: str, result: dict, inference_params: dict):
-        """后台推理完成处理"""
+        """后台Inference Complete处理"""
         self.progressBar_inference.setValue(100)
 
         success = result.get('success', False)
-        self._emit_log(f"📊 推理结果状态: {'成功' if success else '失败'}")
+        self._emit_log(f"📊 Inference Result Status: {'Success' if success else '失败'}")
 
         if success:
             self._handle_inference_success(image_path, result, inference_params)
         else:
-            error_msg = result.get('error', '未知错误')
+            error_msg = result.get('error', 'Unknown error')
             self._handle_inference_error(error_msg)
 
     def _on_worker_error(self, error_msg: str):
@@ -2587,7 +2587,7 @@ class InferencePanel(QWidget):
     def _cleanup_worker(self):
         """清理 Worker 资源"""
         self.pushButton_runInference.setEnabled(True)
-        self.pushButton_cancelInference.setEnabled(False)  # 禁用取消按钮
+        self.pushButton_cancelInference.setEnabled(False)  # Disable取消按钮
         self._is_inferencing = False
         if hasattr(self, '_inference_worker'):
             self._inference_worker.deleteLater()
@@ -2596,26 +2596,26 @@ class InferencePanel(QWidget):
     def _cancel_inference(self):
         """取消当前推理任务"""
         if not self._is_inferencing:
-            self._emit_log("⚠️  当前没有正在进行的推理任务")
+            self._emit_log("⚠️  No ongoing inference task")
             return
 
         if hasattr(self, '_inference_worker') and self._inference_worker:
-            self._emit_log("🛑 正在取消推理...")
+            self._emit_log("🛑 Cancelling inference...")
             self._inference_worker.request_cancel()
             self.pushButton_cancelInference.setEnabled(False)
-            self.pushButton_cancelInference.setText("取消中...")
+            self.pushButton_cancelInference.setText("Cancelling...")
         else:
-            self._emit_log("⚠️  无法取消：Worker 不存在")
+            self._emit_log("⚠️  Cannot cancel: Worker not found")
 
     def _on_worker_cancelled(self):
         """推理被取消时的处理"""
-        self._emit_log("✅ 推理已成功取消")
+        self._emit_log("✅ 推理已Success取消")
         self.progressBar_inference.setValue(0)
-        self.pushButton_cancelInference.setText("❌ 取消")
-        self.label_inferenceResult.setText("推理已取消\\n\\n可以重新配置参数后再次运行推理。")
+        self.pushButton_cancelInference.setText("❌ Cancel")
+        self.label_inferenceResult.setText("推理Cancelled\\n\\n可以重新配置参数后再次运行推理。")
 
     def _handle_inference_success(self, image_path: str, result: dict, inference_params: dict):
-        """处理推理成功的结果"""
+        """处理推理Success的结果"""
         try:
             # 提取结果信息
             mask = result.get('mask')
@@ -2626,38 +2626,38 @@ class InferencePanel(QWidget):
             # 构建结果显示文本
             use_real_model = result.get('use_real_model', False)
 
-            result_text = f"✅ 推理完成！\n\n"
+            result_text = f"✅ Inference Complete！\n\n"
 
             # 显示推理模式
             if use_real_model:
-                result_text += f"🚀 使用真实模型推理（MMSegmentation）\n\n"
+                result_text += f"🚀 Inference with Real Model (MMSegmentation)\n\n"
             else:
-                result_text += f"⚠️  注意：当前使用模拟推理（未集成MMSegmentation）\n\n"
+                result_text += f"⚠️  Note: Currently using mock inference (MMSegmentation not integrated)\n\n"
 
-            result_text += f"📷 图像: {os.path.basename(image_path)}\n"
-            result_text += f"📐 尺寸: {image_shape[1]} x {image_shape[0]}\n"
-            result_text += f"🎯 策略: {strategy}\n\n"
+            result_text += f"📷 Image: {os.path.basename(image_path)}\n"
+            result_text += f"📐 Size: {image_shape[1]} x {image_shape[0]}\n"
+            result_text += f"🎯 Strategy: {strategy}\n\n"
 
             if strategy == 'sliding_window':
-                result_text += f"窗口参数:\n"
-                result_text += f"  • 窗口大小: {params.get('crop_size', 'N/A')}\n"
-                result_text += f"  • 步长: {params.get('stride', 'N/A')}\n"
-                result_text += f"  • 批大小: {params.get('batch_size', 'N/A')}\n"
-                result_text += f"  • 窗口总数: {params.get('total_windows', 'N/A')}\n"
+                result_text += f"Window Params:\n"
+                result_text += f"  • Window Size: {params.get('crop_size', 'N/A')}\n"
+                result_text += f"  • Stride: {params.get('stride', 'N/A')}\n"
+                result_text += f"  • Batch Size: {params.get('batch_size', 'N/A')}\n"
+                result_text += f"  • Total Windows: {params.get('total_windows', 'N/A')}\n"
 
-            result_text += f"\n推理配置:\n"
-            result_text += f"  • TTA增强: {'启用' if params.get('enable_tta', False) else '禁用'}\n"
-            result_text += f"  • 置信度阈值: {inference_params.get('conf_threshold', 0.5)}\n"
+            result_text += f"\nInference Config:\n"
+            result_text += f"  • TTA: {'Enable' if params.get('enable_tta', False) else 'Disable'}\n"
+            result_text += f"  • Confidence Threshold: {inference_params.get('conf_threshold', 0.5)}\n"
 
             # 大图分块推理的特殊处理
             if strategy == 'large_image_block':
                 output_path = result.get('output_path', '')
                 temp_dir = result.get('temp_dir', '')
 
-                result_text += f"\n大图分块推理结果:\n"
-                result_text += f"  • 输出文件: {os.path.basename(output_path)}\n"
-                result_text += f"  • 分块临时目录: {os.path.basename(temp_dir)}\n"
-                result_text += f"  • 分块数量: {params.get('x_num', 0)} x {params.get('y_num', 0)} = {params.get('total_blocks', 0)}\n"
+                result_text += f"\nTile Inference Result:\n"
+                result_text += f"  • Output File: {os.path.basename(output_path)}\n"
+                result_text += f"  • Tile Temp Dir: {os.path.basename(temp_dir)}\n"
+                result_text += f"  • Tiles: {params.get('x_num', 0)} x {params.get('y_num', 0)} = {params.get('total_blocks', 0)}\n"
 
                 # 更新结果显示
                 self.label_inferenceResult.setText(result_text)
@@ -2670,20 +2670,20 @@ class InferencePanel(QWidget):
                     'params': inference_params
                 }
 
-                # 初始化可视化设置（允许使用回退 classes/palette）
+                # 初始化可视化Settings（允许使用回退 classes/palette）
                 self._ensure_visualization_controls(mask=mask, result=result)
 
-                # 发送推理完成信号
+                # 发送Inference Complete信号
                 self.inference_finished.emit(result)
 
-                self._emit_log("✅ 大图分块推理完成")
-                self._emit_log(f"   输出文件: {output_path}")
+                self._emit_log("✅ 大图分块Inference Complete")
+                self._emit_log(f"   Output File: {output_path}")
 
                 # 提示用户
                 QMessageBox.information(
                     self,
-                    "推理完成",
-                    f"大图分块推理已成功完成！\n\n"
+                    "Inference Complete",
+                    f"大图分块推理已Success完成！\n\n"
                     f"图像: {os.path.basename(image_path)}\n"
                     f"输出: {output_path}\n"
                     f"分块数: {params.get('total_blocks', 0)}\n\n"
@@ -2691,18 +2691,18 @@ class InferencePanel(QWidget):
                 )
                 return
 
-            # 统计类别分布（非大图分块模式）
+            # 统计Class分布（非大图分块模式）
             unique_classes = []  # 初始化变量
             total_pixels = image_shape[0] * image_shape[1]
 
             if mask is not None:
                 unique_classes = np.unique(mask)
-                result_text += f"\n检测到的类别: {len(unique_classes)} 个\n"
+                result_text += f"\n检测到的Class: {len(unique_classes)} items\n"
 
                 classes = result.get('classes', [])
                 if classes:
-                    result_text += f"\n类别分布:\n"
-                    for cls_id in unique_classes[:10]:  # 最多显示10个类别
+                    result_text += f"\nClass分布:\n"
+                    for cls_id in unique_classes[:10]:  # 最多显示10个Class
                         if cls_id < len(classes):
                             cls_name = classes[cls_id]
                             pixel_count = np.sum(mask == cls_id)
@@ -2710,11 +2710,11 @@ class InferencePanel(QWidget):
                             result_text += f"  • {cls_name}: {percentage:.2f}%\n"
             else:
                 # 超大图像，未生成完整掩码
-                result_text += f"\n💡 超大图像处理模式:\n"
-                result_text += f"  • 总像素: {total_pixels:,} ({total_pixels/1000000:.1f}M)\n"
-                result_text += f"  • 为节省内存，未生成完整预测掩码\n"
-                result_text += f"  • 推理流程已验证成功\n"
-                result_text += f"  • 集成MMSegmentation后将生成真实结果\n"
+                result_text += f"\n💡 Large Image Mode:\n"
+                result_text += f"  • Total pixels: {total_pixels:,} ({total_pixels/1000000:.1f}M)\n"
+                result_text += f"  • To save memory, full mask not generated\n"
+                result_text += f"  • 推理流程已验证Success\n"
+                result_text += f"  • Real results will be generated after MMSegmentation integration\n"
 
             # 更新结果显示
             self.label_inferenceResult.setText(result_text)
@@ -2726,9 +2726,9 @@ class InferencePanel(QWidget):
                 img = Image.open(image_path).convert('RGB')
                 image_array = np.array(img)
             except Exception as e:
-                self._emit_log(f"⚠️  读取原始图像失败: {e}")
+                self._emit_log(f"⚠️  Read original image failed: {e}")
 
-            # 保存推理结果供导出使用
+            # 保存推理结果供Export使用
             self.last_inference_result = {
                 'image_path': image_path,
                 'image': image_array,  # 保存图像数组用于可视化调整
@@ -2745,7 +2745,7 @@ class InferencePanel(QWidget):
                     output_dir = self.lineEdit_outputPath.text().strip()
                     if not output_dir:
                         output_dir = os.path.dirname(image_path)
-                        self._emit_log(f"⚠️  未设置输出路径，预览PNG将保存到默认路径: {output_dir}")
+                        self._emit_log(f"⚠️  Output path not set, preview PNG will be saved to: {output_dir}")
 
                     # 生成输出文件名（自动命名规则：input.jpg -> input_pred_v1.png）
                     base_output_name = self._generate_output_filename(image_path)
@@ -2757,86 +2757,86 @@ class InferencePanel(QWidget):
                     result_image = Image.fromarray(mask.astype(np.uint8))
                     result_image.save(saved_path)
 
-                    self._emit_log(f"✅ 预览PNG已自动保存: {saved_path}")
+                    self._emit_log(f"✅ Preview PNG auto-saved: {saved_path}")
 
                     # 更新last_inference_result，添加保存路径
                     self.last_inference_result['saved_path'] = saved_path
 
                 except Exception as save_error:
-                    self._emit_log(f"⚠️  预览PNG自动保存失败: {save_error}")
+                    self._emit_log(f"⚠️  Preview PNG auto-save failed: {save_error}")
 
-            self._emit_log("✅ 推理完成")
+            self._emit_log("✅ Inference Complete")
             if mask is not None:
-                self._emit_log(f"   检测到 {len(unique_classes)} 个类别")
+                self._emit_log(f"   Detected {len(unique_classes)} 个Class")
             else:
-                self._emit_log(f"   超大图像模式：未生成完整掩码（正常）")
+                self._emit_log(f"   Large Image Mode: full mask not generated (normal)")
 
             # 先准备可视化元数据，再通知外部使用当前 palette 注入主画布。
             self._ensure_visualization_controls(mask=mask, result=result)
 
-            # 发送推理完成信号
+            # 发送Inference Complete信号
             self.inference_finished.emit(result)
 
             # P1-3: 改为非侵入式日志提示（去掉弹窗）
-            self._emit_log(f"✅ 推理完成：{os.path.basename(image_path)}，策略：{strategy}")
+            self._emit_log(f"✅ Inference Complete：{os.path.basename(image_path)}, Strategy: {strategy}")
             if saved_path:
-                self._emit_log(f"   预览已保存至：{saved_path}")
+                self._emit_log(f"   Preview saved to:{saved_path}")
 
         except Exception as e:
-            self._emit_log(f"⚠️  结果处理警告: {e}")
-            self.label_inferenceResult.setText(f"推理完成，但结果处理出现问题:\n{str(e)}")
+            self._emit_log(f"⚠️  Result process warning: {e}")
+            self.label_inferenceResult.setText(f"Inference Complete，但结果处理出现问题:\n{str(e)}")
 
     def _handle_inference_error(self, error_msg: str):
         """处理推理错误"""
         self.progressBar_inference.setValue(0)
 
-        error_text = f"❌ 推理失败\n\n错误信息:\n{error_msg}"
+        error_text = f"❌ Inference failed\n\nError msg:\n{error_msg}"
         self.label_inferenceResult.setText(error_text)
 
-        self._emit_log(f"❌ 推理失败: {error_msg}")
+        self._emit_log(f"❌ Inference Failed: {error_msg}")
 
         # 发送错误信号
         self.inference_error.emit(error_msg)
 
         QMessageBox.critical(
             self,
-            "推理失败",
-            f"推理过程中发生错误。\n\n错误信息:\n{error_msg}"
+            "Inference Failed",
+            f"Error occurred during inference.\n\nError msg:\n{error_msg}"
         )
 
     def _run_batch_inference(self):
-        """运行批量推理"""
+        """Run Batch Inference"""
         if not self.inference_model:
-            QMessageBox.warning(self, "模型未加载", "请先加载推理模型。")
+            QMessageBox.warning(self, "Model Not Loaded", "Please load inference model first.")
             return
 
         batch_dir = self.lineEdit_inputPath.text().strip()
         if not batch_dir or not os.path.isdir(batch_dir):
-            QMessageBox.warning(self, "输入目录无效", "请选择有效的批量推理图像目录。")
+            QMessageBox.warning(self, "Invalid Input Directory", "Please select valid batch inference image directory.")
             return
 
         self.inference_started.emit()
-        self._emit_log(f"🚀 开始批量推理: {batch_dir}")
+        self._emit_log(f"🚀 Start batch inference: {batch_dir}")
 
-        # TODO: 实现实际的批量推理逻辑
-        self.label_inferenceResult.setText("批量推理功能待实现...\n\n请在实际项目中集成 MMSegmentation 推理 API。")
+        # TODO: 实现实际的Batch Inference逻辑
+        self.label_inferenceResult.setText("Batch inference to be implemented...\n\nPlease integrate MMSegmentation API in actual project.")
 
     def _export_results(self):
-        """导出推理结果"""
+        """Export Inference Results"""
         # 1. 检查是否有推理结果
         if not self.last_inference_result:
-            self._emit_log("⚠️  没有可导出的推理结果")
+            self._emit_log("⚠️  No inference results to export")
             QMessageBox.warning(
                 self,
-                "无推理结果",
-                "请先运行推理，然后再导出结果。"
+                "No Inference Results",
+                "Please run inference first before exporting."
             )
             return
 
-        # 2. 检查导出目录
+        # 2. 检查Export目录
         export_dir = self.lineEdit_exportDir.text().strip()
         if not export_dir:
-            # 如果没有设置导出目录，使用输出路径
+            # 如果没有SettingsExport目录，使用输出路径
             export_dir = self.lineEdit_outputPath.text().strip()
             if not export_dir:
                 # 如果输出路径也没有，使用输入图像所在目录
@@ -2846,27 +2846,27 @@ class InferencePanel(QWidget):
                 else:
                     QMessageBox.warning(
                         self,
-                        "导出目录未设置",
-                        "请先选择导出目录。"
+                        "Export Directory Not Set",
+                        "请先Select Export Directory。"
                     )
                     return
 
             self.lineEdit_exportDir.setText(export_dir)
 
-        # 确保导出目录存在
+        # 确保Export目录存在
         if not os.path.exists(export_dir):
             try:
                 os.makedirs(export_dir)
-                self._emit_log(f"📁 创建导出目录: {export_dir}")
+                self._emit_log(f"📁 Create export dir: {export_dir}")
             except Exception as e:
                 QMessageBox.critical(
                     self,
-                    "创建目录失败",
-                    f"无法创建导出目录。\n\n错误信息:\n{e}"
+                    "Create Directory Failed",
+                    f"Cannot create export directory.\n\nError msg:\n{e}"
                 )
                 return
 
-        # 3. 获取导出格式
+        # 3. 获取Export格式
         export_tif = self.checkBox_exportTIF.isChecked()
         export_png = self.checkBox_exportPNG.isChecked()
         export_numpy = self.checkBox_exportNumpy.isChecked()
@@ -2874,13 +2874,13 @@ class InferencePanel(QWidget):
         if not (export_tif or export_png or export_numpy):
             QMessageBox.warning(
                 self,
-                "未选择导出格式",
-                "请至少选择一种导出格式（GeoTIFF、PNG 或 NumPy）。"
+                "Export Format Not Selected",
+                "Please select at least one export format (GeoTIFF, PNG, or NumPy)."
             )
             return
 
-        # 4. 执行导出
-        self._emit_log(f"📤 开始导出结果到: {export_dir}")
+        # 4. 执行Export
+        self._emit_log(f"📤 Start exporting results to: {export_dir}")
 
         try:
             image_path = self.last_inference_result.get('image_path', '')
@@ -2889,7 +2889,7 @@ class InferencePanel(QWidget):
 
             exported_files = []
 
-            # 导出 GeoTIFF 格式（语义分割标准格式）
+            # Export GeoTIFF 格式（语义分割标准格式）
             if export_tif and mask is not None:
                 tif_path = os.path.join(export_dir, f"{base_name}_pred.tif")
                 try:
@@ -2916,7 +2916,7 @@ class InferencePanel(QWidget):
                     with rasterio.open(tif_path, 'w', **profile) as dst:
                         dst.write(mask.astype(np.uint8), 1)
                     exported_files.append(tif_path)
-                    self._emit_log(f"✅ GeoTIFF 已导出: {os.path.basename(tif_path)}")
+                    self._emit_log(f"✅ GeoTIFF exported: {os.path.basename(tif_path)}")
                 except ImportError:
                     # rasterio 不可用时回退到 PIL
                     from PIL import Image
@@ -2924,49 +2924,49 @@ class InferencePanel(QWidget):
                     tif_path = os.path.join(export_dir, f"{base_name}_pred.tif")
                     result_image.save(tif_path)
                     exported_files.append(tif_path)
-                    self._emit_log(f"✅ TIFF 已导出（无地理信息）: {os.path.basename(tif_path)}")
+                    self._emit_log(f"✅ TIFF exported (no geo info): {os.path.basename(tif_path)}")
 
-            # 导出 PNG 格式
+            # Export PNG 格式
             if export_png and mask is not None:
                 png_path = os.path.join(export_dir, f"{base_name}_pred.png")
                 from PIL import Image
                 result_image = Image.fromarray(mask.astype(np.uint8))
                 result_image.save(png_path)
                 exported_files.append(png_path)
-                self._emit_log(f"✅ PNG 已导出: {os.path.basename(png_path)}")
+                self._emit_log(f"✅ PNG exported: {os.path.basename(png_path)}")
 
-            # 导出 NumPy 格式
+            # Export NumPy 格式
             if export_numpy and mask is not None:
                 npy_path = os.path.join(export_dir, f"{base_name}_pred.npy")
                 np.save(npy_path, mask)
                 exported_files.append(npy_path)
-                self._emit_log(f"✅ NumPy 已导出: {os.path.basename(npy_path)}")
+                self._emit_log(f"✅ NumPy exported: {os.path.basename(npy_path)}")
 
-            # 5. 显示导出成功消息
+            # 5. 显示ExportSuccess消息
             if exported_files:
                 files_list = '\n'.join([f"  • {os.path.basename(f)}" for f in exported_files])
                 QMessageBox.information(
                     self,
-                    "导出成功",
-                    f"推理结果已成功导出！\n\n导出目录:\n{export_dir}\n\n导出文件:\n{files_list}"
+                    "ExportSuccess",
+                    f"推理结果已SuccessExport！\n\nExport目录:\n{export_dir}\n\nExported files:\n{files_list}"
                 )
-                self._emit_log(f"✅ 导出完成，共 {len(exported_files)} 个文件")
+                self._emit_log(f"✅ Export complete, total {len(exported_files)} files")
             else:
                 QMessageBox.warning(
                     self,
-                    "导出失败",
-                    "没有可导出的数据。\n\n注意：大图分块模式不生成完整掩码，无法导出 PNG/NumPy 格式。"
+                    "Export失败",
+                    "No data to export.\n\nNote: Tile mode doesn't generate full mask, cannot export PNG/NumPy."
                 )
 
         except Exception as e:
             import traceback
             error_details = traceback.format_exc()
-            self._emit_log(f"❌ 导出失败: {e}")
-            self._emit_log(f"详细错误:\n{error_details}")
+            self._emit_log(f"❌ Export failed: {e}")
+            self._emit_log(f"Detailed error:\n{error_details}")
             QMessageBox.critical(
                 self,
-                "导出失败",
-                f"导出过程中发生错误。\n\n错误信息:\n{e}"
+                "Export失败",
+                f"Error occurred during export.\n\nError msg:\n{e}"
             )
 
     def get_inference_config(self) -> dict:
@@ -3004,16 +3004,16 @@ class InferencePanel(QWidget):
 
     def is_single_image_mode(self) -> bool:
         """
-        检查当前是否为单图推理模式
+        检查当前是否为Single Inference模式
 
         Returns:
-            bool: True 表示单图推理模式，False 表示批量推理模式
+            bool: True 表示Single Inference模式，False 表示Batch Inference模式
         """
         return self.radioButton_singleImage.isChecked()
 
     def set_image_path(self, path: str) -> None:
         """
-        设置推理输入图像路径（由外部调用，用于接收同步）
+        Settings推理输入图像路径（由外部调用，用于接收同步）
 
         用于从左侧 GIS 图层控制同步过来的路径。
         会抑制信号发送，防止循环同步。
@@ -3022,22 +3022,22 @@ class InferencePanel(QWidget):
             path: 图像文件路径
         """
         if not path or not os.path.exists(path):
-            self._emit_log(f"⚠️ 同步路径无效或不存在: {path}")
+            self._emit_log(f"⚠️ Sync path invalid or not found: {path}")
             return
 
-        # 设置标志位，防止信号循环
+        # Settings标志位，防止信号循环
         self._suppress_sync = True
 
         try:
-            # 直接设置到输入影像框
+            # 直接Settings到输入影像框
             self.lineEdit_inputPath.setText(path)
-            self._emit_log(f"📥 已从 GIS 图层同步输入路径: {os.path.basename(path)}")
+            self._emit_log(f"📥 Synced input path from GIS layer: {os.path.basename(path)}")
         finally:
             self._suppress_sync = False
 
     def set_batch_dir(self, dir_path: str) -> None:
         """
-        设置批量推理目录（由外部调用，用于接收同步）
+        SettingsBatch Inference目录（由外部调用，用于接收同步）
 
         Args:
             dir_path: 目录路径
@@ -3129,7 +3129,7 @@ class InferencePanel(QWidget):
             ]
         return classes, palette
 
-    # ==================== 可视化设置回调方法 ====================
+    # ==================== 可视化Settings回调方法 ====================
 
     def _on_palette_changed(self, palette: dict):
         """调色板变化回调"""
@@ -3139,7 +3139,7 @@ class InferencePanel(QWidget):
 
     def _on_alpha_changed(self, alpha: float):
         """透明度变化回调"""
-        self._emit_log(f"透明度已调整: {int(alpha * 100)}%")
+        self._emit_log(f"Alpha adjusted: {int(alpha * 100)}%")
         # 实时重新渲染
         self._render_inference_result()
 
@@ -3185,7 +3185,7 @@ class InferencePanel(QWidget):
                         img = Image.open(image_path).convert('RGB')
                         image_array = np.array(img)
                     except Exception as e:
-                        self._emit_log(f"⚠️  读取原始图像失败: {e}")
+                        self._emit_log(f"⚠️  Read original image failed: {e}")
 
                 if mask is not None and image_array is not None:
                     self.visualization_widget.render(
@@ -3197,25 +3197,25 @@ class InferencePanel(QWidget):
                     )
                 else:
                     if mask is None:
-                        self._emit_log("⚠️  预测掩码为空，无法渲染")
+                        self._emit_log("⚠️  Predict mask empty, cannot render")
                     if image_array is None:
-                        self._emit_log("⚠️  原始图像为空，无法渲染")
+                        self._emit_log("⚠️  Original image empty, cannot render")
 
         except Exception as e:
-            self._emit_log(f"渲染可视化失败: {e}")
+            self._emit_log(f"Visualization render failed: {e}")
 
     def _apply_visualization_settings(self):
-        """应用可视化设置到预览"""
+        """应用可视化Settings到预览"""
         if not self.last_inference_result:
             QMessageBox.warning(
                 self,
-                "无法应用",
-                "没有可用的推理结果。\n\n请先运行推理，然后再调整可视化设置。"
+                "Cannot Apply",
+                "No inference results available.\n\nPlease run inference before adjusting visualization settings."
             )
             return
 
         try:
-            self._emit_log("正在应用新的可视化设置...")
+            self._emit_log("Applying new visualization settings...")
 
             result = self.last_inference_result.get('result', {})
             strategy = result.get('strategy', '')
@@ -3229,9 +3229,9 @@ class InferencePanel(QWidget):
                 image_path = self.last_inference_result.get('image_path', '')
 
                 if not output_path or not os.path.exists(output_path):
-                    raise Exception("找不到大图推理结果文件")
+                    raise Exception("Cannot find large image tile result file")
 
-                self._emit_log("重新渲染大图...")
+                self._emit_log("Re-rendering large image...")
                 self.visualization_widget.render_large_image(
                     image_path=image_path,
                     mask_path=output_path,
@@ -3239,7 +3239,7 @@ class InferencePanel(QWidget):
                     palette=palette_list,
                     alpha=current_alpha
                 )
-                self._emit_log("大图渲染完成")
+                self._emit_log("Large image rendering complete")
 
             # 小图推理结果
             else:
@@ -3253,15 +3253,15 @@ class InferencePanel(QWidget):
                         img = Image.open(image_path).convert('RGB')
                         image_array = np.array(img)
                     except Exception as e:
-                        self._emit_log(f"⚠️  读取原始图像失败: {e}")
+                        self._emit_log(f"⚠️  Read original image failed: {e}")
 
                 if mask is None or image_array is None:
                     if mask is None:
-                        raise Exception("推理结果掩码不完整")
+                        raise Exception("Inference mask incomplete")
                     if image_array is None:
-                        raise Exception("无法读取原始图像")
+                        raise Exception("Cannot read original image")
 
-                self._emit_log("重新渲染小图...")
+                self._emit_log("Re-rendering thumbnail...")
                 self.visualization_widget.render(
                     image=image_array,
                     mask=mask,
@@ -3269,13 +3269,13 @@ class InferencePanel(QWidget):
                     palette=palette_list,
                     alpha=current_alpha
                 )
-                self._emit_log("小图渲染完成")
+                self._emit_log("Small image rendering complete")
 
         except Exception as e:
-            self._emit_log(f"应用可视化设置失败: {e}")
+            self._emit_log(f"Apply visualization settings failed: {e}")
             QMessageBox.critical(
                 self,
-                "应用失败",
-                f"应用可视化设置时发生错误。\n\n错误信息:\n{e}"
+                "Apply Failed",
+                f"Error applying visualization settings.\n\nError msg:\n{e}"
             )
 

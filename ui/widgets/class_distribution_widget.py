@@ -39,13 +39,13 @@ class ClassDistributionChart(FigureCanvas):
     
     # 条形样式
     BAR_ROUNDING_PX = 0     # 圆角半径（像素），0=无圆角
-    BAR_COLOR_BASE = (0.35, 0.65, 0.35)  # 基础颜色 (RGB, 0-1)
-    BAR_COLOR_VARIATION = 0.3  # 颜色变化幅度
+    BAR_COLOR_BASE = (0.35, 0.65, 0.35)  # 基础Color (RGB, 0-1)
+    BAR_COLOR_VARIATION = 0.3  # Color变化幅度
     
     # 文字样式
     LABEL_FONT_SIZE = 7     # Y轴标签字号
     VALUE_FONT_SIZE = 6     # 数值字号
-    VALUE_COLOR = '#555'    # 数值颜色
+    VALUE_COLOR = '#555'    # 数值Color
     VALUE_OFFSET = 0.03     # 数值与条形的间距比例
     # ================================================
     
@@ -83,7 +83,7 @@ class ClassDistributionChart(FigureCanvas):
     def _draw_empty(self) -> None:
         """绘制空图表"""
         self.axes.clear()
-        self.axes.text(0.5, 0.5, '暂无数据', ha='center', va='center',
+        self.axes.text(0.5, 0.5, 'No Data', ha='center', va='center',
                        transform=self.axes.transAxes, fontsize=9, color='gray')
         self.axes.set_xticks([])
         self.axes.set_yticks([])
@@ -161,7 +161,7 @@ class ClassDistributionChart(FigureCanvas):
             min_display = max_count * 0.02
             display_counts = np.maximum(counts, min_display)
         
-        # 颜色映射 - 使用配置的基础颜色
+        # Color映射 - 使用配置的基础Color
         base_color = np.array(self.BAR_COLOR_BASE)
         colors = [base_color * (1.0 - self.BAR_COLOR_VARIATION + self.BAR_COLOR_VARIATION * i / max(n_classes - 1, 1)) 
                   for i in range(n_classes)]
@@ -309,7 +309,7 @@ class ClassDistributionWidget(QWidget):
         layout.addLayout(control_layout)
 
         # P2-3: 常驻说明文字（替代不可见的 Tooltip）
-        self.label_control_hint = QLabel("Px=像素统计 | Img=图像数 | Log=对数坐标 | NoBG=隐藏背景")
+        self.label_control_hint = QLabel("Px=Pixels | Img=Images | Log=Log Scale | NoBG=Hide BG")
         self.label_control_hint.setStyleSheet("font-size: 9px; color: gray; padding-left: 2px;")
         layout.addWidget(self.label_control_hint)
         
@@ -322,7 +322,7 @@ class ClassDistributionWidget(QWidget):
         
         # === 权重按钮（供外部添加到标题栏）===
         self.btn_calc_weights = QToolButton()
-        self.btn_calc_weights.setText("📊 计算权重")
+        self.btn_calc_weights.setText("📊 Calculate Weights")
         self.btn_calc_weights.setToolTip("计算类别权重 (Median Frequency Balancing)")
         self.btn_calc_weights.setStyleSheet("""
             QToolButton {

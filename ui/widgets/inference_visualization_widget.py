@@ -73,7 +73,7 @@ class InferenceVisualizationWidget(QWidget):
             if image_tile is None or mask_tile is None:
                 self.image_label.setText(
                     "无法打开图像或掩膜文件\n\n"
-                    "请检查当前机器是否正确安装 rasterio/GDAL，并确认该 TIFF/GeoTIFF 格式受支持。"
+                    "请检查当前机器是否正确安装 rasterio/GDAL，并Confirm该 TIFF/GeoTIFF 格式受支持。"
                 )
                 return
 

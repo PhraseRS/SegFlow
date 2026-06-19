@@ -71,7 +71,7 @@ class ParamRow(QWidget):
     # 当推荐被单项应用时发出 (param_key, recommended_value)
     recommendation_applied = Signal(str, object)
 
-    # 颜色常量
+    # Color常量
     COLOR_RECOMMENDED = "#1565C0"  # 蓝色 — 值来自推荐
     COLOR_OVERRIDDEN = "#E65100"   # 橙色 — 用户覆写了推荐值
     COLOR_DEFAULT = ""             # 默认
@@ -196,9 +196,9 @@ class ParamRow(QWidget):
         self._recommend_btn.setText("💡")
         self._recommend_btn.setVisible(True)
         self._recommend_btn.setToolTip(
-            f"推荐值: {value}\n{reason}\n\n🔹 点击应用此推荐"
+            f"Recommended value: {value}\n{reason}\n\n🔹 Click to apply this recommendation"
         )
-        # 值保持默认颜色（用户未操作前不改变任何东西）
+        # 值保持默认Color（用户未操作前不改变任何东西）
         self._set_value_color(self.COLOR_DEFAULT)
 
     def apply_recommendation(self):
@@ -212,7 +212,7 @@ class ParamRow(QWidget):
         # 图标切为 ✅
         self._recommend_btn.setText("✅")
         self._recommend_btn.setToolTip(
-            f"已应用推荐值: {self._recommended_value}\n{self._recommend_reason}"
+            f"已应用Recommended value: {self._recommended_value}\n{self._recommend_reason}"
         )
         # 值变蓝
         self._set_value_color(self.COLOR_RECOMMENDED)
@@ -244,9 +244,9 @@ class ParamRow(QWidget):
             self.recommendation_applied.emit(self._param_key, self._recommended_value)
 
     def _on_value_changed(self):
-        """用户手动修改值后的颜色反馈。"""
+        """用户手动修改值后的Color反馈。"""
         if not self._recommendation_applied:
-            return  # 尚未应用推荐，无需颜色反馈
+            return  # 尚未应用推荐，无需Color反馈
 
         current = self.get_value()
         rec = self._recommended_value
@@ -266,7 +266,7 @@ class ParamRow(QWidget):
             self._set_value_color(self.COLOR_OVERRIDDEN)    # 橙色
 
     def _set_value_color(self, color: str):
-        """设置输入控件文字颜色。"""
+        """设置输入控件文字Color。"""
         if color:
             style = f"color: {color}; font-weight: bold;"
         else:
@@ -284,7 +284,7 @@ class ParamRow(QWidget):
             self.input.setStyleSheet(style)
 
     def _connect_value_changed(self):
-        """连接控件的值变更信号以驱动颜色反馈。"""
+        """连接控件的值变更信号以驱动Color反馈。"""
         if isinstance(self.input, QLineEdit):
             self.input.textChanged.connect(self._on_value_changed)
         elif isinstance(self.input, QSpinBox):

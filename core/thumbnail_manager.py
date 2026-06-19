@@ -279,7 +279,7 @@ class ThumbnailLazyLoader:
         with QMutexLocker(self.task_mutex):
             if key in self.pending_tasks:
                 del self.pending_tasks[key]
-        print(f"⚠️ 缩略图加载失败 [{key}]: {error_msg}")
+        print(f"⚠️ Thumbnail load failed [{key}]: {error_msg}")
     
     def _update_item_display(self, key):
         """更新单个项的显示"""
@@ -365,7 +365,7 @@ class ThumbnailLazyLoader:
         会在 data_root 下创建 .cache/thumbnails/ 目录。
         
         Args:
-            data_root: 数据集根目录。
+            data_root: Dataset Root Dir。
         """
         if not data_root:
             self._cache_dir = None
@@ -375,9 +375,9 @@ class ThumbnailLazyLoader:
         try:
             os.makedirs(cache_dir, exist_ok=True)
             self._cache_dir = cache_dir
-            print(f'📁 缩略图缓存目录: {cache_dir}')
+            print(f'📁 Thumbnail cache dir: {cache_dir}')
         except OSError as e:
-            print(f'⚠️ 无法创建缓存目录: {e}')
+            print(f'⚠️ Cannot create cache directory: {e}')
             self._cache_dir = None
     
     def _get_cache_path(self, key):
@@ -422,4 +422,4 @@ class ThumbnailLazyLoader:
         try:
             composite_pixmap.save(cache_path, 'JPEG', 85)
         except Exception as e:
-            print(f'⚠️ 保存缩略图缓存失败 [{key}]: {e}')
+            print(f'⚠️ Save thumbnail cache failed [{key}]: {e}')

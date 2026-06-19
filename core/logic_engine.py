@@ -87,12 +87,12 @@ class ConfigGenerator:
         # Rule 1: 遥感切片大小必须是 32 的倍数 (Backbone 下采样限制)
         crop = int(flat_data.get('crop_size', 512))
         if crop % 32 != 0:
-            self.errors.append(f"Crop Size ({crop}) 必须是 32 的倍数 (如 256, 512, 1024)，否则模型无法推理。")
+            self.errors.append(f"Crop Size ({crop}) must be a multiple of 32 (e.g. 256, 512, 1024), otherwise inference will fail.")
             
         # Rule 2: 学习率检查
         lr = float(flat_data.get('learning_rate', 0.01))
         if lr <= 0:
-            self.errors.append("学习率 (Learning Rate) 必须大于 0。")
+            self.errors.append("Learning Rate must be greater than 0.")
 
         return len(self.errors) == 0, self.errors
 
@@ -178,24 +178,24 @@ if __name__ == "__main__":
 
     generator = ConfigGenerator()
     
-    print("=== 测试嵌套数据结构 ===")
+    print("=== Test Nested Data Structure ===")
     # 1. 校验
     is_valid, errs = generator.validate(mock_nested_data)
     if not is_valid:
-        print("❌ 配置校验失败:")
+        print("❌ Config validation failed:")
         for e in errs: print(f" - {e}")
     else:
-        print("✅ 配置校验通过")
+        print("✅ Config validation passed")
         # 2. 生成
         path = generator.generate(mock_nested_data)
-        print(f"✅ 配置文件已生成: {path}")
+        print(f"✅ Config file generated: {path}")
         print("-" * 40)
         # 打印生成的配置文件
         with open(path, 'r', encoding='utf-8') as f:
             print(f.read())
     
     print("\n" + "=" * 40)
-    print("=== 测试扁平数据结构（向后兼容）===")
+    print("=== Test Flat Data Structure ===")
     # 测试 2: 扁平数据结构（向后兼容）
     mock_flat_data = {
         'backbone': 'Swin-T',
@@ -211,9 +211,9 @@ if __name__ == "__main__":
     
     is_valid2, errs2 = generator.validate(mock_flat_data)
     if not is_valid2:
-        print("❌ 配置校验失败:")
+        print("❌ Config validation failed:")
         for e in errs2: print(f" - {e}")
     else:
-        print("✅ 配置校验通过")
+        print("✅ Config validation passed")
         path2 = generator.generate(mock_flat_data, "work_dirs/gen_config_flat.py")
-        print(f"✅ 配置文件已生成: {path2}")
+        print(f"✅ Config file generated: {path2}")

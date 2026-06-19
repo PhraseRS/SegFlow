@@ -20,7 +20,7 @@ class MaskRenderer:
         初始化掩膜渲染器
 
         Args:
-            num_classes: 类别数量
+            num_classes: Class Count
             palette: 调色板字典 {class_id: [R, G, B], ...}
             alpha: 透明度 0.0-1.0
         """
@@ -96,7 +96,7 @@ class MaskRenderer:
             colored_mask: (H, W, 3) RGB彩色图
         """
         if mask.ndim != 2:
-            raise ValueError(f"mask必须是2D数组,当前维度: {mask.ndim}")
+            raise ValueError(f"mask must be 2D array, current dim: {mask.ndim}")
 
         h, w = mask.shape
         colored_mask = np.zeros((h, w, 3), dtype=np.uint8)
@@ -120,10 +120,10 @@ class MaskRenderer:
             blended: (H, W, 3) 混合后的图像
         """
         if image.ndim != 3 or image.shape[2] != 3:
-            raise ValueError(f"image必须是3通道RGB图像,当前形状: {image.shape}")
+            raise ValueError(f"image must be 3 channel RGB, current shape: {image.shape}")
 
         if colored_mask.ndim != 3 or colored_mask.shape[2] != 3:
-            raise ValueError(f"colored_mask必须是3通道RGB图像,当前形状: {colored_mask.shape}")
+            raise ValueError(f"colored_mask must be 3 channel RGB, current shape: {colored_mask.shape}")
 
         # 确保尺寸一致
         if image.shape[:2] != colored_mask.shape[:2]:

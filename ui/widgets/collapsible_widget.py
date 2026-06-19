@@ -162,8 +162,8 @@ class CollapsiblePanel(QWidget):
         Args:
             text: 按钮文字
             icon_name: qtawesome 图标名称，如 'fa5s.sync-alt'
-            icon_color: 图标颜色（预设名或十六进制）
-            tooltip: 工具提示
+            icon_color: 图标Color（预设名或十六进制）
+            tooltip: 工具Tip
             on_clicked: 点击回调函数
         
         Returns:

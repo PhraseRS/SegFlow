@@ -160,13 +160,13 @@ class MMSegTrainer(BaseTrainer):
             
         except ImportError:
             raise ImportError(
-                "mmengine 未安装。请运行: pip install mmengine"
+                "mmengine not installed. Please run: pip install mmengine"
             )
 
         base_config = ui_params.get('base_config', '')
         if not base_config or not os.path.isfile(base_config):
             raise FileNotFoundError(
-                f"基础配置文件不存在: {base_config}"
+                f"基础配置文件Not Found: {base_config}"
             )
 
         cfg = Config.fromfile(base_config)
@@ -475,10 +475,10 @@ class MMSegTrainer(BaseTrainer):
                           为 None 时回退到 sys.executable。
         """
         if self.is_running():
-            raise RuntimeError("训练进程已在运行，请先停止当前训练")
+            raise RuntimeError("Training process already running, please stop it first")
 
         if not os.path.isfile(config_path):
-            raise FileNotFoundError(f"配置文件不存在: {config_path}")
+            raise FileNotFoundError(f"配置文件Not Found: {config_path}")
 
         os.makedirs(work_dir, exist_ok=True)
         self._config_path = config_path
@@ -500,16 +500,16 @@ class MMSegTrainer(BaseTrainer):
                     conda_python = os.path.join(conda_prefix, 'bin', 'python')
                 if os.path.isfile(conda_python):
                     interpreter = conda_python
-                    print(f"[INFO] 使用 Conda 环境 Python: {interpreter}")
+                    print(f"[INFO] Using Conda Python: {interpreter}")
                 else:
                     # 若找不到，回退到当前进程的解释器并警告
                     interpreter = sys.executable
-                    print(f"[Warning] CONDA_PREFIX 存在但未找到 python，回退到 {interpreter}")
+                    print(f"[Warning] CONDA_PREFIX exists but python not found, fallback to {interpreter}")
             else:
                 # 未检测到 Conda 环境，使用打包解释器（可能缺失依赖）
                 interpreter = sys.executable
-                print(f"[Warning] 未指定 python_path 且未检测到 CONDA_PREFIX，使用打包解释器 {interpreter}")
-                print("[Warning] 这可能导致 mmdet 等依赖无法导入，请确保在 Conda 环境中运行 GUI 或显式指定 python_path。")
+                print(f"[Warning] python_path not specified and no CONDA_PREFIX, using packaged interpreter {interpreter}")
+                print("[Warning] This may cause mmdet dependency issues. Please run GUI in Conda or specify python_path.")
         # ========================================================
 
         # 动态寻找 mmsegmentation 的 train.py 文件

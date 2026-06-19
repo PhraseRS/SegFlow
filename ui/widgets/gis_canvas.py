@@ -31,7 +31,7 @@ except ImportError:
 
 @dataclass
 class LayerInfo:
-    """图层信息 (兼容旧代码)"""
+    """图层Info (兼容旧代码)"""
     name: str
     path: str
     item: QGraphicsPixmapItem
@@ -112,13 +112,13 @@ class GISCanvasWidget(QWidget):
         """为 Sidebar 的添加按钮设置菜单"""
         menu = QMenu(button)
         
-        action_base = QAction("📂 加载底图 (Set Base Image)...", menu)
+        action_base = QAction("📂 Set Base Image...", menu)
         action_base.triggered.connect(self.on_set_base_image)
         menu.addAction(action_base)
         
         menu.addSeparator()
         
-        action_overlay = QAction("➕ 添加叠加层 (Add Overlay Raster)...", menu)
+        action_overlay = QAction("➕ Add Overlay Raster...", menu)
         action_overlay.triggered.connect(self.on_add_overlay)
         menu.addAction(action_overlay)
         
@@ -164,7 +164,7 @@ class GISCanvasWidget(QWidget):
 
         # 创建进度对话框 (可选)
         # 注意：对于快速加载，对话框可能不会显示
-        progress = QProgressDialog("正在加载图像...", None, 0, 100, self)  # 移除取消按钮
+        progress = QProgressDialog("正在加载图像...", None, 0, 100, self)  # 移除Cancel按钮
         progress.setWindowTitle("加载中")
         progress.setWindowModality(Qt.WindowModality.WindowModal)
         progress.setMinimumDuration(1000)  # 1秒后才显示，避免闪烁
@@ -201,7 +201,7 @@ class GISCanvasWidget(QWidget):
                 "且底层驱动支持该影像格式。"
                 if is_tiff else ""
             )
-            QMessageBox.critical(self, "错误", f"无法读取元数据:\n{path}{detail}")
+            QMessageBox.critical(self, "Error", f"无法读取元数据:\n{path}{detail}")
             return False
 
         progress.setValue(30)
@@ -229,7 +229,7 @@ class GISCanvasWidget(QWidget):
                 "\n\n可能原因：当前机器的 rasterio/GDAL 环境不完整，或该 TIFF/GeoTIFF 的压缩/波段格式暂不受支持。"
                 if is_tiff else ""
             )
-            QMessageBox.critical(self, "错误", f"加载图像失败:\n{path}{detail}")
+            QMessageBox.critical(self, "Error", f"加载图像失败:\n{path}{detail}")
             return False
 
         progress.setValue(80)
@@ -266,7 +266,7 @@ class GISCanvasWidget(QWidget):
     def on_add_overlay(self) -> None:
         """添加叠加层"""
         if self._base_profile is None:
-            QMessageBox.warning(self, "提示", "请先设置基础图像")
+            QMessageBox.warning(self, "Tip", "请先设置基础图像")
             return
             
         file_path, _ = QFileDialog.getOpenFileName(

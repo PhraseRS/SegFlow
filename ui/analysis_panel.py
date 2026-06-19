@@ -6,7 +6,7 @@
 布局结构：
 - 顶部 (Top)：数据集概览 - 永远可见（毫秒级加载）
 - 中部 (Middle)：分析控制器 - 按钮/进度条（单独放置）
-- 底部 (Bottom)：深度图表 - 类别分布、尺度分析、健康检查（独立显示）
+- 底部 (Bottom)：深度图表 - Class分布、尺度分析、健康检查（独立显示）
 """
 
 from typing import Optional, Dict, Any
@@ -72,7 +72,7 @@ class AnalysisControlWidget(QWidget):
         button_layout.addWidget(self.hint_label)
         
         # 开始分析按钮
-        self.start_button = QPushButton("📊 启动深度像素统计 (Start Deep Analysis)")
+        self.start_button = QPushButton("📊 Start Deep Analysis")
         self.start_button.setMinimumHeight(36)
         self.start_button.setMaximumHeight(36)
         self.start_button.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -109,7 +109,7 @@ class AnalysisControlWidget(QWidget):
         progress_layout.setSpacing(2)
         
         # 状态文字
-        self.status_label = QLabel("准备中...")
+        self.status_label = QLabel("Preparing...")
         self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.status_label.setStyleSheet("color: gray; font-size: 11px;")
         progress_layout.addWidget(self.status_label)
@@ -136,7 +136,7 @@ class AnalysisControlWidget(QWidget):
         progress_layout.addWidget(self.progress_bar)
 
         # 取消按钮
-        self.cancel_button = QPushButton("✕ 取消分析")
+        self.cancel_button = QPushButton("✕ Cancel Analysis")
         self.cancel_button.setMaximumHeight(28)
         self.cancel_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.cancel_button.setStyleSheet("""
@@ -169,7 +169,7 @@ class AnalysisControlWidget(QWidget):
         completed_layout.addWidget(self.completed_hint)
         
         # 完成状态标签（与按钮同高）
-        self.completed_label = QLabel("✅ 像素统计已完成 (Analysis Completed)")
+        self.completed_label = QLabel("✅ Analysis Completed")
         self.completed_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.completed_label.setMinimumHeight(36)
         self.completed_label.setMaximumHeight(36)
@@ -190,23 +190,23 @@ class AnalysisControlWidget(QWidget):
         
         layout.addWidget(self.stacked)
         
-        # 默认显示按钮（禁用状态，等待加载样本）
+        # 默认显示按钮（Disable状态，等待加载样本）
         self.stacked.setCurrentIndex(0)
         self.start_button.setEnabled(False)
-        self.hint_label.setText("请先加载数据集")
+        self.hint_label.setText("Please load dataset first")
     
     def set_sample_count(self, count: int, is_large: bool) -> None:
-        """设置样本数量"""
+        """Settings样本数量"""
         self._sample_count = count
         self._is_large_dataset = is_large
         
         if count == 0:
-            # 无样本，禁用按钮
-            self.hint_label.setText("请先加载数据集")
+            # 无样本，Disable按钮
+            self.hint_label.setText("Please load dataset first")
             self.start_button.setEnabled(False)
         elif is_large:
             self.hint_label.setText(
-                f"数据集较大（{count:,} 个样本），为节省资源请手动开启分析"
+                f"Large dataset ({count:,} samples). To save resources, please start analysis manually."
             )
             self.start_button.setEnabled(True)
         else:
@@ -222,7 +222,7 @@ class AnalysisControlWidget(QWidget):
     def show_progress(self) -> None:
         """显示进度状态"""
         self.progress_bar.setValue(0)
-        self.status_label.setText("准备中...")
+        self.status_label.setText("Preparing...")
         self.stacked.setCurrentIndex(1)
     
     def set_progress(self, current: int, total: int, message: str = "") -> None:
@@ -233,10 +233,10 @@ class AnalysisControlWidget(QWidget):
             self.status_label.setText(f"{message} ({current:,}/{total:,})")
         else:
             self.progress_bar.setValue(0)
-            self.status_label.setText(message or "准备中...")
+            self.status_label.setText(message or "Preparing...")
     
     def set_completed(self, from_cache: bool = False) -> None:
-        """设置为完成状态"""
+        """Settings为完成状态"""
         if from_cache:
             self.completed_hint.setText("已从缓存加载统计数据")
         else:
@@ -350,10 +350,10 @@ class AnalysisPanel(QWidget):
         self.metadata_manager.signals.finished.connect(self._on_finished)
         self.metadata_manager.signals.error.connect(self._on_error)
     
-    # ==================== 外部组件设置 ====================
+    # ==================== 外部组件Settings ====================
     
     def set_overview_widget(self, widget: QWidget) -> None:
-        """设置数据集概览组件（顶部，永远可见）"""
+        """Settings数据集概览组件（顶部，永远可见）"""
         # 清空现有内容
         while self.overview_layout.count():
             item = self.overview_layout.takeAt(0)
@@ -364,7 +364,7 @@ class AnalysisPanel(QWidget):
         self.overview_layout.addWidget(widget)
     
     def set_charts_widget(self, widget: QWidget) -> None:
-        """设置深度图表组件（底部，独立显示）"""
+        """Settings深度图表组件（底部，独立显示）"""
         # 清空现有内容
         while self.charts_layout.count():
             item = self.charts_layout.takeAt(0)
@@ -398,7 +398,7 @@ class AnalysisPanel(QWidget):
         self._images_dir = images_dir
         self._labels_dir = labels_dir
         
-        # 设置 metadata_manager 的目录
+        # Settings metadata_manager 的目录
         self.metadata_manager.set_directories(images_dir, labels_dir)
         
         # 更新控制器显示
@@ -407,21 +407,21 @@ class AnalysisPanel(QWidget):
         self.control_widget.show_control()
         self.control_widget.show_button()
         
-        # 设置深度图表为禁用状态（灰显）
+        # Settings深度图表为Disable状态（灰显）
         self._set_charts_pending()
         
         # Step 1: 检查缓存
         if self._check_cache_valid(samples_info):
-            print("✅ [AnalysisPanel] 缓存有效，直接加载结果")
+            print("✅ [AnalysisPanel] Cache valid, loading results")
             self._load_from_cache()
             return
         
         # Step 2: 判断数据量
         if self._is_below_threshold():
-            print(f"🔄 [AnalysisPanel] 小数据集 ({self._sample_count} 样本)，自动开始分析")
+            print(f"🔄 [AnalysisPanel] Small dataset ({self._sample_count} samples), auto starting analysis")
             self._start_analysis()
         else:
-            print(f"⏸️ [AnalysisPanel] 大数据集 ({self._sample_count} 样本)，等待用户手动触发")
+            print(f"⏸️ [AnalysisPanel] Large dataset ({self._sample_count} samples), waiting for manual trigger")
             self._current_state = AnalysisState.IDLE
     
     def _check_cache_valid(self, samples_info: list) -> bool:
@@ -443,12 +443,12 @@ class AnalysisPanel(QWidget):
         self.analysis_finished.emit()
     
     def _set_charts_pending(self) -> None:
-        """设置深度图表为待分析状态（灰显/禁用）"""
+        """Settings深度图表为待分析状态（灰显/Disable）"""
         if self._charts_widget:
             self._charts_widget.setEnabled(False)
     
     def _set_charts_ready(self) -> None:
-        """设置深度图表为就绪状态（启用）"""
+        """Settings深度图表为就绪状态（Enable）"""
         if self._charts_widget:
             self._charts_widget.setEnabled(True)
     
@@ -468,18 +468,18 @@ class AnalysisPanel(QWidget):
     @Slot()
     def _on_manual_start(self) -> None:
         """用户手动点击开始分析"""
-        print("👆 [AnalysisPanel] 用户手动触发分析")
+        print("👆 [AnalysisPanel] User manually triggered analysis")
         self._start_analysis()
     
     @Slot(int, int, str)
     def _on_progress(self, current: int, total: int, sample_id: str) -> None:
         """进度更新回调"""
-        self.control_widget.set_progress(current, total, f"正在分析: {sample_id}")
+        self.control_widget.set_progress(current, total, f"Analyzing: {sample_id}")
     
     @Slot()
     def _on_finished(self) -> None:
         """分析完成回调"""
-        print("✅ [AnalysisPanel] 分析完成")
+        print("✅ [AnalysisPanel] Analysis completed")
         self._current_state = AnalysisState.COMPLETED
         self.control_widget.set_completed(from_cache=False)
         self._set_charts_ready()
@@ -488,7 +488,7 @@ class AnalysisPanel(QWidget):
     @Slot(str)
     def _on_error(self, error_msg: str) -> None:
         """分析错误回调"""
-        print(f"❌ [AnalysisPanel] 分析错误: {error_msg}")
+        print(f"❌ [AnalysisPanel] Analysis error: {error_msg}")
         self._current_state = AnalysisState.IDLE
         self.control_widget.show_button()
         self.analysis_error.emit(error_msg)

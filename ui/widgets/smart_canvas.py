@@ -251,7 +251,7 @@ class MetadataLoaderWorker(QObject):
     def _load_metadata_opencv(self, path: str):
         """使用 OpenCV 读取元数据 (回退方案)"""
         try:
-            # 只读取头部信息，不完全解码
+            # 只读取头部Info，不完全解码
             with open(path, 'rb') as f:
                 # 只读取前 64KB 用于解析头部
                 data = np.frombuffer(f.read(65536), dtype=np.uint8)
@@ -310,7 +310,7 @@ class MetadataLoaderThread(QThread):
 
 
 class ImageLayerInfo:
-    """图层元数据信息"""
+    """图层元数据Info"""
     def __init__(
         self,
         path: str,
@@ -633,7 +633,7 @@ def apply_label_colormap(label_np: np.ndarray, palette: Optional[Any] = None) ->
             palette_bgr.append((128, 128, 128))
     h, w = label_np.shape
     bgra = np.zeros((h, w, 4), dtype=np.uint8)
-    # 当用户提供了自定义 palette 时，class_id=0 也应用颜色（不强制透明）
+    # 当用户提供了自定义 palette 时，class_id=0 也应用Color（不强制透明）
     has_custom_bg = len(custom_palette) > 0 and custom_palette[0] != (0, 0, 0)
     for class_id, color in enumerate(palette_bgr):
         mask = label_np == class_id
@@ -725,19 +725,19 @@ class SmartCanvas(QGraphicsView):
         self._context_menu = QMenu(self)
 
         # Zoom Full - 适应窗口
-        self._action_zoom_full = QAction("🔲 适应窗口 (Zoom Full)", self)
+        self._action_zoom_full = QAction("🔲 Zoom Full", self)
         self._action_zoom_full.triggered.connect(self._on_zoom_full)
         self._context_menu.addAction(self._action_zoom_full)
 
         # Zoom to Native Resolution - 原始分辨率 (1:1)
-        self._action_zoom_native = QAction("🔍 原始分辨率 (1:1)", self)
+        self._action_zoom_native = QAction("🔍 Native Resolution (1:1)", self)
         self._action_zoom_native.triggered.connect(self._on_zoom_native)
         self._context_menu.addAction(self._action_zoom_native)
 
         self._context_menu.addSeparator()
 
         # Zoom to Last - 恢复上次缩放
-        self._action_zoom_last = QAction("↩️ 恢复上次视图 (Zoom to Last)", self)
+        self._action_zoom_last = QAction("↩️ Zoom to Last", self)
         self._action_zoom_last.triggered.connect(self._on_zoom_last)
         self._action_zoom_last.setEnabled(False)  # 初始禁用
         self._context_menu.addAction(self._action_zoom_last)
@@ -759,12 +759,12 @@ class SmartCanvas(QGraphicsView):
         self._last_center = self.mapToScene(self.viewport().rect().center())
 
     def _on_zoom_full(self):
-        """Zoom Full - 适应窗口显示完整图像"""
+        """Zoom Full - Fit image to window"""
         self._save_current_view()
         self.fit_to_view()
 
     def _on_zoom_native(self):
-        """Zoom to Native Resolution - 缩放到原始分辨率 (1:1)"""
+        """Zoom to Native Resolution (1:1)"""
         self._save_current_view()
 
         # 获取当前视图中心 (在场景坐标中)
@@ -857,13 +857,13 @@ class SmartCanvas(QGraphicsView):
                 if self._is_swipe_layer(layer_info.z_value):
                     self._apply_swipe_clip_to_layer(layer_info)
 
-                print(f"   ✅ 视口区域已加载")
+                print(f"   ✅ 视口区域Loaded")
 
         except Exception as e:
             print(f"   ⚠️ 加载失败: {e}")
 
     def _on_zoom_last(self):
-        """Zoom to Last - 恢复上一次的缩放状态"""
+        """Zoom to Last"""
         if self._last_transform is None:
             return
 
@@ -1037,7 +1037,7 @@ class SmartCanvas(QGraphicsView):
             self._layers[1].item.setVisible(visible)
 
     def set_label_opacity(self, opacity: int):
-        """设置标签层的透明度 (0-100)"""
+        """设置标签层的Alpha (0-100)"""
         if 1 in self._layers and self._layers[1].item:
             self._layers[1].item.setOpacity(opacity / 100.0)
             self._layers[1].opacity = opacity / 100.0
@@ -1355,7 +1355,7 @@ class SmartCanvas(QGraphicsView):
             print(f"⚠️ 同步加载失败: level={level}")
             return
 
-        print(f"✅ 已加载: level={level}, shape={data.shape}, scale={scale}, "
+        print(f"✅ Loaded: level={level}, shape={data.shape}, scale={scale}, "
               f"原始尺寸=({layer_info.width}, {layer_info.height}), colormap={layer_info.apply_colormap}")
 
         QApplication.processEvents()

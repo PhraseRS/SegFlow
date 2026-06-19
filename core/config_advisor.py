@@ -62,14 +62,14 @@ class DatasetInsights:
     
     @property
     def num_classes(self) -> int:
-        """类别数量"""
+        """Class Count"""
         if self.class_names:
             return len(self.class_names)
         return len(self.pixel_distribution)
     
     @property
     def is_imbalanced(self) -> bool:
-        """是否存在严重的类别不平衡（最大/最小像素比 > 50）"""
+        """Contains severe class imbalance (max/min pixel ratio > 50)"""
         if not self.pixel_ratios:
             return False
         ratios = [v for v in self.pixel_ratios.values() if v > 0]
@@ -79,7 +79,7 @@ class DatasetInsights:
     
     @property
     def has_small_objects(self) -> bool:
-        """是否存在小目标类别"""
+        """Contains Small Object Classes"""
         return self.small_object_ratio > 0.2  # 超过 20% 的类别是小目标
 
 
@@ -251,7 +251,7 @@ class ConfigAdvisor:
                 'type': 'CrossEntropyLoss',
                 'use_sigmoid': False,
                 'loss_weight': 1.0,
-                '_reason': '类别分布相对均衡，使用默认交叉熵损失'
+                '_reason': 'Class distribution relatively balanced, use default CrossEntropyLoss'
             }
         
         # 构建权重列表（按 class_id 排序）
@@ -267,7 +267,7 @@ class ConfigAdvisor:
                 'loss_weight': 1.0,
                 'class_weight': class_weight,
                 '_reason': (
-                    f'检测到严重类别不平衡（{ins.small_object_ratio:.0%} 的前景类像素占比 < 1%），'
+                    f'Severe class imbalance detected ({ins.small_object_ratio:.0%} 的前景类像素占比 < 1%），'
                     f'推荐使用 FocalLoss + class_weight'
                 )
             }
@@ -317,7 +317,7 @@ class ConfigAdvisor:
                 'cat_max_ratio': 0.75,
             })
             recommendations['_reasons'].append(
-                f'空标签样本占比 {ins.empty_mask_ratio:.1%}，'
+                f'Empty mask ratio {ins.empty_mask_ratio:.1%}，'
                 f'推荐 RandomCrop(cat_max_ratio=0.75) 减少空 patch 出现概率'
             )
         else:
@@ -335,7 +335,7 @@ class ConfigAdvisor:
                 'paste_by_box': False,
             })
             recommendations['_reasons'].append(
-                f'小目标类别占前景类 {ins.small_object_ratio:.0%}，'
+                f'Small object classes take up {ins.small_object_ratio:.0%}，'
                 f'推荐 CopyPaste 增强小目标出现频率'
             )
         
@@ -349,17 +349,17 @@ class ConfigAdvisor:
                 'keep_ratio': True,
             })
             recommendations['_reasons'].append(
-                f'图像尺寸跨度大 (W: {ins.min_size[0]}-{ins.max_size[0]}, '
-                f'H: {ins.min_size[1]}-{ins.max_size[1]})，推荐多尺度训练'
+                f'Large variance in image size (W: {ins.min_size[0]}-{ins.max_size[0]}, '
+                f'H: {ins.min_size[1]}-{ins.max_size[1]}), recommend multi-scale training'
             )
         
         if not recommendations['_reasons']:
-            recommendations['_reasons'].append('数据集分布较均衡，使用标准数据增强配置')
+            recommendations['_reasons'].append('Balanced dataset, standard augmentation')
         
         return recommendations
     
     def _recommend_crop_size(self) -> Tuple[int, int]:
-        """根据图像尺寸推荐裁剪大小"""
+        """Recommend crop size based on image sizes"""
         ins = self.insights
         min_dim = min(ins.min_size[0], ins.min_size[1]) if min(ins.min_size) > 0 else 512
         
@@ -415,26 +415,26 @@ class ConfigAdvisor:
         """
         ins = self.insights
         lines = [
-            '📊 数据集洞察摘要',
+            '📊 Dataset Insights Summary',
             '='*40,
-            f'总样本数: {ins.total_samples} '
+            f'Total Samples: {ins.total_samples} '
             f'(训练={ins.train_count}, 验证={ins.val_count}, 测试={ins.test_count})',
-            f'类别数: {ins.num_classes}',
-            f'类别不平衡: {"⚠️ 是" if ins.is_imbalanced else "✅ 否"}',
-            f'小目标类别占比: {ins.small_object_ratio:.0%}',
-            f'空标签样本占比: {ins.empty_mask_ratio:.1%}',
-            f'健康问题: 🔴 {ins.fatal_issues_count} | 🟠 {ins.warning_issues_count}',
+            f'Classes: {ins.num_classes}',
+            f'Class Imbalance: {"⚠️ Yes" if ins.is_imbalanced else "✅ No"}',
+            f'Small Object Ratio: {ins.small_object_ratio:.0%}',
+            f'Empty Mask Ratio: {ins.empty_mask_ratio:.1%}',
+            f'Health Issues: 🔴 {ins.fatal_issues_count} | 🟠 {ins.warning_issues_count}',
             '',
-            '💡 推荐配置',
+            '💡 Recommended Config',
             '-'*40,
         ]
         
         loss_config = self.recommend_loss_config()
-        lines.append(f'损失函数: {loss_config["type"]}')
-        lines.append(f'  原因: {loss_config["_reason"]}')
+        lines.append(f'Loss Function: {loss_config["type"]}')
+        lines.append(f'  Reason: {loss_config["_reason"]}')
         
         aug_config = self.recommend_augmentation()
-        lines.append(f'数据增强: {len(aug_config["augmentations"])} 个操作')
+        lines.append(f'Augmentation: {len(aug_config["augmentations"])} operations')
         for reason in aug_config['_reasons']:
             lines.append(f'  • {reason}')
         

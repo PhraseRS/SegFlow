@@ -34,7 +34,7 @@ class EnvConfigWidget(QWidget):
 
     Signals:
         env_ready(str):      环境验证通过，携带 python_path
-        env_not_ready(str):  环境验证失败，携带错误消息
+        env_not_ready(str):  环境验证失败，携带Error消息
     """
 
     env_ready = Signal(str)       # python_path
@@ -107,7 +107,7 @@ class EnvConfigWidget(QWidget):
         self.framework_hint_label.setVisible(False)
         layout.addWidget(self.framework_hint_label)
 
-        self.status_label = QLabel("请选择 Python 环境")
+        self.status_label = QLabel("Please select Python environment")
         self.status_label.setWordWrap(True)
         self.status_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         self.status_label.setStyleSheet(
@@ -156,7 +156,7 @@ class EnvConfigWidget(QWidget):
     def refresh_envs(self):
         """异步刷新 conda 环境列表，不阻塞主线程。"""
         self.refresh_button.setEnabled(False)
-        self._set_status_loading("正在扫描 conda 环境，请稍候...")
+        self._set_status_loading("Scanning conda environments, please wait...")
 
         from PySide6.QtCore import QThread
 
@@ -225,7 +225,7 @@ class EnvConfigWidget(QWidget):
 
     def set_framework(self, framework_name: str, required_packages=None):
         """
-        设置当前框架，更新提示文字和探针包列表。
+        设置当前框架，更新Tip文字和探针包列表。
 
         Args:
             framework_name:     框架显示名称，如 "MMSegmentation"
@@ -287,7 +287,7 @@ class EnvConfigWidget(QWidget):
             )
             return
 
-        # 如果已有 worker 在跑，先取消
+        # 如果已有 worker 在跑，先Cancel
         if self._check_worker is not None:
             try:
                 if self._check_worker.isRunning():
@@ -299,7 +299,7 @@ class EnvConfigWidget(QWidget):
 
         self._invalidate_validation_cache()
         self.validate_button.setEnabled(False)
-        self._set_status_loading(f"🔍 正在检测: {python_path}")
+        self._set_status_loading(f"🔍 Detecting: {python_path}")
 
         self._check_worker = EnvCheckWorker(
             python_path=python_path,
@@ -341,7 +341,7 @@ class EnvConfigWidget(QWidget):
     def _on_check_failed(self, error: str):
         """EnvCheckWorker 发生意外异常时的处理。"""
         self.validate_button.setEnabled(True)
-        self._set_status(False, f"检测异常: {error}")
+        self._set_status(False, f"Detection exception: {error}")
         # 同步更新状态管理器为 error 状态
         from core.env_state_manager import EnvStateManager
         EnvStateManager.instance().update(
@@ -368,13 +368,13 @@ class EnvConfigWidget(QWidget):
 
         if status == "version_mismatch":
             msg = result.get("msg", "")
-            # 构建安装提示
+            # 构建安装Tip
             install_parts = []
             for pkg, constraint in self._version_constraints.items():
                 install_parts.append(f"{pkg}{constraint}")
             install_cmd = "pip install " + " ".join(install_parts)
             return False, (
-                f"❌ 版本不兼容: {msg}\n"
+                f"❌ Version incompatible: {msg}\n"
                 f"此 GUI 需要 MMSeg 1.x 配置格式，与 0.x 不兼容。\n"
                 f"请运行: {install_cmd}"
             )
@@ -429,7 +429,7 @@ class EnvConfigWidget(QWidget):
 
         python_path = self.get_selected_python_path()
         if not python_path:
-            msg = "未选择 Python 环境，请在环境面板中选择或输入路径。"
+            msg = "No Python environment selected. Please select or input path in environment panel."
             self._set_status(False, msg)
             return False, msg
 

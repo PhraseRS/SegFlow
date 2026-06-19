@@ -43,9 +43,9 @@ class ProjectManager:
 
     def validate_state(self, state: ProjectState) -> list[str]:
         warnings: list[str] = []
-        self._validate_dir(state.inputs.dataset_root, "数据集根目录", warnings)
-        self._validate_file(state.model.config, "模型配置文件", warnings)
-        self._validate_file(state.model.checkpoint, "模型权重文件", warnings)
+        self._validate_dir(state.inputs.dataset_root, "Dataset Root Dir", warnings)
+        self._validate_file(state.model.config, "Model Config File", warnings)
+        self._validate_file(state.model.checkpoint, "Model Weight File", warnings)
         self._validate_file(state.custom_modules.custom_rs_dataset, "custom_rs_dataset.py", warnings, optional=True)
         self._validate_file(
             state.custom_modules.custom_live_pred_hook,
@@ -59,7 +59,7 @@ class ProjectManager:
             if os.path.isdir(module_dir):
                 valid_module_dirs.append(module_dir)
             else:
-                warnings.append(f"自定义模块目录不存在: {module_dir}")
+                warnings.append(f"自定义模块目录Not Found: {module_dir}")
         state.custom_modules.module_dirs = valid_module_dirs
         return warnings
 
@@ -81,15 +81,15 @@ class ProjectManager:
     def _validate_file(path: str, label: str, warnings: list[str], optional: bool = False) -> None:
         if not path:
             if not optional:
-                warnings.append(f"{label}未设置")
+                warnings.append(f"{label}Not Set")
             return
         if not os.path.isfile(path):
-            warnings.append(f"{label}不存在: {path}")
+            warnings.append(f"{label}Not Found: {path}")
 
     @staticmethod
     def _validate_dir(path: str, label: str, warnings: list[str]) -> None:
         if not path:
-            warnings.append(f"{label}未设置")
+            warnings.append(f"{label}Not Set")
             return
         if not os.path.isdir(path):
-            warnings.append(f"{label}不存在: {path}")
+            warnings.append(f"{label}Not Found: {path}")

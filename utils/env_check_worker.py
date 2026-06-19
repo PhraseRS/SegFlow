@@ -72,7 +72,7 @@ class EnvCheckWorker(QThread):
         if not python_path or not os.path.exists(python_path):
             return {
                 "status": "error",
-                "msg": f"Python 路径不存在: {python_path}",
+                "msg": f"Python 路径Not Found: {python_path}",
             }
 
         # 额外探测 mmengine（如果在 version_constraints 中但不在 packages 中）
@@ -118,20 +118,20 @@ class EnvCheckWorker(QThread):
             # 取最后一行非空内容作为 JSON（防止前面有 print/warning 输出）
             lines = [l for l in output.strip().splitlines() if l.strip()]
             if not lines:
-                return {"status": "error", "msg": "探针无输出"}
+                return {"status": "error", "msg": "Probe has no output"}
             json_line = lines[-1]
             result = json.loads(json_line)
         except subprocess.TimeoutExpired:
-            return {"status": "error", "msg": "探针超时（>15s），解释器响应过慢"}
+            return {"status": "error", "msg": "Probe timeout (>15s), interpreter response too slow"}
         except subprocess.CalledProcessError as exc:
             stderr_text = ""
             if exc.stderr:
                 stderr_text = exc.stderr.strip()[:200]
-            return {"status": "error", "msg": f"解释器执行失败: {stderr_text or exc.output or exc}"}
+            return {"status": "error", "msg": f"Interpreter execution failed: {stderr_text or exc.output or exc}"}
         except json.JSONDecodeError as exc:
-            return {"status": "error", "msg": f"探针输出解析失败: {exc}. 原始输出: {output.strip()[:200]}"}
+            return {"status": "error", "msg": f"Probe output parse failed: {exc}. Raw output: {output.strip()[:200]}"}
         except Exception as exc:
-            return {"status": "error", "msg": f"探针异常: {exc}"}
+            return {"status": "error", "msg": f"Probe exception: {exc}"}
 
         # 版本约束校验（在探针成功后进行）
         if self._version_constraints and result.get("status") != "error":
@@ -157,7 +157,7 @@ class EnvCheckWorker(QThread):
             if not detected or detected == "unknown":
                 continue  # 包缺失由 incomplete 状态处理，此处不重复
             if not self._version_satisfies(detected, constraint_str):
-                mismatches.append(f"{pkg} {detected} (需要 {constraint_str})")
+                mismatches.append(f"{pkg} {detected} (Needs {constraint_str})")
         return mismatches
 
     @staticmethod

@@ -31,10 +31,10 @@ LABEL_WIDTH_PX = 24         # Y轴标签宽度
 # 7pt ≈ 9.3px，为保持视觉一致，Qt 使用 9px
 LABEL_FONT_SIZE_PX = 9      # Y轴标签字号（px，对应 Matplotlib 7pt）
 LEGEND_FONT_SIZE = 10       # 图例字号（与控制栏 Px/Img/Log/NoBG 一致）
-LEGEND_BLOCK_SIZE = 10      # 图例颜色块尺寸
+LEGEND_BLOCK_SIZE = 10      # 图例Color块尺寸
 
-# 颜色
-LABEL_COLOR = '#666'        # 标签颜色
+# Color
+LABEL_COLOR = '#666'        # 标签Color
 # ================================================
 
 
@@ -63,28 +63,28 @@ BIN_CONFIGS: Dict[CoverageBin, BinConfig] = {
         min_ratio=0.0,
         max_ratio=0.1,
         color="#B0BEC5",  # 浅灰色
-        description="稀疏 (<10%)"
+        description="Sparse (<10%)"
     ),
     CoverageBin.MODERATE: BinConfig(
         name="Moderate", 
         min_ratio=0.1,
         max_ratio=0.5,
         color="#4CAF50",  # 绿色
-        description="适中 (10%-50%)"
+        description="Moderate (10%-50%)"
     ),
     CoverageBin.DENSE: BinConfig(
         name="Dense",
         min_ratio=0.5,
         max_ratio=0.9,
         color="#2E7D32",  # 深绿色
-        description="密集 (50%-90%)"
+        description="Dense (50%-90%)"
     ),
     CoverageBin.FULL: BinConfig(
         name="Full",
         min_ratio=0.9,
         max_ratio=1.0,
         color="#FF9800",  # 警示橙色
-        description="全覆盖 (>90%)"
+        description="Full (>90%)"
     ),
 }
 
@@ -158,7 +158,7 @@ class SegmentedHeatmapBar(QWidget):
             if segment_width <= 0:
                 continue
             
-            # 获取颜色
+            # 获取Color
             config = BIN_CONFIGS[bin_type]
             color = QColor(config.color)
             
@@ -190,7 +190,7 @@ class SegmentedHeatmapBar(QWidget):
             if new_hover:
                 config = BIN_CONFIGS[new_hover]
                 count = self._stats.bin_counts.get(new_hover, 0)
-                tooltip = f"{config.description}: {count} 张图像"
+                tooltip = f"{config.description}: {count} Images"
                 QToolTip.showText(event.globalPos(), tooltip, self)
             else:
                 QToolTip.hideText()
@@ -284,7 +284,7 @@ class CoverageAnalysisCard(QWidget):
         for bin_type in [CoverageBin.SPARSE, CoverageBin.MODERATE, CoverageBin.DENSE, CoverageBin.FULL]:
             config = BIN_CONFIGS[bin_type]
             
-            # 颜色块
+            # Color块
             color_block = QLabel()
             color_block.setFixedSize(LEGEND_BLOCK_SIZE, LEGEND_BLOCK_SIZE)
             color_block.setStyleSheet(f"background-color: {config.color}; border: 1px solid #ccc;")
@@ -305,8 +305,8 @@ class CoverageAnalysisCard(QWidget):
         self.content_layout.setSpacing(0)
         self.content_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         
-        # 空状态提示
-        self.empty_label = QLabel("暂无数据")
+        # 空状态Tip
+        self.empty_label = QLabel("No Data")
         self.empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.empty_label.setStyleSheet("color: gray; font-size: 11px; padding: 10px;")
         self.content_layout.addWidget(self.empty_label)
@@ -380,7 +380,7 @@ class CoverageAnalysisCard(QWidget):
         # 计算分箱
         self._class_stats = self._calculate_bins(image_records)
         
-        # 隐藏空状态提示
+        # 隐藏空状态Tip
         self.empty_label.setVisible(len(self._class_stats) == 0)
         
         # 清除旧行

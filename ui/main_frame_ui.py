@@ -213,7 +213,7 @@ class Ui_MainWindow(object):
         self.analysis_panel.setObjectName(u"analysis_panel")
         
         # === 顶部：数据集概览（永远可见）===
-        self.panel_datasetOverview = CollapsiblePanel("数据集概览 (Dataset Overview)", expanded=True)
+        self.panel_datasetOverview = CollapsiblePanel("Dataset Overview", expanded=True)
         self.widget_datasetOverview = DatasetOverviewWidget()
         self.widget_datasetOverview.setObjectName(u"widget_datasetOverview")
         self.panel_datasetOverview.add_widget(self.widget_datasetOverview)
@@ -222,7 +222,7 @@ class Ui_MainWindow(object):
             text="Resplit",
             icon_name='fa5s.sync-alt',
             icon_color='#2196F3',
-            tooltip="重新划分数据集 (Train/Val/Test)"
+            tooltip="Resplit Dataset (Train/Val/Test)"
         )
         self.btn_resplit.setEnabled(False)  # 默认禁用，有数据时启用
         self.analysis_panel.set_overview_widget(self.panel_datasetOverview)
@@ -232,7 +232,7 @@ class Ui_MainWindow(object):
         self.collapsible_dataProfile.setObjectName(u"collapsible_dataProfile")
         
         # 面板1: 类别分布 (Class Distribution)
-        self.panel_classDistribution = self.collapsible_dataProfile.add_panel("类别分布", expanded=True)
+        self.panel_classDistribution = self.collapsible_dataProfile.add_panel("Class Distribution", expanded=True)
         self.widget_classDistribution = ClassDistributionWidget()
         self.widget_classDistribution.setObjectName(u"widget_classDistribution")
         self.panel_classDistribution.add_widget(self.widget_classDistribution)
@@ -240,13 +240,13 @@ class Ui_MainWindow(object):
         self.panel_classDistribution.add_header_widget(self.widget_classDistribution.get_header_button())
         
         # 面板2: 覆盖率分析 (Coverage Analysis)
-        self.panel_coverageAnalysis = self.collapsible_dataProfile.add_panel("覆盖率分析", expanded=False)
+        self.panel_coverageAnalysis = self.collapsible_dataProfile.add_panel("Coverage Analysis", expanded=False)
         self.widget_coverageAnalysis = CoverageAnalysisCard()
         self.widget_coverageAnalysis.setObjectName(u"widget_coverageAnalysis")
         self.panel_coverageAnalysis.add_widget(self.widget_coverageAnalysis)
         
         # 面板3: 健康检查 (Health Check)
-        self.panel_healthCheck = self.collapsible_dataProfile.add_panel("健康检查 (Health Check)", expanded=False)
+        self.panel_healthCheck = self.collapsible_dataProfile.add_panel("Health Check", expanded=False)
         self.widget_healthCheck = HealthCheckCard()
         self.widget_healthCheck.setObjectName(u"widget_healthCheck")
         self.panel_healthCheck.add_widget(self.widget_healthCheck)
@@ -304,7 +304,7 @@ class Ui_MainWindow(object):
         # 3. 类别配置组
         self.groupBox_classConfig = QGroupBox(self.scrollAreaWidget_taskConfig)
         self.groupBox_classConfig.setObjectName(u"groupBox_classConfig")
-        self.groupBox_classConfig.setTitle("类别配置 (Class Configuration)")
+        self.groupBox_classConfig.setTitle("Class Configuration")
         self.verticalLayout_classConfig = QVBoxLayout(self.groupBox_classConfig)
         self.verticalLayout_classConfig.setContentsMargins(6, 6, 6, 6)
 
@@ -539,78 +539,78 @@ class Ui_MainWindow(object):
     # setupUi
 
     def retranslateUi(self, MainWindow):
-        MainWindow.setWindowTitle(QCoreApplication.translate("MainWindow", u"\u9065\u611f\u5f71\u50cf\u5206\u5272\u7cfb\u7edf", None))
-        self.action_open.setText(QCoreApplication.translate("MainWindow", u"\u6253\u5f00", None))
+        MainWindow.setWindowTitle(QCoreApplication.translate("MainWindow", u"SegFlux", None))
+        self.action_open.setText(QCoreApplication.translate("MainWindow", u"Open", None))
 #if QT_CONFIG(shortcut)
         self.action_open.setShortcut(QCoreApplication.translate("MainWindow", u"Ctrl+O", None))
 #endif // QT_CONFIG(shortcut)
-        self.action_save.setText(QCoreApplication.translate("MainWindow", u"\u4fdd\u5b58", None))
+        self.action_save.setText(QCoreApplication.translate("MainWindow", u"Save", None))
 #if QT_CONFIG(shortcut)
         self.action_save.setShortcut(QCoreApplication.translate("MainWindow", u"Ctrl+S", None))
 #endif // QT_CONFIG(shortcut)
-        self.action_exit.setText(QCoreApplication.translate("MainWindow", u"\u9000\u51fa", None))
+        self.action_exit.setText(QCoreApplication.translate("MainWindow", u"Exit", None))
 #if QT_CONFIG(shortcut)
         self.action_exit.setShortcut(QCoreApplication.translate("MainWindow", u"Ctrl+Q", None))
 #endif // QT_CONFIG(shortcut)
-        self.action_preferences.setText(QCoreApplication.translate("MainWindow", u"\u9996\u9009\u9879", None))
-        self.action_zoomIn.setText(QCoreApplication.translate("MainWindow", u"\u653e\u5927", None))
+        self.action_preferences.setText(QCoreApplication.translate("MainWindow", u"Preferences", None))
+        self.action_zoomIn.setText(QCoreApplication.translate("MainWindow", u"Zoom In", None))
 #if QT_CONFIG(shortcut)
         self.action_zoomIn.setShortcut(QCoreApplication.translate("MainWindow", u"Ctrl++", None))
 #endif // QT_CONFIG(shortcut)
-        self.action_zoomOut.setText(QCoreApplication.translate("MainWindow", u"\u7f29\u5c0f", None))
+        self.action_zoomOut.setText(QCoreApplication.translate("MainWindow", u"Zoom Out", None))
 #if QT_CONFIG(shortcut)
         self.action_zoomOut.setShortcut(QCoreApplication.translate("MainWindow", u"Ctrl+-", None))
 #endif // QT_CONFIG(shortcut)
-        self.action_fitToWindow.setText(QCoreApplication.translate("MainWindow", u"\u9002\u5e94\u7a97\u53e3", None))
+        self.action_fitToWindow.setText(QCoreApplication.translate("MainWindow", u"Fit to Window", None))
 #if QT_CONFIG(shortcut)
         self.action_fitToWindow.setShortcut(QCoreApplication.translate("MainWindow", u"Ctrl+0", None))
 #endif // QT_CONFIG(shortcut)
-        self.action_train.setText(QCoreApplication.translate("MainWindow", u"\u8bad\u7ec3", None))
+        self.action_train.setText(QCoreApplication.translate("MainWindow", u"Train", None))
 #if QT_CONFIG(shortcut)
         self.action_train.setShortcut(QCoreApplication.translate("MainWindow", u"F5", None))
 #endif // QT_CONFIG(shortcut)
-        self.action_inference.setText(QCoreApplication.translate("MainWindow", u"\u63a8\u7406", None))
+        self.action_inference.setText(QCoreApplication.translate("MainWindow", u"Inference", None))
 #if QT_CONFIG(shortcut)
         self.action_inference.setShortcut(QCoreApplication.translate("MainWindow", u"F6", None))
 #endif // QT_CONFIG(shortcut)
-        self.action_about.setText(QCoreApplication.translate("MainWindow", u"\u5173\u4e8e", None))
-        self.action_detailView.setText(QCoreApplication.translate("MainWindow", u"\u8be6\u60c5\u89c6\u56fe (Detail)", None))
-        self.action_gridView.setText(QCoreApplication.translate("MainWindow", u"\u7f51\u683c\u89c6\u56fe (Grid)", None))
+        self.action_about.setText(QCoreApplication.translate("MainWindow", u"About", None))
+        self.action_detailView.setText(QCoreApplication.translate("MainWindow", u"Detail View", None))
+        self.action_gridView.setText(QCoreApplication.translate("MainWindow", u"Grid View", None))
         # 侧边栏组件内部已设置文本，无需在此翻译
         
         # Tab 1: 数据洞察（使用可折叠面板，标题在组件中设置）
-        self.tabWidget_contextControl.setTabText(self.tabWidget_contextControl.indexOf(self.tab_dataProfile), QCoreApplication.translate("MainWindow", u"\u6570\u636e\u6d1e\u5bdf (Data Profile)", None))
+        self.tabWidget_contextControl.setTabText(self.tabWidget_contextControl.indexOf(self.tab_dataProfile), QCoreApplication.translate("MainWindow", u"Data Profile", None))
         # widget_datasetOverview, widget_classDistribution, widget_coverageAnalysis, widget_healthCheck 使用自定义组件，无需设置文本
         
         # Tab 2: 任务配置
-        self.tabWidget_contextControl.setTabText(self.tabWidget_contextControl.indexOf(self.tab_taskConfig), QCoreApplication.translate("MainWindow", u"\u4efb\u52a1\u914d\u7f6e (Task Config)", None))
+        self.tabWidget_contextControl.setTabText(self.tabWidget_contextControl.indexOf(self.tab_taskConfig), QCoreApplication.translate("MainWindow", u"Task Config", None))
 
-        self.groupBox_modelSelection.setTitle(QCoreApplication.translate("MainWindow", u"\u6a21\u578b\u9009\u62e9 (Model Selection)", None))
-        self.groupBox_weightSelection.setTitle(QCoreApplication.translate("MainWindow", u"\u6743\u91cd\u9009\u62e9 (Weight Selection)", None))
-        self.groupBox_advisorConfig.setTitle(QCoreApplication.translate("MainWindow", u"\u6570\u636e\u9a71\u52a8\u63a8\u8350 (Data-Driven Advisor)", None))
-        self.groupBox_hyperparams.setTitle(QCoreApplication.translate("MainWindow", u"\u8be6\u7ec6\u53c2\u6570\u8bbe\u7f6e (Detailed Hyperparameters)", None))
-        self.groupBox_paramConfig.setTitle(QCoreApplication.translate("MainWindow", u"\u9ad8\u7ea7\u53c2\u6570\u914d\u7f6e (Advanced Parameters)", None))
-        self.groupBox_environment.setTitle(QCoreApplication.translate("MainWindow", u"\u73af\u5883\u51c6\u5907\u72b6\u6001 (Environment Readiness)", None))
-        self.groupBox_actions.setTitle(QCoreApplication.translate("MainWindow", u"\u64cd\u4f5c\u6309\u94ae (Action Buttons)", None))
-        self.pushButton_run.setText(QCoreApplication.translate("MainWindow", u"\u8fd0\u884c (Run)", None))
-        self.pushButton_stop.setText(QCoreApplication.translate("MainWindow", u"\u505c\u6b62 (Stop)", None))
-        self.pushButton_export.setText(QCoreApplication.translate("MainWindow", u"\u5bfc\u51fa (Export)", None))
+        self.groupBox_modelSelection.setTitle(QCoreApplication.translate("MainWindow", u"Model Selection", None))
+        self.groupBox_weightSelection.setTitle(QCoreApplication.translate("MainWindow", u"Weight Selection", None))
+        self.groupBox_advisorConfig.setTitle(QCoreApplication.translate("MainWindow", u"Data-Driven Advisor", None))
+        self.groupBox_hyperparams.setTitle(QCoreApplication.translate("MainWindow", u"Detailed Hyperparameters", None))
+        self.groupBox_paramConfig.setTitle(QCoreApplication.translate("MainWindow", u"Advanced Parameters", None))
+        self.groupBox_environment.setTitle(QCoreApplication.translate("MainWindow", u"Environment Readiness", None))
+        self.groupBox_actions.setTitle(QCoreApplication.translate("MainWindow", u"Actions", None))
+        self.pushButton_run.setText(QCoreApplication.translate("MainWindow", u"Run", None))
+        self.pushButton_stop.setText(QCoreApplication.translate("MainWindow", u"Stop", None))
+        self.pushButton_export.setText(QCoreApplication.translate("MainWindow", u"Export", None))
         
         # Tab 3: 推理可视化
-        self.tabWidget_contextControl.setTabText(self.tabWidget_contextControl.indexOf(self.tab_inferenceVis), QCoreApplication.translate("MainWindow", u"\u63a8\u7406\u53ef\u89c6\u5316 (Inference)", None))
+        self.tabWidget_contextControl.setTabText(self.tabWidget_contextControl.indexOf(self.tab_inferenceVis), QCoreApplication.translate("MainWindow", u"Inference", None))
         # inference_panel 使用自定义组件，内部已设置文本
         
-        self.tabWidget_bottom.setTabText(self.tabWidget_bottom.indexOf(self.tab_logs), QCoreApplication.translate("MainWindow", u"\u65e5\u5fd7\u8f93\u51fa (Logs)", None))
-        self.label_metricsPlaceholder.setText(QCoreApplication.translate("MainWindow", u"\u5b9e\u65f6\u8bad\u7ec3\u6307\u6807\u66f2\u7ebf\u663e\u793a\u533a\u57df\n"
-"(\u53ef\u4f7f\u7528 matplotlib \u6216 pyqtgraph)", None))
-        self.tabWidget_bottom.setTabText(self.tabWidget_bottom.indexOf(self.tab_metrics), QCoreApplication.translate("MainWindow", u"\u8bad\u7ec3\u6307\u6807 (Metrics)", None))
-        self.label_progressInfo.setText(QCoreApplication.translate("MainWindow", u"\u5f53\u524d\u4efb\u52a1\u8fdb\u5ea6\uff1a", None))
-        self.tabWidget_bottom.setTabText(self.tabWidget_bottom.indexOf(self.tab_progress), QCoreApplication.translate("MainWindow", u"\u8fdb\u5ea6 (Progress)", None))
-        self.menu_file.setTitle(QCoreApplication.translate("MainWindow", u"\u6587\u4ef6 (&F)", None))
-        self.menu_edit.setTitle(QCoreApplication.translate("MainWindow", u"\u7f16\u8f91 (&E)", None))
-        self.menu_view.setTitle(QCoreApplication.translate("MainWindow", u"\u89c6\u56fe (&V)", None))
-        self.menu_tools.setTitle(QCoreApplication.translate("MainWindow", u"\u5de5\u5177 (&T)", None))
-        self.menu_help.setTitle(QCoreApplication.translate("MainWindow", u"\u5e2e\u52a9 (&H)", None))
-        self.toolBar.setWindowTitle(QCoreApplication.translate("MainWindow", u"\u5de5\u5177\u680f", None))
+        self.tabWidget_bottom.setTabText(self.tabWidget_bottom.indexOf(self.tab_logs), QCoreApplication.translate("MainWindow", u"Logs", None))
+        self.label_metricsPlaceholder.setText(QCoreApplication.translate("MainWindow", u"Live metrics chart area\n"
+"(matplotlib / pyqtgraph)", None))
+        self.tabWidget_bottom.setTabText(self.tabWidget_bottom.indexOf(self.tab_metrics), QCoreApplication.translate("MainWindow", u"Metrics", None))
+        self.label_progressInfo.setText(QCoreApplication.translate("MainWindow", u"Current progress:", None))
+        self.tabWidget_bottom.setTabText(self.tabWidget_bottom.indexOf(self.tab_progress), QCoreApplication.translate("MainWindow", u"Progress", None))
+        self.menu_file.setTitle(QCoreApplication.translate("MainWindow", u"&File", None))
+        self.menu_edit.setTitle(QCoreApplication.translate("MainWindow", u"&Edit", None))
+        self.menu_view.setTitle(QCoreApplication.translate("MainWindow", u"&View", None))
+        self.menu_tools.setTitle(QCoreApplication.translate("MainWindow", u"&Tools", None))
+        self.menu_help.setTitle(QCoreApplication.translate("MainWindow", u"&Help", None))
+        self.toolBar.setWindowTitle(QCoreApplication.translate("MainWindow", u"Toolbar", None))
     # retranslateUi
 

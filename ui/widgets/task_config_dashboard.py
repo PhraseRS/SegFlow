@@ -151,7 +151,7 @@ class AugmentationPreviewStrip(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        title = QLabel("实时增强预览 (Live Augmentation Preview)")
+        title = QLabel("Live Augmentation Preview")
         title.setStyleSheet("font-weight: bold; color: #495057;")
         layout.addWidget(title)
 
@@ -278,24 +278,24 @@ class AugmentationPreviewStrip(QWidget):
         for row_index in range(self.ROW_COUNT):
             sample = rows[row_index] if row_index < len(rows) else None
             img_cv = self._read_image_cv(sample.get('img_path', '')) if sample else None
-            sample_name = sample.get('name', f'样本 {row_index + 1}') if sample else f'样本 {row_index + 1}'
+            sample_name = sample.get('name', f'Sample {row_index + 1}') if sample else f'Sample {row_index + 1}'
 
             for col_index, (aug_key, _) in enumerate(self.AUGMENTATION_COLUMNS):
                 if sample is None:
                     cell = self._make_cell_widget(
-                        sample_name if aug_key == "original" else ("未启用" if not self.augmentation_states.get(aug_key, False) else "等待样本"),
-                        text="暂无样本" if aug_key == "original" else "",
+                        sample_name if aug_key == "original" else ("Disabled" if not self.augmentation_states.get(aug_key, False) else "Waiting for samples"),
+                        text="No Samples" if aug_key == "original" else "",
                         is_placeholder=(aug_key != "original" and not self.augmentation_states.get(aug_key, False)),
                     )
                 else:
                     if aug_key == "original":
                         pixmap = self._cv_to_pixmap(self._simulate_augmentation(img_cv, aug_key))
-                        cell = self._make_cell_widget(sample_name, pixmap=pixmap, text="无图片")
+                        cell = self._make_cell_widget(sample_name, pixmap=pixmap, text="No Image")
                     elif self.augmentation_states.get(aug_key, False):
                         pixmap = self._cv_to_pixmap(self._simulate_augmentation(img_cv, aug_key))
-                        cell = self._make_cell_widget(sample_name, pixmap=pixmap, text="无预览")
+                        cell = self._make_cell_widget(sample_name, pixmap=pixmap, text="No Preview")
                     else:
-                        cell = self._make_cell_widget("未启用", is_placeholder=True)
+                        cell = self._make_cell_widget("Disabled", is_placeholder=True)
                 self.grid_layout.addWidget(cell, row_index + 1, col_index)
 
         self.grid_layout.setColumnStretch(len(self.AUGMENTATION_COLUMNS), 1)
@@ -325,7 +325,7 @@ class ConfigHealthBar(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        title = QLabel("配置健康度 (Configuration Health Score)")
+        title = QLabel("Configuration Health Score")
         title.setStyleSheet("font-weight: bold; color: #495057;")
         layout.addWidget(title)
 
@@ -336,7 +336,7 @@ class ConfigHealthBar(QWidget):
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
         self.progress_bar.setTextVisible(True)
-        self.progress_bar.setFormat("%v 分")
+        self.progress_bar.setFormat("%v Pts")
         self.progress_bar.setMinimumHeight(24)
         self.progress_bar.setStyleSheet("""
             QProgressBar {
@@ -360,10 +360,10 @@ class ConfigHealthBar(QWidget):
         pills_layout.setSpacing(8)
 
         self.pills = {
-            "vram":   self._create_pill("预估显存: -- GB",  "#F1F3F5", "#495057"),
-            "data":   self._create_pill("数据集: 未就绪",   "#F1F3F5", "#495057"),
-            "params": self._create_pill("参数: 待配置",     "#F1F3F5", "#495057"),
-            "env":    self._create_pill("环境: 未检测",     "#F1F3F5", "#495057"),
+            "vram":   self._create_pill("Est. VRAM: -- GB",  "#F1F3F5", "#495057"),
+            "data":   self._create_pill("Dataset: Not Ready",   "#F1F3F5", "#495057"),
+            "params": self._create_pill("Params: Pending",     "#F1F3F5", "#495057"),
+            "env":    self._create_pill("Env: Not Detected",     "#F1F3F5", "#495057"),
         }
 
         for p in self.pills.values():
@@ -394,13 +394,13 @@ class ConfigHealthBar(QWidget):
         if state.get("is_ready"):
             python_path = state.get("python_path", "")
             short_path = python_path.split("\\")[-2] if "\\" in python_path else python_path
-            self.update_env_pill(ready=True, label=f"✅ 环境: {short_path}")
+            self.update_env_pill(ready=True, label=f"✅ Env: {short_path}")
         else:
             status = state.get("status", "unknown")
             if status == "unknown":
-                self.update_env_pill(ready=None, label="环境: 未检测")
+                self.update_env_pill(ready=None, label="Env: Not Detected")
             else:
-                self.update_env_pill(ready=False, label="❌ 环境: 未就绪")
+                self.update_env_pill(ready=False, label="❌ Env: Not Ready")
 
     def update_env_pill(self, ready, label: str):
         """
@@ -439,7 +439,7 @@ class TaskConfigBlueprintWidget(QWidget):
         layout.setSpacing(24)
 
         # 标题区
-        header = QLabel("任务配置蓝图 (Task Configuration Dashboard)")
+        header = QLabel("Task Configuration Dashboard")
         header.setStyleSheet("font-size: 18px; font-weight: bold; color: #212529;")
         layout.addWidget(header)
 
@@ -466,17 +466,17 @@ class TaskConfigBlueprintWidget(QWidget):
     def update_blueprint(self, params: dict):
         """
         根据完整的参数字典更新蓝图各节点与健康度。
-        params 整合了 HyperparamTabsWidget / ModelSelectionWidget 以及数据集信息。
+        params 整合了 HyperparamTabsWidget / ModelSelectionWidget 以及数据集Info。
         """
         # ---- Dataset 节点 ----
         dataset_samples = params.get("dataset_samples", 0)
         data_root = params.get("data_root", "")
         dataset_ready = bool(dataset_samples > 0 or data_root)
         if dataset_ready:
-            label = f"{dataset_samples} 样本" if dataset_samples else "已加载"
+            label = f"{dataset_samples} Samples" if dataset_samples else "Loaded"
             self.blueprint.nodes["dataset"].set_active(True, label)
         else:
-            self.blueprint.nodes["dataset"].set_active(False, "未加载数据集")
+            self.blueprint.nodes["dataset"].set_active(False, "Dataset not loaded")
 
         # ---- Augmentation 节点 ----
         crop_size = params.get("crop_size", 512)
@@ -510,7 +510,7 @@ class TaskConfigBlueprintWidget(QWidget):
         elif backbone:
             model_label = f"{backbone} | {in_ch}ch"
         else:
-            model_label = "待选择"
+            model_label = "Pending"
         self.blueprint.nodes["model"].set_active(bool(method or backbone), model_label)
 
         # ---- Loss & Optimizer 节点 ----
@@ -553,16 +553,16 @@ class TaskConfigBlueprintWidget(QWidget):
         if dataset_ready:
             raw_score += 20
             ds = params.get('dataset_samples', 0)
-            self.pills_status_update("data", f"✅ 数据: {ds or ''}已就绪", "#D4EDDA", "#155724")
+            self.pills_status_update("data", f"✅ Data: {ds or ''}Ready", "#D4EDDA", "#155724")
         else:
-            self.pills_status_update("data", "⚠ 数据: 未加载", "#FFF3CD", "#856404")
+            self.pills_status_update("data", "⚠ Data: Not Loaded", "#FFF3CD", "#856404")
 
         # 2. 模型参数已选（20分）
         if params.get("method") or params.get("backbone"):
             raw_score += 20
-            self.pills_status_update("params", "✅ 参数: 已配置", "#D4EDDA", "#155724")
+            self.pills_status_update("params", "✅ Params: Configured", "#D4EDDA", "#155724")
         else:
-            self.pills_status_update("params", "⚠ 参数: 待配置", "#FFF3CD", "#856404")
+            self.pills_status_update("params", "⚠ Params: Pending", "#FFF3CD", "#856404")
 
         # 3. 批大小与显存估算（20分，超出16GB得0分）
         batch_size = params.get("batch_size", 2)
@@ -571,12 +571,12 @@ class TaskConfigBlueprintWidget(QWidget):
         estimated_vram_gb = round((crop_size ** 2 * in_ch * 4 * batch_size * 4) / 1e9, 1)
         if estimated_vram_gb <= 8:
             raw_score += 20
-            self.pills_status_update("vram", f"✅ 显存预估: ~{estimated_vram_gb}GB", "#D4EDDA", "#155724")
+            self.pills_status_update("vram", f"✅ Est. VRAM: ~{estimated_vram_gb}GB", "#D4EDDA", "#155724")
         elif estimated_vram_gb <= 16:
             raw_score += 12
-            self.pills_status_update("vram", f"⚠ 显存预估: ~{estimated_vram_gb}GB", "#FFF3CD", "#856404")
+            self.pills_status_update("vram", f"⚠ Est. VRAM: ~{estimated_vram_gb}GB", "#FFF3CD", "#856404")
         else:
-            self.pills_status_update("vram", f"❌ 显存: ~{estimated_vram_gb}GB OOM风险!", "#F8D7DA", "#721C24")
+            self.pills_status_update("vram", f"❌ VRAM: ~{estimated_vram_gb}GB OOM风险!", "#F8D7DA", "#721C24")
 
         # 4. 关键增强选项（20分）
         if params.get("aug_random_flip", False) or params.get("aug_photo_distortion", False):
@@ -592,7 +592,7 @@ class TaskConfigBlueprintWidget(QWidget):
         # 归一化到100分
         score = min(100, int(raw_score * 100 / MAX_RAW))
 
-        # 更新进度条（含动态颜色）
+        # 更新进度条（含动态Color）
         self.health_bar.progress_bar.setValue(score)
         chunk_color = "#20C997" if score >= 75 else ("#FFC107" if score >= 50 else "#DC3545")
         self.health_bar.progress_bar.setStyleSheet(f"""
@@ -638,7 +638,7 @@ class LossCurvePlaceholder(QWidget):
         """)
         frame_layout = QVBoxLayout(self.frame)
         
-        label = QLabel("预留：训练曲线图表展示区\n(Reserved for Dynamic Loss Chart Integration)")
+        label = QLabel("Reserved for Dynamic Loss Chart Integration")
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         label.setStyleSheet("color: #ADB5BD; font-size: 14px; font-weight: bold;")
         
@@ -653,7 +653,7 @@ class PredictionEvolutionStrip(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         
-        title = QLabel("实时预测演进 (Live Prediction Evolution)")
+        title = QLabel("Live Prediction Evolution")
         title.setStyleSheet("font-weight: bold; color: #495057;")
         layout.addWidget(title)
         
@@ -906,7 +906,7 @@ class TrainingExecutionDashboard(QWidget):
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(16)
         
-        header = QLabel("训练执行监控 (Live Training Center)")
+        header = QLabel("Live Training Center")
         header.setStyleSheet("font-size: 18px; font-weight: bold; color: #212529;")
         layout.addWidget(header)
         
@@ -955,11 +955,11 @@ class TaskConfigDashboard(QStackedWidget):
         self.setCurrentWidget(self.blueprint_view)
         
     def switch_to_blueprint(self):
-        """切回任务配置面板"""
+        """Switch back to Task Config"""
         self.setCurrentWidget(self.blueprint_view)
         
     def switch_to_training(self):
-        """切换到训练执行监视大屏"""
+        """Switch to Training Live Monitor"""
         self.setCurrentWidget(self.training_view)
         
     def update_config_params(self, params: dict):

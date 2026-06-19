@@ -36,7 +36,7 @@ class AdvisorConfigWidget(QWidget):
         layout.setSpacing(8)
 
         # 生成推荐按钮 (默认状态下显示)
-        self.btn_generate = QPushButton("✨ 获取数据驱动推荐")
+        self.btn_generate = QPushButton("✨ Get Data-Driven Recommendations")
         self.btn_generate.setStyleSheet("""
             QPushButton {
                 background-color: #F3E5F5;
@@ -54,7 +54,7 @@ class AdvisorConfigWidget(QWidget):
         layout.addWidget(self.btn_generate)
 
         # 状态标签 (加载时显示)
-        self.label_status = QLabel("⏳ 正在结合分析结果生成推荐配置...")
+        self.label_status = QLabel("⏳ Generating recommended config based on analysis...")
         self.label_status.setStyleSheet("color: #666; font-style: italic; padding: 4px;")
         self.label_status.setVisible(False)
         layout.addWidget(self.label_status)
@@ -69,7 +69,7 @@ class AdvisorConfigWidget(QWidget):
         layout.addWidget(self.widget_summary)
 
         # 一键应用按钮
-        self.btn_apply_all = QPushButton("✅ 一键全部应用")
+        self.btn_apply_all = QPushButton("✅ Apply All")
         self.btn_apply_all.setStyleSheet("""
             QPushButton {
                 background-color: #E3F2FD;
@@ -102,12 +102,12 @@ class AdvisorConfigWidget(QWidget):
             if item.widget():
                 item.widget().deleteLater()
                 
-        # 顶部提示
+        # 顶部Tip
         num_items = 0
         
         # 分析并添加摘要项
         if 'in_channels' in params:
-            lbl = QLabel(f"· <b>输入通道数</b>: 推荐 <b>{params['in_channels']}</b> <span style='color: #666;'>(受影像波段影响)</span>")
+            lbl = QLabel(f"· <b>In Channels</b>: Recommend <b>{params['in_channels']}</b> <span style='color: #666;'>(Affected by image bands)</span>")
             lbl.setTextFormat(Qt.RichText)
             self.layout_summary.addWidget(lbl)
             num_items += 1
@@ -115,29 +115,29 @@ class AdvisorConfigWidget(QWidget):
         if 'crop_size' in params:
             crop = params['crop_size']
             crop_val = crop[0] if isinstance(crop, (list, tuple)) else crop
-            lbl = QLabel(f"· <b>裁剪大小</b>: 推荐 <b>{crop_val}</b> <span style='color: #666;'>(基于最小影像宽度 × 0.8)</span>")
+            lbl = QLabel(f"· <b>Crop Size</b>: Recommend <b>{crop_val}</b> <span style='color: #666;'>(Based on min image width × 0.8)</span>")
             lbl.setTextFormat(Qt.RichText)
             self.layout_summary.addWidget(lbl)
             num_items += 1
             
         if 'class_weight' in params and params['class_weight']:
-            lbl = QLabel(f"· <b>Loss 权重补偿</b>: 建议 <b>启用</b> <span style='color: #666;'>(针对类别不平衡现象)</span>")
+            lbl = QLabel(f"· <b>Loss Weighting</b>: Recommend <b>Enable</b> <span style='color: #666;'>(For class imbalance)</span>")
             lbl.setTextFormat(Qt.RichText)
             self.layout_summary.addWidget(lbl)
             num_items += 1
             
         if 'loss_config' in params and params['loss_config'] and 'type' in params['loss_config']:
-            lbl = QLabel(f"· <b>损失函数</b>: 推荐 <b>{params['loss_config']['type']}</b> <span style='color: #666;'>({params['loss_config'].get('_reason', '')})</span>")
+            lbl = QLabel(f"· <b>Loss Function</b>: Recommend <b>{params['loss_config']['type']}</b> <span style='color: #666;'>({params['loss_config'].get('_reason', '')})</span>")
             lbl.setTextFormat(Qt.RichText)
             self.layout_summary.addWidget(lbl)
             num_items += 1
 
         if num_items > 0:
-            header = QLabel(f"💡 基于数据集特征，已生成 <b>{num_items}</b> 项推荐，等待采纳：")
+            header = QLabel(f"💡 Based on dataset features, generated <b>{num_items}</b> recommendations waiting to be applied:")
             header.setTextFormat(Qt.RichText)
             self.layout_summary.insertWidget(0, header)
             
-            note = QLabel("⚠ 推荐值将分发到上下方各栏的相应位置（带有 💡 标记）\n您也可以不去点击下方按钮，逐项在有指标的小图标上点击以分步采纳。")
+            note = QLabel("⚠ Recommendations will be distributed to respective fields (marked with 💡)\nYou can also click the lightbulb icons individually to apply.")
             note.setStyleSheet("color: #888; font-size: 11px;")
             self.layout_summary.addWidget(note)
 

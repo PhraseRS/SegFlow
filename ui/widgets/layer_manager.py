@@ -156,7 +156,7 @@ class LayerManager(QObject):
     slot_filled = Signal(str, str)          # 槽位被填充 (slot_name, data_path)
     slot_cleared = Signal(str)              # 槽位被清空 (slot_name)
     layer_visibility_changed = Signal(str, bool)  # 图层可见性改变
-    layer_opacity_changed = Signal(str, float)    # 图层透明度改变
+    layer_opacity_changed = Signal(str, float)    # 图层Alpha改变
     base_image_cleared = Signal()           # 底图被清空信号
     base_image_replaced = Signal(str)       # 底图被替换信号 (new_path)
     
@@ -214,7 +214,7 @@ class LayerManager(QObject):
         Args:
             base_image_path: 底图路径
             base_item: 底图的 QGraphicsPixmapItem
-            band_count: 波段数量（用于显示波段信息子节点）
+            band_count: 波段数量（用于显示波段Info子节点）
         
         Returns:
             bool: 是否成功
@@ -256,7 +256,7 @@ class LayerManager(QObject):
         base_slot.graphics_item = base_item
         self._update_slot_tree_item(base_slot)
         
-        # 6. 添加波段信息子节点
+        # 6. 添加波段Info子节点
         self._add_band_info_nodes(base_slot.tree_item, band_count)
         
         # 7. 保存当前任务
@@ -272,7 +272,7 @@ class LayerManager(QObject):
         创建纯色方块图标
         
         Args:
-            color: 颜色
+            color: Color
             size: 图标大小
         
         Returns:
@@ -289,7 +289,7 @@ class LayerManager(QObject):
     
     def _add_band_info_nodes(self, parent_item: QTreeWidgetItem, band_count: int):
         """
-        为底图添加波段信息子节点
+        为底图添加波段Info子节点
         
         Args:
             parent_item: 底图的树项
@@ -331,7 +331,7 @@ class LayerManager(QObject):
             # 设置为灰色斜体
             child_item.setForeground(0, QBrush(QColor(100, 100, 100)))
         
-        # 展开底图节点显示波段信息
+        # 展开底图节点显示波段Info
         parent_item.setExpanded(True)
     
     def inject_layer_data(
@@ -447,7 +447,7 @@ class LayerManager(QObject):
         if slot_type == SlotType.TYPE_BASE:
             QMessageBox.warning(
                 self._parent_widget, 
-                "提示", 
+                "Tip", 
                 "无法清空底图。请使用\"设置新底图\"来替换。"
             )
             return False
@@ -496,7 +496,7 @@ class LayerManager(QObject):
         if not slot.is_filled:
             item.setForeground(0, QBrush(QColor(128, 128, 128)))
         
-        # 设置提示
+        # 设置Tip
         if slot.data_path:
             item.setToolTip(0, slot.data_path)
         else:
@@ -522,7 +522,7 @@ class LayerManager(QObject):
             item.setCheckState(0, Qt.CheckState.Unchecked)
             item.setForeground(0, QBrush(QColor(128, 128, 128)))  # 灰色
         
-        # 更新提示
+        # 更新Tip
         if slot.data_path:
             item.setToolTip(0, slot.data_path)
         else:
@@ -576,7 +576,7 @@ class LayerManager(QObject):
         
         item_type = data.get("type")
         
-        # 波段信息节点不显示菜单
+        # 波段Info节点不显示菜单
         if item_type == "band_info":
             return
         
@@ -664,10 +664,10 @@ class LayerManager(QObject):
         if not self._current_task:
             return
         
-        # 确认对话框
+        # Confirm对话框
         reply = QMessageBox.question(
             self._parent_widget,
-            "确认清空",
+            "Confirm清空",
             "清空底图将同时移除所有叠加图层。\n\n是否继续？",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No
@@ -692,7 +692,7 @@ class LayerManager(QObject):
         """为槽位打开文件选择对话框"""
         file_path, _ = QFileDialog.getOpenFileName(
             self._parent_widget,
-            f"选择 {slot.display_name}",
+            f"Select {slot.display_name}",
             "",
             slot.file_filter
         )

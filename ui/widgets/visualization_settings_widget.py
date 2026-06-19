@@ -40,7 +40,7 @@ class VisualizationSettingsWidget(QWidget):
         layout.setContentsMargins(5, 5, 5, 5)
         layout.setSpacing(10)
 
-        alpha_group = QGroupBox("透明度")
+        alpha_group = QGroupBox("Alpha")
         alpha_layout = QHBoxLayout(alpha_group)
 
         self.alpha_slider = QSlider(Qt.Orientation.Horizontal)
@@ -52,12 +52,12 @@ class VisualizationSettingsWidget(QWidget):
         self.alpha_label.setMinimumWidth(40)
         self.alpha_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 
-        alpha_layout.addWidget(QLabel("叠加透明度:"))
+        alpha_layout.addWidget(QLabel("Overlay Alpha:"))
         alpha_layout.addWidget(self.alpha_slider)
         alpha_layout.addWidget(self.alpha_label)
         layout.addWidget(alpha_group)
 
-        color_group = QGroupBox("类别颜色配置")
+        color_group = QGroupBox("类别Color配置")
         color_layout = QVBoxLayout(color_group)
 
         scroll = QScrollArea()
@@ -75,11 +75,11 @@ class VisualizationSettingsWidget(QWidget):
         layout.addWidget(color_group)
 
         btn_layout = QHBoxLayout()
-        self.reset_btn = QPushButton("重置为默认")
+        self.reset_btn = QPushButton("Reset to Default")
         self.reset_btn.clicked.connect(self._reset_palette)
         btn_layout.addWidget(self.reset_btn)
 
-        self.apply_btn = QPushButton("应用到预览")
+        self.apply_btn = QPushButton("Apply to Preview")
         self.apply_btn.setStyleSheet("font-weight: bold;")
         self.apply_btn.clicked.connect(self.apply_requested.emit)
         btn_layout.addWidget(self.apply_btn)
@@ -134,7 +134,7 @@ class VisualizationSettingsWidget(QWidget):
         self.color_buttons.clear()
 
         if not self.class_names:
-            placeholder = QLabel("推理完成后会在这里列出可调整的类别颜色。")
+            placeholder = QLabel("推理完成后会在这里列出可调整的类别Color。")
             placeholder.setWordWrap(True)
             placeholder.setStyleSheet("color: #6C757D; padding: 4px;")
             self.color_list_layout.addWidget(placeholder)
@@ -154,7 +154,7 @@ class VisualizationSettingsWidget(QWidget):
                 f"background-color: rgb({color[0]}, {color[1]}, {color[2]}); "
                 "border: 1px solid #ccc; border-radius: 3px;"
             )
-            color_preview.setToolTip(f"点击选择 {class_name} 的颜色")
+            color_preview.setToolTip(f"点击Select {class_name} 的Color")
             color_preview.clicked.connect(lambda _checked=False, cid=class_id: self._choose_color(cid))
 
             label = QLabel(class_name)
@@ -180,7 +180,7 @@ class VisualizationSettingsWidget(QWidget):
 
         current_color = self.current_palette.get(class_id, [128, 128, 128])
         qcolor = QColor(current_color[0], current_color[1], current_color[2])
-        color = QColorDialog.getColor(qcolor, self, f"选择 {self.class_names[class_id]} 的颜色")
+        color = QColorDialog.getColor(qcolor, self, f"Select {self.class_names[class_id]} 的Color")
 
         if not color.isValid():
             return

@@ -2,7 +2,7 @@
 """
 类别配置组件 (Class Config Widget)
 
-提供类别名称可编辑列表 + 颜色选择器，供 Tab2 任务配置使用。
+提供Class Name可编辑列表 + Color选择器，供 Tab2 任务配置使用。
 Public API:
     set_num_classes(n)          由 spin_num_classes 联动调用
     get_class_config() -> dict  返回 {'class_names': [...], 'palette': [[r,g,b], ...]}
@@ -31,7 +31,7 @@ def _default_color(idx: int) -> tuple:
 
 
 class ClassConfigWidget(QWidget):
-    """类别名称 + 颜色配置控件。"""
+    """Class Name + Color配置控件。"""
 
     config_changed = Signal()
 
@@ -49,12 +49,12 @@ class ClassConfigWidget(QWidget):
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(4)
 
-        hint = QLabel("定义数据集的类别名称和可视化颜色（第 0 行通常为背景类）")
+        hint = QLabel("定义数据集的Class Name和可视化Color（第 0 行通常为背景类）")
         hint.setStyleSheet("color: #555; font-size: 11px;")
         layout.addWidget(hint)
 
         self.table = QTableWidget(0, 3)
-        self.table.setHorizontalHeaderLabels(["ID", "类别名称", "颜色"])
+        self.table.setHorizontalHeaderLabels(["ID", "Class Name", "Color"])
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
@@ -66,8 +66,8 @@ class ClassConfigWidget(QWidget):
         layout.addWidget(self.table)
 
         btn_row = QHBoxLayout()
-        self.btn_add = QPushButton("+ 添加类别")
-        self.btn_del = QPushButton("- 删除选中")
+        self.btn_add = QPushButton("+ Add Class")
+        self.btn_del = QPushButton("- Delete Selected")
         btn_row.addWidget(self.btn_add)
         btn_row.addWidget(self.btn_del)
         btn_row.addStretch()
@@ -99,7 +99,7 @@ class ClassConfigWidget(QWidget):
         default_name = name if name else f"class_{row}"
         self.table.setItem(row, self._COL_NAME, QTableWidgetItem(default_name))
 
-        # 颜色列
+        # Color列
         rgb = color if color else _default_color(row)
         self._set_color_btn(row, rgb)
         self.config_changed.emit()
@@ -119,7 +119,7 @@ class ClassConfigWidget(QWidget):
             return
         rgb = btn.property('rgb') or [0, 0, 0]
         init_color = QColor(*rgb)
-        color = QColorDialog.getColor(init_color, self, f"选择 class_{row} 的颜色")
+        color = QColorDialog.getColor(init_color, self, f"Select class_{row} 的Color")
         if color.isValid():
             new_rgb = (color.red(), color.green(), color.blue())
             self._set_color_btn(row, new_rgb)
@@ -127,7 +127,7 @@ class ClassConfigWidget(QWidget):
 
     def _del_row(self):
         if self.table.rowCount() <= 2:
-            QMessageBox.information(self, "删除类别", "至少保留 2 个类别。")
+            QMessageBox.information(self, "Delete Class", "Keep at least 2 classes.")
             return
         rows = sorted({idx.row() for idx in self.table.selectedIndexes()}, reverse=True)
         for r in rows:
@@ -186,7 +186,7 @@ class ClassConfigWidget(QWidget):
         self.config_changed.emit()
 
     def load_from_advisor(self, class_names: list, palette: list = None):
-        """由推荐系统或 Tab1 联动批量填入类别名和颜色。"""
+        """由推荐系统或 Tab1 联动批量填入类别名和Color。"""
         if not class_names:
             return
         # 若已有用户编辑内容，询问是否覆盖
@@ -196,8 +196,8 @@ class ClassConfigWidget(QWidget):
         )
         if has_custom:
             reply = QMessageBox.question(
-                self, "覆盖类别配置",
-                "检测到已有手动编辑的类别配置，是否用推荐结果覆盖？",
+                self, "Override Class Config",
+                "Manually edited class config detected. Override with recommendations?",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
             )
             if reply != QMessageBox.StandardButton.Yes:

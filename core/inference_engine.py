@@ -90,7 +90,7 @@ class InferenceEngine:
     def request_cancel(self):
         """请求取消当前推理任务"""
         self._cancel_requested = True
-        print("[推理引擎] 🛑 收到取消请求")
+        print("[InferenceEngine] 🛑 Cancellation request received")
 
     def reset_cancel(self):
         """重置取消请求状态"""
@@ -101,15 +101,15 @@ class InferenceEngine:
         try:
             # === 添加下面这两行即可精准打印源码绝对路径 ===
             import mmseg
-            print(f"\n[推理排查] 🚨 当前正在使用此目录下的 MMSeg 代码: {mmseg.__file__}\n")
+            print(f"\n[InferenceDebug] 🚨 Currently using MMSeg code from: {mmseg.__file__}\n")
 
             # 尝试使用 MMSegmentation API 加载真实模型
             from mmseg.apis import init_model
 
-            print(f"[推理引擎] 正在加载模型...")
-            print(f"[推理引擎] 配置文件: {self.model_info['config']}")
-            print(f"[推理引擎] 权重文件: {self.model_info['checkpoint']}")
-            print(f"[推理引擎] 设备: {self.model_info['device']}")
+            print(f"[InferenceEngine] Loading model...")
+            print(f"[InferenceEngine] Config file: {self.model_info['config']}")
+            print(f"[InferenceEngine] Weight file: {self.model_info['checkpoint']}")
+            print(f"[InferenceEngine] Device: {self.model_info['device']}")
 
             self.model = init_model(
                 self.model_info['config'],
@@ -118,16 +118,16 @@ class InferenceEngine:
             )
 
             print("="*60)
-            print(f"[推理引擎] ✅ 模型加载成功（真实模型）")
-            print(f"[推理引擎] 🎯 推理模式: 真实神经网络推理")
+            print(f"[InferenceEngine] ✅ Model loaded successfully (Real Model)")
+            print(f"[InferenceEngine] 🎯 Inference mode: Real neural network inference")
             print("="*60)
             self.use_real_model = True
 
         except ImportError as e:
 
             # MMSegmentation 未安装，使用模拟模式
-            print(f"[推理引擎] ⚠️  MMSegmentation 未安装，使用模拟模式")
-            print(f"[推理引擎] 错误: {e}")
+            print(f"[InferenceEngine] ⚠️  MMSegmentation not installed, using mock mode")
+            print(f"[InferenceEngine] Error: {e}")
             self.model = {
                 'config': self.model_info['config'],
                 'checkpoint': self.model_info['checkpoint'],
@@ -139,8 +139,8 @@ class InferenceEngine:
 
         except Exception as e:
             # 模型加载失败，使用模拟模式
-            print(f"[推理引擎] ⚠️  模型加载失败，使用模拟模式")
-            print(f"[推理引擎] 错误: {e}")
+            print(f"[InferenceEngine] ⚠️  Model load failed, using mock mode")
+            print(f"[InferenceEngine] Error: {e}")
             self.model = {
                 'config': self.model_info['config'],
                 'checkpoint': self.model_info['checkpoint'],
@@ -175,7 +175,7 @@ class InferenceEngine:
         from PIL import Image
         import numpy as np
 
-        print(f"[推理引擎] 开始滑窗推理: {img_width}x{img_height}")
+        print(f"[InferenceEngine] Start sliding window inference: {img_width}x{img_height}")
 
         # 打开图像（不加载到内存）
         image = Image.open(image_path)
@@ -184,9 +184,9 @@ class InferenceEngine:
         # 检查图像大小
         total_pixels = w * h
         if total_pixels > 100000000:  # 超过1亿像素
-            print(f"[推理引擎] ⚠️  超大图像 ({total_pixels/1000000:.1f}M像素)")
-            print(f"[推理引擎] 为避免内存溢出，将使用轻量级模式")
-            print(f"[推理引擎] 建议：使用专业的遥感影像处理工具进行推理")
+            print(f"[InferenceEngine] ⚠️  Large image ({total_pixels/1000000:.1f}M pixels)")
+            print(f"[InferenceEngine] To avoid OOM, using lightweight mode")
+            print(f"[InferenceEngine] Suggestion: Use professional RS tools for inference")
 
             # 返回None，让调用者知道这是超大图像
             return None
@@ -199,7 +199,7 @@ class InferenceEngine:
         num_windows_w = max(1, (w - crop_size) // stride + 1) if w > crop_size else 1
         total_windows = num_windows_h * num_windows_w
 
-        print(f"[推理引擎] 窗口数量: {num_windows_h} x {num_windows_w} = {total_windows}")
+        print(f"[InferenceEngine] Window count: {num_windows_h} x {num_windows_w} = {total_windows}")
 
         window_count = 0
 
@@ -210,7 +210,7 @@ class InferenceEngine:
         for y in range(0, h, stride):
             # 检查取消请求
             if self._cancel_requested:
-                print("[推理引擎] 🛑 推理已取消")
+                print("[InferenceEngine] 🛑 Inference cancelled")
                 return None
 
             for x in range(0, w, stride):
@@ -218,7 +218,7 @@ class InferenceEngine:
 
                 # 检查取消请求 (内层循环也检查，响应更快)
                 if self._cancel_requested:
-                    print("[推理引擎] 🛑 推理已取消")
+                    print("[InferenceEngine] 🛑 Inference cancelled")
                     return None
 
                 # 计算窗口边界
@@ -261,13 +261,13 @@ class InferenceEngine:
                     # 控制台进度 (每10个窗口打印一次)
                     if window_count % 10 == 0:
                         progress = (window_count / total_windows) * 100
-                        print(f"[推理引擎] 进度: {window_count}/{total_windows} ({progress:.1f}%)")
+                        print(f"[InferenceEngine] Progress: {window_count}/{total_windows} ({progress:.1f}%)")
 
                 except Exception as e:
-                    print(f"[推理引擎] ⚠️  窗口 ({x},{y}) 推理失败: {e}")
+                    print(f"[InferenceEngine] ⚠️  Window ({x},{y}) inference failed: {e}")
                     continue
 
-        print(f"[推理引擎] ✅ 滑窗推理完成")
+        print(f"[InferenceEngine] ✅ Sliding window inference complete")
 
         return result_mask
 
@@ -320,19 +320,19 @@ class InferenceEngine:
         if not GDAL_AVAILABLE:
             return {
                 'success': False,
-                'error': 'GDAL未安装，无法进行大图像分块推理。请安装GDAL: pip install gdal'
+                'error': 'GDAL not installed, cannot run Tile inference. Please install GDAL: pip install gdal'
             }
 
         if not self.use_real_model:
             return {
                 'success': False,
-                'error': '大图像分块推理需要真实模型，请确保MMSegmentation已正确安装并加载模型'
+                'error': 'Tile inference requires real model, please ensure MMSegmentation is installed and model is loaded'
             }
 
         try:
-            print(f"[推理引擎] 🚀 开始大图像分块推理...")
-            print(f"[推理引擎] 输入图像: {image_path}")
-            print(f"[推理引擎] 分块大小: {crop_size}, 重叠率: {overlap_rate}")
+            print(f"[InferenceEngine] 🚀 Start large image tile inference...")
+            print(f"[InferenceEngine] Input image: {image_path}")
+            print(f"[InferenceEngine] Tile size: {crop_size}, overlap rate: {overlap_rate}")
 
             t0 = time.time()
 
@@ -341,7 +341,7 @@ class InferenceEngine:
             img_width = raster.width
             img_height = raster.height
 
-            print(f"[推理引擎] 图像尺寸: {img_width} x {img_height}")
+            print(f"[InferenceEngine] Image size: {img_width} x {img_height}")
 
             # 计算分块参数
             stride = crop_size - int(crop_size * overlap_rate)
@@ -349,7 +349,7 @@ class InferenceEngine:
             y_num = math.ceil((img_height - crop_size) / stride) + 1
             total_blocks = x_num * y_num
 
-            print(f"[推理引擎] 分块数量: {x_num} x {y_num} = {total_blocks}")
+            print(f"[InferenceEngine] Tile count: {x_num} x {y_num} = {total_blocks}")
 
             # 重置取消状态
             self._cancel_requested = False
@@ -370,8 +370,8 @@ class InferenceEngine:
             for j in range(y_num - 1):
                 # 检查取消请求
                 if self._cancel_requested:
-                    print("[推理引擎] 🛑 分块推理已取消")
-                    return {'success': False, 'error': '用户取消'}
+                    print("[InferenceEngine] 🛑 Tile inference cancelled")
+                    return {'success': False, 'error': 'User cancelled'}
 
                 for i in range(x_num - 1):
                     x_start = stride * i
@@ -404,7 +404,7 @@ class InferenceEngine:
 
             for i in range(x_num - 1):
                 if self._cancel_requested:
-                    return {'success': False, 'error': '用户取消'}
+                    return {'success': False, 'error': 'User cancelled'}
 
                 x_start = stride * i
 
@@ -432,7 +432,7 @@ class InferenceEngine:
 
             for j in range(y_num - 1):
                 if self._cancel_requested:
-                    return {'success': False, 'error': '用户取消'}
+                    return {'success': False, 'error': 'User cancelled'}
 
                 y_start = stride * j
 
@@ -455,7 +455,7 @@ class InferenceEngine:
 
             # 右下角
             if self._cancel_requested:
-                return {'success': False, 'error': '用户取消'}
+                return {'success': False, 'error': 'User cancelled'}
 
             img_block_cv = read_block(raster, img_width - crop_size, img_height - crop_size, crop_size, crop_size)
 
@@ -474,13 +474,13 @@ class InferenceEngine:
             if self._progress_callback:
                 self._progress_callback(80, 100)
 
-            print(f'[推理引擎] 分块预测完成，耗时: {(time.time() - t0) / 60:.2f} 分钟')
+            print(f'[InferenceEngine] Tile prediction complete, time: {(time.time() - t0) / 60:.2f} mins')
 
             # 构建分块索引
             self._build_block_index(dst_blocks)
 
             # 创建输出GeoTIFF
-            print(f'[推理引擎] 开始拼接分块结果...')
+            print(f'[InferenceEngine] Start stitching tile results...')
 
             # 确保输出路径有正确的扩展名
             if not output_path.endswith('.tif'):
@@ -504,7 +504,7 @@ class InferenceEngine:
             raster.close()
 
             # 【关键】为输出结果构建金字塔，确保快速预览
-            print(f'[推理引擎] 正在为输出结果构建金字塔...')
+            print(f'[InferenceEngine] Building pyramid for output results...')
             from utils.pyramid_builder import PyramidBuilder
             pyramid_ok = PyramidBuilder.build_pyramids(
                 output_path,
@@ -512,13 +512,13 @@ class InferenceEngine:
                 resampling='NEAREST'
             )
             if pyramid_ok:
-                print(f'[推理引擎] ✅ 金字塔构建成功')
+                print(f'[InferenceEngine] ✅ Pyramid building successful')
             else:
-                print(f'[推理引擎] ⚠️ 金字塔构建失败，但不影响结果')
+                print(f'[InferenceEngine] ⚠️ Pyramid building failed, but results not affected')
 
-            print(f'[推理引擎] ✅ 大图像分块推理完成！')
-            print(f'[推理引擎] 总耗时: {(time.time() - t0) / 60:.2f} 分钟')
-            print(f'[推理引擎] 输出文件: {output_path}')
+            print(f'[InferenceEngine] ✅ Large image tile inference complete!')
+            print(f'[InferenceEngine] Total time: {(time.time() - t0) / 60:.2f} mins')
+            print(f'[InferenceEngine] Output file: {output_path}')
 
             return {
                 'success': True,
@@ -542,11 +542,11 @@ class InferenceEngine:
         except Exception as e:
             import traceback
             error_details = traceback.format_exc()
-            print(f"[推理引擎] 大图像分块推理失败: {e}")
-            print(f"[推理引擎] 详细错误:\n{error_details}")
+            print(f"[推理引擎] Large image tile inference failed: {e}")
+            print(f"[InferenceEngine] Detailed error:\n{error_details}")
             return {
                 'success': False,
-                'error': f'大图像分块推理失败: {str(e)}\n\n详细信息:\n{error_details}'
+                'error': f'Large image tile inference failed: {str(e)}\n\nDetailed info:\n{error_details}'
             }
 
     def _build_block_index(self, dst_blocks):
@@ -587,7 +587,7 @@ class InferenceEngine:
 
                 # 检查取消请求
                 if self._cancel_requested:
-                    print("[推理引擎] 🛑 拼接已取消")
+                    print("[InferenceEngine] 🛑 Stitching cancelled")
                     return
 
                 # 读取分块
@@ -647,22 +647,22 @@ class InferenceEngine:
             image = Image.open(image_path)
             w, h = image.size  # 注意：PIL的size是(width, height)
 
-            print(f"[推理引擎] 图像尺寸: {w} x {h}")
-            print(f"[推理引擎] 窗口大小: {crop_size}, 步长: {stride}")
+            print(f"[InferenceEngine] Image size: {w} x {h}")
+            print(f"[InferenceEngine] Window size: {crop_size}, stride: {stride}")
 
             # 计算滑窗数量
             num_windows_h = max(1, (h - crop_size) // stride + 1) if h > crop_size else 1
             num_windows_w = max(1, (w - crop_size) // stride + 1) if w > crop_size else 1
             total_windows = num_windows_h * num_windows_w
 
-            print(f"[推理引擎] 窗口数量: {num_windows_h} x {num_windows_w} = {total_windows}")
+            print(f"[InferenceEngine] Window count: {num_windows_h} x {num_windows_w} = {total_windows}")
 
             # 执行推理
             if self.use_real_model:
                 # 使用真实的 MMSegmentation 推理
                 print("="*60)
-                print(f"[推理引擎] 🚀 使用真实模型进行推理...")
-                print(f"[推理引擎] 📊 推理参数: crop={crop_size}, stride={stride}")
+                print(f"[InferenceEngine] 🚀 Inference with real model...")
+                print(f"[InferenceEngine] 📊 Inference params: crop={crop_size}, stride={stride}")
                 print("="*60)
                 result_mask = self._real_sliding_window_inference(
                     image_path, crop_size, stride, w, h
@@ -670,19 +670,19 @@ class InferenceEngine:
 
                 if result_mask is None:
                     # 超大图像，无法处理
-                    print(f"[推理引擎] ⚠️  图像过大，无法生成完整掩码")
+                    print(f"[InferenceEngine] ⚠️  Image too large, cannot generate full mask")
                 else:
                     print("="*60)
-                    print(f"[推理引擎] ✅ 真实推理完成")
+                    print(f"[InferenceEngine] ✅ Real inference complete")
                     print("="*60)
             else:
                 # 模拟推理结果
                 print("="*60)
-                print(f"[推理引擎] ⚠️  使用模拟推理（MMSegmentation未安装或模型加载失败）")
-                print(f"[推理引擎] ⚠️  这不是真正的神经网络推理！")
+                print(f"[InferenceEngine] ⚠️  Using mock inference (MMSegmentation not installed or model load failed)")
+                print(f"[InferenceEngine] ⚠️  This is not real neural network inference!")
                 print("="*60)
                 if w * h > 100000000:  # 超过1亿像素
-                    print(f"[推理引擎] 检测到超大图像，使用轻量级模式")
+                    print(f"[InferenceEngine] Large image detected, using lightweight mode")
                     result_mask = None  # 不创建完整掩码，节省内存
                 else:
                     result_mask = np.zeros((h, w), dtype=np.uint8)
@@ -698,7 +698,7 @@ class InferenceEngine:
                     elif image_array.shape[2] == 4:  # RGBA转RGB
                         image_array = cv2.cvtColor(image_array, cv2.COLOR_RGBA2RGB)
                 except Exception as e:
-                    print(f"[推理引擎] ⚠️  读取原始图像失败: {e}")
+                    print(f"[InferenceEngine] ⚠️  Read original image failed: {e}")
 
             return {
                 'success': True,
@@ -721,11 +721,11 @@ class InferenceEngine:
         except Exception as e:
             import traceback
             error_details = traceback.format_exc()
-            print(f"[推理引擎] 滑窗推理失败: {e}")
-            print(f"[推理引擎] 详细错误:\n{error_details}")
+            print(f"[推理引擎] Sliding window inference failed: {e}")
+            print(f"[InferenceEngine] Detailed error:\n{error_details}")
             return {
                 'success': False,
-                'error': f'滑窗推理失败: {str(e)}\n\n详细信息:\n{error_details}'
+                'error': f'Sliding window inference failed: {str(e)}\n\nDetailed info:\n{error_details}'
             }
 
     def resize_inference(
@@ -748,13 +748,13 @@ class InferenceEngine:
             image = Image.open(image_path)
             w, h = image.size
 
-            print(f"[推理引擎] 图像尺寸: {w} x {h}")
-            print(f"[推理引擎] 使用全图缩放推理")
+            print(f"[InferenceEngine] Image size: {w} x {h}")
+            print(f"[InferenceEngine] Using full image scale inference")
 
             # 执行推理
             if self.use_real_model:
                 # 使用真实的 MMSegmentation 推理
-                print(f"[推理引擎] 🚀 使用真实模型进行推理...")
+                print(f"[InferenceEngine] 🚀 Inference with real model...")
                 from mmseg.apis import inference_model
 
                 result = inference_model(self.model, image_path)
@@ -765,12 +765,12 @@ class InferenceEngine:
                 else:
                     result_mask = result[0]
 
-                print(f"[推理引擎] ✅ 真实推理完成")
+                print(f"[InferenceEngine] ✅ Real inference complete")
             else:
                 # 模拟推理结果
-                print(f"[推理引擎] ⚠️  使用模拟推理（MMSegmentation未安装或模型加载失败）")
+                print(f"[InferenceEngine] ⚠️  Using mock inference (MMSegmentation not installed or model load failed)")
                 if w * h > 100000000:  # 超过1亿像素
-                    print(f"[推理引擎] 检测到超大图像，使用轻量级模式")
+                    print(f"[InferenceEngine] Large image detected, using lightweight mode")
                     result_mask = None
                 else:
                     result_mask = np.zeros((h, w), dtype=np.uint8)
@@ -786,7 +786,7 @@ class InferenceEngine:
                     elif image_array.shape[2] == 4:  # RGBA转RGB
                         image_array = cv2.cvtColor(image_array, cv2.COLOR_RGBA2RGB)
                 except Exception as e:
-                    print(f"[推理引擎] ⚠️  读取原始图像失败: {e}")
+                    print(f"[InferenceEngine] ⚠️  Read original image failed: {e}")
 
             return {
                 'success': True,
@@ -805,11 +805,11 @@ class InferenceEngine:
         except Exception as e:
             import traceback
             error_details = traceback.format_exc()
-            print(f"[推理引擎] 全图缩放推理失败: {e}")
-            print(f"[推理引擎] 详细错误:\n{error_details}")
+            print(f"[推理引擎] Full image scale inference failed: {e}")
+            print(f"[InferenceEngine] Detailed error:\n{error_details}")
             return {
                 'success': False,
-                'error': f'全图缩放推理失败: {str(e)}\n\n详细信息:\n{error_details}'
+                'error': f'Full image scale inference failed: {str(e)}\n\nDetailed info:\n{error_details}'
             }
         img_array = np.array(image)
         h, w = img_array.shape[:2]
@@ -853,7 +853,7 @@ class InferenceEngine:
         if not os.path.exists(image_path):
             return {
                 'success': False,
-                'error': f'图像文件不存在: {image_path}'
+                'error': f'Image file not found: {image_path}'
             }
 
         try:
@@ -873,7 +873,7 @@ class InferenceEngine:
             else:
                 return {
                     'success': False,
-                    'error': f'未知的推理策略: {strategy}'
+                    'error': f'Unknown inference strategy: {strategy}'
                 }
 
         except Exception as e:

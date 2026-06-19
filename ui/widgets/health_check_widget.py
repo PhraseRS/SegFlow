@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 健康检查卡片 (Health Check Card)
-汇总数据集中的错误和警告，支持问题过滤和自动修复
+汇总数据集中的Error和Warning，支持问题过滤和自动修复
 
 关键约束：禁止使用 CSS/QSS (setStyleSheet)
 必须通过 Qt 原生组件属性或 qtawesome 来实现样式控制
@@ -23,11 +23,11 @@ from PySide6.QtGui import QCursor, QAction, QPalette, QColor, QPainter
 from ui.widgets.ui_utils import create_flat_button, create_toolbar_separator
 
 
-# ==================== 颜色配置 ====================
-COLOR_FATAL = QColor(229, 115, 115)      # 柔和红色（严重错误）
-COLOR_WARNING = QColor(255, 183, 77)     # 琥珀色（警告）
+# ==================== Color配置 ====================
+COLOR_FATAL = QColor(229, 115, 115)      # 柔和红色（严重Error）
+COLOR_WARNING = QColor(255, 183, 77)     # 琥珀色（Warning）
 COLOR_SUCCESS = QColor(129, 199, 132)    # 柔和绿色（通过）
-COLOR_LABEL = QColor(102, 102, 102)      # 标签颜色
+COLOR_LABEL = QColor(102, 102, 102)      # 标签Color
 
 # 尺寸
 ROW_HEIGHT_PX = 26
@@ -45,7 +45,7 @@ def export_issues_to_csv(
     save_path: str,
     data_root: str = ""
 ) -> bool:
-    """导出问题列表到 CSV 文件"""
+    """Export issue list to CSV file"""
     if not issues_data or not save_path:
         return False
     
@@ -53,12 +53,12 @@ def export_issues_to_csv(
         with open(save_path, 'w', newline='', encoding='utf-8-sig') as f:
             writer = csv.writer(f)
             writer.writerow([
-                '样本ID (Sample ID)',
-                '问题类型 (Issue Type)',
-                '问题描述 (Description)',
-                '图像路径 (Image Path)',
-                '标签路径 (Label Path)',
-                '详细信息 (Details)'
+                'Sample ID',
+                'Issue Type',
+                'Description',
+                'Image Path',
+                'Label Path',
+                'Details'
             ])
             
             for item in issues_data:
@@ -77,7 +77,7 @@ def export_issues_to_csv(
         
         return True
     except Exception as e:
-        print(f"⚠️ 导出 CSV 失败: {e}")
+        print(f"⚠️ Export CSV failed: {e}")
         return False
 
 
@@ -102,58 +102,58 @@ class IssueTypeConfig:
 ISSUE_TYPES: Dict[str, IssueTypeConfig] = {
     "file_missing": IssueTypeConfig(
         key="file_missing",
-        name="文件缺失 (File Missing)",
-        description="图像或标签文件不存在",
+        name="File Missing",
+        description="Image or label file does not exist",
         level=IssueLevel.FATAL
     ),
     "corrupt_file": IssueTypeConfig(
         key="corrupt_file",
-        name="文件损坏 (Corrupt Files)",
-        description="无法读取的图像或标签文件",
+        name="Corrupt Files",
+        description="Unreadable image or label file",
         level=IssueLevel.FATAL
     ),
     "dimension_mismatch": IssueTypeConfig(
         key="dimension_mismatch",
-        name="尺寸不匹配 (Dimension Mismatch)",
-        description="图像与标签尺寸不一致",
+        name="Dimension Mismatch",
+        description="Image and label dimensions mismatch",
         level=IssueLevel.FATAL
     ),
     "channel_mismatch": IssueTypeConfig(
         key="channel_mismatch",
-        name="通道数异常 (Channel Mismatch)",
-        description="图像或标签通道数异常",
+        name="Channel Mismatch",
+        description="Image or label channel mismatch",
         level=IssueLevel.FATAL
     ),
     "invalid_class_id": IssueTypeConfig(
         key="invalid_class_id",
-        name="无效类别ID (Invalid Class ID)",
-        description="标签中存在定义外的类别ID",
+        name="Invalid Class ID",
+        description="Undefined class ID exists in label",
         level=IssueLevel.FATAL
     ),
     "dtype_mismatch": IssueTypeConfig(
         key="dtype_mismatch",
-        name="位深错误 (Dtype Mismatch)",
-        description="标签位深错误",
+        name="Dtype Mismatch",
+        description="Label dtype error",
         level=IssueLevel.FATAL
     ),
     "empty_mask": IssueTypeConfig(
         key="empty_mask",
-        name="空标签样本 (Empty Masks)",
-        description="标签全为背景类",
+        name="Empty Masks",
+        description="Label is all background",
         level=IssueLevel.WARNING,
         auto_fixable=True
     ),
     "noise_artifact": IssueTypeConfig(
         key="noise_artifact",
-        name="极微小噪点 (<5px Area)",
-        description="标签包含极小的噪声区域",
+        name="Extremely Small Noise (<5px Area)",
+        description="Label contains extremely small noise area",
         level=IssueLevel.WARNING,
         auto_fixable=True
     ),
     "high_nodata_coverage": IssueTypeConfig(
         key="high_nodata_coverage",
-        name="高无数据覆盖 (>80% Nodata)",
-        description="黑边/无数据区域超过 80%",
+        name="High Nodata Coverage (>80%)",
+        description="Black borders/nodata area exceeds 80%",
         level=IssueLevel.WARNING,
         auto_fixable=True
     ),
@@ -232,7 +232,7 @@ class IssueRow(QWidget):
         layout.addWidget(self.name_label, 1)
         
         # 数量
-        self.count_label = QLabel(f"[ {self._count} 项 ]")
+        self.count_label = QLabel(f"[ {self._count} items ]")
         self.count_label.setFixedWidth(COUNT_WIDTH_PX)
         self.count_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         count_font = self.count_label.font()
@@ -253,7 +253,7 @@ class IssueRow(QWidget):
         self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
     
     def _set_label_color(self, label: QLabel, color: QColor) -> None:
-        """使用 palette 设置标签颜色"""
+        """使用 palette 设置标签Color"""
         palette = label.palette()
         palette.setColor(QPalette.ColorRole.WindowText, color)
         label.setPalette(palette)
@@ -302,22 +302,22 @@ class IssueRow(QWidget):
     
     def update_count(self, count: int) -> None:
         self._count = count
-        self.count_label.setText(f"[ {count} 项 ]")
+        self.count_label.setText(f"[ {count} items ]")
     
     def _show_context_menu(self, pos) -> None:
         menu = QMenu(self)
         
-        action_reveal = QAction("📂 在文件管理器中显示", self)
+        action_reveal = QAction("📂 Show in File Manager", self)
         action_reveal.triggered.connect(lambda: self.revealRequested.emit(self._issue_type))
         menu.addAction(action_reveal)
         
-        action_copy = QAction("📋 复制路径", self)
+        action_copy = QAction("📋 Copy Path", self)
         action_copy.triggered.connect(lambda: self.copyPathRequested.emit(self._issue_type))
         menu.addAction(action_copy)
         
         menu.addSeparator()
         
-        action_export = QAction("📄 导出问题日志", self)
+        action_export = QAction("📄 Export Issue Log", self)
         action_export.triggered.connect(lambda: self.exportLogRequested.emit(self._issue_type))
         menu.addAction(action_export)
         
@@ -366,7 +366,7 @@ class HealthCheckCard(QWidget):
             text="Re-scan",
             icon_name='fa5s.search',
             icon_color='default',
-            tooltip="重新运行健康检查",
+            tooltip="Rerun Health Check",
             on_clicked=self.rescanRequested.emit
         )
         toolbar_layout.addWidget(self.btn_rescan)
@@ -376,7 +376,7 @@ class HealthCheckCard(QWidget):
             text="Auto-Fix",
             icon_name='fa5s.magic',
             icon_color='default',
-            tooltip="自动修复可修复的警告",
+            tooltip="Auto fix fixable warnings",
             enabled=False,
             on_clicked=self.autoFixRequested.emit
         )
@@ -391,7 +391,7 @@ class HealthCheckCard(QWidget):
             text="Clear Filter",
             icon_name='fa5s.filter',
             icon_color='default',
-            tooltip="清除过滤，显示所有样本",
+            tooltip="Clear filter, show all samples",
             enabled=False,
             on_clicked=self._on_clear_filter_clicked
         )
@@ -402,7 +402,7 @@ class HealthCheckCard(QWidget):
             text="Export",
             icon_name='fa5s.file-export',
             icon_color='default',
-            tooltip="导出所有问题到 CSV 文件",
+            tooltip="Export all issues to CSV file",
             on_clicked=self.export_all_issues
         )
         toolbar_layout.addWidget(self.btn_export)
@@ -460,7 +460,7 @@ class HealthCheckCard(QWidget):
         
         if self._total_samples > 0:
             self._passed_samples = self._total_samples - fatal_count - warning_count
-            self.passed_label.setText(f"( 🟢 {self._passed_samples:,} 个样本通过检查 )")
+            self.passed_label.setText(f"( 🟢 {self._passed_samples:,} samples passed check )")
             self.passed_label.setVisible(True)
         else:
             self.passed_label.setVisible(False)
@@ -565,7 +565,7 @@ class HealthCheckCard(QWidget):
     def _on_reveal_requested(self, issue_type: str) -> None:
         files = self.get_files_by_issue(issue_type)
         if not files:
-            QMessageBox.information(self, "提示", f"没有 {issue_type} 类型的问题文件")
+            QMessageBox.information(self, "Tip", f"No {issue_type} type issue files")
             return
         
         first_file = files[0]
@@ -587,13 +587,13 @@ class HealthCheckCard(QWidget):
             QMessageBox.warning(
                 self, 
                 "无法打开", 
-                f"无法在文件管理器中显示文件:\n{file_path}"
+                f"Cannot show file in file manager:\n{file_path}"
             )
     
     def _on_copy_path_requested(self, issue_type: str) -> None:
         files = self.get_files_by_issue(issue_type)
         if not files:
-            QMessageBox.information(self, "提示", f"没有 {issue_type} 类型的问题文件")
+            QMessageBox.information(self, "Tip", f"No {issue_type} type issue files")
             return
         
         paths = []
@@ -605,19 +605,19 @@ class HealthCheckCard(QWidget):
         
         path_text = '\n'.join(paths)
         if copy_path_to_clipboard(path_text):
-            QMessageBox.information(self, "已复制", f"已复制 {len(files)} 个文件路径到剪贴板")
+            QMessageBox.information(self, "Copied", f"Copied {len(files)} file paths to clipboard")
     
     def _on_export_log_requested(self, issue_type: str) -> None:
         files = self.get_files_by_issue(issue_type)
         if not files:
-            QMessageBox.information(self, "提示", f"没有 {issue_type} 类型的问题文件")
+            QMessageBox.information(self, "Tip", f"No {issue_type} type issue files")
             return
         
         config = ISSUE_TYPES.get(issue_type)
         default_name = f"health_check_{issue_type}.csv"
         
         save_path, _ = QFileDialog.getSaveFileName(
-            self, "导出问题日志", default_name, "CSV 文件 (*.csv);;所有文件 (*.*)"
+            self, "Export Issue Log", default_name, "CSV Files (*.csv);;All Files (*.*)"
         )
         
         if not save_path:
@@ -652,9 +652,9 @@ class HealthCheckCard(QWidget):
             export_data.append(item)
         
         if export_issues_to_csv(export_data, save_path, self._data_root):
-            QMessageBox.information(self, "导出成功", f"已导出 {len(export_data)} 条记录到:\n{save_path}")
+            QMessageBox.information(self, "Export Success", f"Exported {len(export_data)} records to:\n{save_path}")
         else:
-            QMessageBox.warning(self, "导出失败", "导出 CSV 文件时发生错误")
+            QMessageBox.warning(self, "Export Failed", "导出 CSV 文件时发生Error")
     
     def export_all_issues(self) -> None:
         all_issues = []
@@ -670,17 +670,17 @@ class HealthCheckCard(QWidget):
                     })
         
         if not all_issues:
-            QMessageBox.information(self, "提示", "没有问题需要导出")
+            QMessageBox.information(self, "Tip", "No issues to export")
             return
         
         save_path, _ = QFileDialog.getSaveFileName(
-            self, "导出所有问题", "health_check_report.csv", "CSV 文件 (*.csv);;所有文件 (*.*)"
+            self, "导出所有问题", "health_check_report.csv", "CSV Files (*.csv);;All Files (*.*)"
         )
         
         if not save_path:
             return
         
         if export_issues_to_csv(all_issues, save_path, self._data_root):
-            QMessageBox.information(self, "导出成功", f"已导出 {len(all_issues)} 条记录到:\n{save_path}")
+            QMessageBox.information(self, "Export Success", f"Exported {len(all_issues)} records to:\n{save_path}")
         else:
-            QMessageBox.warning(self, "导出失败", "导出 CSV 文件时发生错误")
+            QMessageBox.warning(self, "Export Failed", "导出 CSV 文件时发生Error")

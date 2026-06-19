@@ -48,7 +48,7 @@ class AdvancedConfigWidget(QWidget):
         main_layout.setSpacing(6)
 
         self._expert_dialog = None
-        self.button_open_expert_card = QPushButton("🛠️ 开启高级专家配置 (Enable Expert Settings)")
+        self.button_open_expert_card = QPushButton("🛠️ Enable Expert Settings")
         self.button_open_expert_card.setStyleSheet(
             "font-weight: bold; color: #424242; text-align: left; padding: 6px;"
         )
@@ -69,7 +69,7 @@ class AdvancedConfigWidget(QWidget):
         card_layout.setContentsMargins(0, 0, 0, 0)
         card_layout.setSpacing(6)
 
-        title_label = QLabel("🛠️ 高级专家配置 (Expert Settings)")
+        title_label = QLabel("🛠️ Expert Settings")
         title_label.setStyleSheet("font-weight: bold; color: #424242; padding: 4px 4px 0 4px;")
         card_layout.addWidget(title_label)
 
@@ -91,7 +91,7 @@ class AdvancedConfigWidget(QWidget):
         """以独立弹出卡片展示高级专家配置内容。"""
         if self._expert_dialog is None:
             self._expert_dialog = QDialog(self)
-            self._expert_dialog.setWindowTitle("高级专家配置 (Expert Settings)")
+            self._expert_dialog.setWindowTitle("Expert Settings")
             self._expert_dialog.resize(720, 620)
             self._expert_dialog.setModal(False)
 
@@ -158,14 +158,14 @@ class AdvancedConfigWidget(QWidget):
 
     def _build_override_area(self, parent_layout):
         """构建底部的 JSON 字典覆写区"""
-        box_override = CollapsibleBox("底层字典覆写 (Dictionary Overrides)", self)
+        box_override = CollapsibleBox("Dictionary Overrides", self)
         # 默认覆写区收起
         box_override.toggle_btn.setChecked(False)
 
         override_layout = QVBoxLayout()
         override_layout.setContentsMargins(12, 4, 4, 8)
 
-        lbl_info = QLabel("在此处输入要强制覆盖的参数 (JSON 格式)：\n例如：{\"model.decode_head.dropout_ratio\": 0.2}")
+        lbl_info = QLabel("Enter parameters to forcefully override here (JSON format):\nExample: {\"model.decode_head.dropout_ratio\": 0.2}")
         lbl_info.setStyleSheet("color: #757575; font-size: 11px;")
         override_layout.addWidget(lbl_info)
 
@@ -230,7 +230,7 @@ class AdvancedConfigWidget(QWidget):
             self.text_override.setStyleSheet("font-family: Consolas, monospace; background-color: #FAFAFA;")
             self.config_changed.emit()
         except Exception as e:
-            self.lbl_json_error.setText(f"JSON 格式错误: {str(e)}")
+            self.lbl_json_error.setText(f"JSON format error: {str(e)}")
             self.lbl_json_error.setVisible(True)
             self.text_override.setStyleSheet("font-family: Consolas, monospace; background-color: #FFEBEE;")
 
@@ -251,13 +251,13 @@ class AdvancedConfigWidget(QWidget):
                 self._param_rows[key].set_recommendation(val, reason)
 
     def apply_all_recommendations(self):
-        """一键应用本组件内的所有推荐项"""
+        """Apply all recommendations in this component"""
         for row in self._param_rows.values():
             if row.has_recommendation:
                 row.apply_recommendation()
 
     def clear_all_recommendations(self):
-        """清除所有的推荐标注"""
+        """Clear all recommendations"""
         for row in self._param_rows.values():
             row.clear_recommendation()
 

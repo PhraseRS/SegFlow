@@ -51,7 +51,7 @@ class FrameworkSpec:
             return getattr(module, class_name)
         except (ImportError, AttributeError) as e:
             raise ImportError(
-                f"无法加载框架 '{self.display_name}' 的训练器 "
+                f"Cannot load framework '{self.display_name}' 的训练器 "
                 f"'{self.trainer_class_path}': {e}"
             ) from e
 

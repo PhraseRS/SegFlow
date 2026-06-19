@@ -37,7 +37,7 @@ class PyramidBuilder:
             return bool(get_raster_info(file_path).get('has_pyramids', False))
 
         except Exception as e:
-            print(f"检查金字塔失败: {e}")
+            print(f"Check pyramid failed: {e}")
             return False
 
     @staticmethod
@@ -78,7 +78,7 @@ class PyramidBuilder:
             }
 
         except Exception as e:
-            print(f"获取金字塔信息失败: {e}")
+            print(f"Get pyramid info failed: {e}")
             return {'has_pyramids': False, 'levels': []}
 
     @staticmethod
@@ -100,7 +100,7 @@ class PyramidBuilder:
         """
         if not HAS_GDAL:
             if progress_callback:
-                progress_callback(0, "GDAL 未安装")
+                progress_callback(0, "GDAL not installed")
             return False
 
         if levels is None:
@@ -116,8 +116,8 @@ class PyramidBuilder:
 
         except Exception as e:
             if progress_callback:
-                progress_callback(0, f"构建金字塔失败: {e}")
-            print(f"构建金字塔失败: {e}")
+                progress_callback(0, f"Pyramid build failed: {e}")
+            print(f"Pyramid build failed: {e}")
             return False
 
     @staticmethod
@@ -139,18 +139,18 @@ class PyramidBuilder:
         """
         if not os.path.exists(file_path):
             if progress_callback:
-                progress_callback(0, f"文件不存在: {file_path}")
+                progress_callback(0, f"文件Not Found: {file_path}")
             return False
 
         # 检查是否已有金字塔
         if PyramidBuilder.check_has_pyramids(file_path):
             if progress_callback:
-                progress_callback(100, "金字塔已存在")
+                progress_callback(100, "Pyramid already exists")
             return True
 
         # 构建金字塔
         if progress_callback:
-            progress_callback(0, "检测到无金字塔，开始构建...")
+            progress_callback(0, "No pyramid detected, starting build...")
 
         return PyramidBuilder.build_pyramids(
             file_path, levels, resampling, progress_callback
