@@ -1007,5 +1007,6 @@
     "Coverage Analysis": "覆盖率分析",
     "Health Check": "健康度检查",
     "Resplit": "重新划分",
-    "Resplit Dataset (Train/Val/Test)": "重新划分数据集 (Train/Val/Test)"
+    "Resplit Dataset (Train/Val/Test)": "重新划分数据集 (Train/Val/Test)",
+    "🎮 [推理配置] 默认设备: Auto (将交由后端环境自动调用显卡)": "🎮 [推理配置] 默认设备: Auto (将交由后端环境自动调用显卡)"
 }

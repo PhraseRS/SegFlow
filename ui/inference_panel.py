@@ -663,12 +663,47 @@ class InferenceWorker(QThread):
         ]
 
         env = os.environ.copy()
-        python_paths = [project_root]
-        existing_pythonpath = env.get("PYTHONPATH")
-        if existing_pythonpath:
-            python_paths.append(existing_pythonpath)
-        env["PYTHONPATH"] = os.pathsep.join(python_paths)
+       
+        # 1. 强力清除 PyInstaller 带来的虚拟环境污染，确保子进程去外部寻找依赖
+        env.pop('PYTHONHOME', None)
+        env.pop('PYTHONPATH', None)
+        
+        # 2. 动态自适应定位软件根目录：支持源码直接运行与打包后的独立运行
+        if getattr(sys, 'frozen', False):
+            app_root = os.path.dirname(sys.executable)
+        else:
+            app_root = project_root
+            
+        # 3. 将外部抽离出的 core 和 skills 路径注入给全局系统变量
+        env['PYTHONPATH'] = app_root
         env.setdefault("PYTHONIOENCODING", "utf-8")
+
+        # ========================================================
+        # [动态添加 GDAL (Conda C++) 核心动态库路径]
+        # ========================================================
+        env_root = os.path.dirname(runtime_python)
+        gdal_bin = os.path.join(env_root, 'Library', 'bin')
+        
+        if os.path.isdir(gdal_bin):
+            env['PATH'] = gdal_bin + os.pathsep + env.get('PATH', '')
+            
+            # 【终极护身符 1】：开启 Conda 最高 DLL 搜索权限！
+            # 解决 Python 3.8+ 在 Windows 下无视 PATH 的致命机制
+            env['CONDA_DLL_SEARCH_MODIFICATION_ENABLE'] = '1'
+            
+            # 【终极护身符 2】：补齐 GDAL 数据路径，防止后续地理投影报错
+            env['GDAL_DATA'] = os.path.join(env_root, 'Library', 'share', 'gdal')
+            env['PROJ_LIB'] = os.path.join(env_root, 'Library', 'share', 'proj')
+            
+            self.log.emit(f"💡 [GDAL注入] 已开启高级 DLL 权限并打通 C++ 链路: {gdal_bin}")
+        else:
+            # 兼容非 Windows 的备选系统路径
+            alt_bin = os.path.join(env_root, 'bin')
+            if os.path.isdir(alt_bin):
+                env['PATH'] = alt_bin + os.pathsep + env.get('PATH', '')
+                self.log.emit(f"💡 [GDAL注入] 已自动打通类 Unix Conda 链路: {alt_bin}")
+        # ========================================================
+
 
         self._process = subprocess.Popen(
             command,
@@ -1639,30 +1674,14 @@ class InferencePanel(QWidget):
 
     def _init_inference_config(self):
         """初始化推理配置"""
-        cuda_available = self._check_cuda_available()
-
-        if cuda_available:
-            self.comboBox_device.setCurrentIndex(0)  # Auto
-            self._emit_log("🎮 [Inference] CUDA available, default device: Auto")
-        else:
-            self.comboBox_device.setCurrentIndex(2)  # CPU
-            # Disable CUDA:0 选项
-            model = self.comboBox_device.model()
-            item = model.item(1)
-            if item:
-                item.setEnabled(False)
-                item.setToolTip(self.tr("CUDA Not Available"))
-            self._emit_log("⚠️  [推理配置] CUDA Not Available，默认设备: CPU")
+        # 前端不具备检测真实后端 GPU 的能力，直接默认选 Auto，绝不禁用 CUDA 选项！
+        self.comboBox_device.setCurrentIndex(0)  # Auto
+        self._emit_log(self.tr("🎮 [推理配置] 默认设备: Auto (将交由后端环境自动调用显卡)"))
 
     def _check_cuda_available(self) -> bool:
-        """检测 CUDA 是否可用"""
-        try:
-            import torch
-            return torch.cuda.is_available()
-        except ImportError:
-            return False
-        except Exception:
-            return False
+        """(已废弃) 前端环境无需检测 CUDA，直接返回 True 欺骗前端即可"""
+        return True
+
 
     def _emit_log(self, message: str):
         """发送日志消息"""
