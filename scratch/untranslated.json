@@ -1,5 +1,5 @@
 {
-  "SegFlux": "SegFlux",
+  "SegFlow": "SegFlow",
   "打开独立卡片，调整 MMSegmentation 的底层或较不常用的超参数": "打开独立卡片，调整 MMSegmentation 的底层或较不常用的超参数",
   "{\\n    \\n}": "{\\n    \\n}",
   "按像素总数统计各类别分布": "按像素总数统计各类别分布",

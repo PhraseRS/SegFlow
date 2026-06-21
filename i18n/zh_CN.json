@@ -1,5 +1,5 @@
 {
-    "SegFlux": "SegFlux",
+    "SegFlow": "SegFlow",
     "&File": "文件 (&F)",
     "Open": "打开工程",
     "Save": "保存工程",
@@ -16,7 +16,7 @@
     "Train": "训练配置",
     "Inference": "推理分析",
     "&Help": "帮助 (&H)",
-    "About": "关于 SegFlux",
+    "About": "关于 SegFlow",
     "Data Profile": "数据概览",
     "Task Config": "任务配置",
     "Model Selection": "模型选择",

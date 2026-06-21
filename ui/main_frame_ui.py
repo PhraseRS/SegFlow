@@ -538,7 +538,7 @@ class Ui_MainWindow(object):
     # setupUi
 
     def retranslateUi(self, MainWindow):
-        MainWindow.setWindowTitle(QCoreApplication.translate("MainWindow", u"SegFlux", None))
+        MainWindow.setWindowTitle(QCoreApplication.translate("MainWindow", u"SegFlow", None))
         self.action_open.setText(QCoreApplication.translate("MainWindow", u"Open", None))
 #if QT_CONFIG(shortcut)
         self.action_open.setShortcut(QCoreApplication.translate("MainWindow", u"Ctrl+O", None))
