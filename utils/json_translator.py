@@ -35,6 +35,4 @@ class JsonTranslator(QTranslator):
             return self.mapping[sourceText]
             
         # 如果有特定前缀或符号，也可以在这里处理
-        # A partial JSON catalog must never erase visible UI text. Qt's base
-        # translator returns an empty string for a missing key.
-        return sourceText
+        return super().translate(context, sourceText, disambiguation, n)
