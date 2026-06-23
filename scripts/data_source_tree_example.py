@@ -463,55 +463,81 @@ class MainWindow(QMainWindow):
 
     def _setup_language_menu(self):
         from utils.i18n_manager import I18nManager
-        from PySide6.QtWidgets import QMenu, QMessageBox
         from PySide6.QtGui import QActionGroup
         
-        # 创建 Language 菜单
-        self.menu_language = QMenu("Language", self)
+        self.menu_language = QMenu(self.tr("Language"), self)
         
-        # 获取当前语言
         current_lang = I18nManager.get_current_language()
         
-        # 动作组，确保单选
-        lang_group = QActionGroup(self)
+        self.language_action_group = QActionGroup(self)
+        self.language_action_group.setExclusive(True)
         
-        action_en = QAction("English", self, checkable=True)
-        if current_lang == "en":
-            action_en.setChecked(True)
-        action_en.triggered.connect(lambda: self._change_language("en"))
-        lang_group.addAction(action_en)
-        self.menu_language.addAction(action_en)
+        self.action_language_en = QAction(self.tr("English"), self, checkable=True)
+        self.action_language_en.setData("en")
+        self.action_language_en.setChecked(current_lang == "en")
+        self.action_language_en.triggered.connect(
+            lambda checked=False: self._change_language("en")
+        )
+        self.language_action_group.addAction(self.action_language_en)
+        self.menu_language.addAction(self.action_language_en)
         
-        action_zh = QAction("简体中文", self, checkable=True)
-        if current_lang == "zh_CN":
-            action_zh.setChecked(True)
-        action_zh.triggered.connect(lambda: self._change_language("zh_CN"))
-        lang_group.addAction(action_zh)
-        self.menu_language.addAction(action_zh)
+        self.action_language_zh = QAction(
+            self.tr("Simplified Chinese"), self, checkable=True
+        )
+        self.action_language_zh.setData("zh_CN")
+        self.action_language_zh.setChecked(current_lang == "zh_CN")
+        self.action_language_zh.triggered.connect(
+            lambda checked=False: self._change_language("zh_CN")
+        )
+        self.language_action_group.addAction(self.action_language_zh)
+        self.menu_language.addAction(self.action_language_zh)
         
-        # 插入到 menu_tools 下
         if hasattr(self.ui, 'menu_tools'):
             self.ui.menu_tools.addMenu(self.menu_language)
 
+    @Slot(str)
     def _change_language(self, lang_code: str):
         from utils.i18n_manager import I18nManager
-        from PySide6.QtWidgets import QMessageBox
         
         if I18nManager.get_current_language() == lang_code:
             return
-            
-        I18nManager.set_language(lang_code)
-        
-        QMessageBox.information(
-            self, 
-            "Language Changed" if lang_code == "en" else "语言已更改", 
-            "Language has been changed. Please restart the application to take effect.\n\n"
-            "语言已更改，请重启应用程序生效。"
-        )
+
+        app = QApplication.instance()
+        previous_lang = I18nManager.get_current_language()
+        try:
+            project_state = self._collect_project_state()
+            geometry = self.saveGeometry()
+            window_state = self.saveState()
+
+            if not I18nManager.apply_language(app, lang_code):
+                raise RuntimeError(
+                    self.tr("The selected language file could not be loaded.")
+                )
+
+            new_window = MainWindow()
+            new_window._current_project_path = self._current_project_path
+            new_window._apply_project_state(project_state)
+            new_window.restoreGeometry(geometry)
+            new_window.restoreState(window_state)
+
+            app._main_window = new_window
+            new_window.show()
+            self.close()
+        except Exception as exc:
+            I18nManager.apply_language(app, previous_lang)
+            self.action_language_en.setChecked(previous_lang == "en")
+            self.action_language_zh.setChecked(previous_lang == "zh_CN")
+            QMessageBox.critical(
+                self,
+                self.tr("Language Switch Failed"),
+                self.tr("Unable to switch the interface language:\n{error}").format(
+                    error=exc
+                ),
+            )
 
     def _setup_project_actions(self):
-        self.action_new_project = QAction("新建工程", self)
-        self.action_save_project_as = QAction("工程另存为", self)
+        self.action_new_project = QAction(self.tr("New Project"), self)
+        self.action_save_project_as = QAction(self.tr("Save Project As"), self)
 
         self.ui.action_open.setText("Open Project")
         self.ui.action_save.setText("Save Project")
