@@ -1,3 +1,28 @@
+<p align="center">
+  <img src="docs/picture/SegFlow.png" alt="SegFlow" width="800">
+</p>
+
+<p align="center">
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.9%2B-3776AB" alt="Python 3.9+"></a>
+  <a href="https://doc.qt.io/qtforpython-6/"><img src="https://img.shields.io/badge/GUI-PySide6-41CD52" alt="PySide6"></a>
+  <a href="https://docs.opencv.org/4.x/"><img src="https://img.shields.io/badge/OpenCV-4.8%2B-5C3EE8" alt="OpenCV"></a>
+  <a href="https://rasterio.readthedocs.io/"><img src="https://img.shields.io/badge/Rasterio-1.3%2B-3A7D44" alt="Rasterio"></a>
+  <a href="https://gdal.org/"><img src="https://img.shields.io/badge/GDAL-GeoTIFF-5CAE58" alt="GDAL"></a>
+</p>
+
+<p align="center">
+  <a href="https://pytorch.org/docs/stable/"><img src="https://img.shields.io/badge/PyTorch-2.0%2B-EE4C2C" alt="PyTorch"></a>
+  <a href="https://mmcv.readthedocs.io/"><img src="https://img.shields.io/badge/MMCV-2.0%2B-005BAC" alt="MMCV"></a>
+  <a href="https://mmsegmentation.readthedocs.io/"><img src="https://img.shields.io/badge/MMSegmentation-1.x-005BAC" alt="MMSegmentation"></a>
+  <a href="docs/ENVIRONMENT_REQUIREMENTS.md"><img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-555555" alt="Supported platforms"></a>
+  <a href="https://github.com/xicheng79/segflow/releases"><img src="https://img.shields.io/badge/version-v0.1.0-E0B52D" alt="Version v0.1.0"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPLv3%2B-blue" alt="GPLv3+ License"></a>
+</p>
+
+<p align="center">
+  <strong>English</strong> | <a href="README_zh-CN.md">简体中文</a>
+</p>
+
 # SegFlow
 
 A graphical workspace for remote-sensing semantic segmentation. It provides an integrated visual workflow for dataset management, sample analysis, configuration generation, model training, model evaluation, project-state restoration, and large-image inference, powered by [OpenMMLab / MMSegmentation](https://github.com/open-mmlab/mmsegmentation).
@@ -96,6 +121,7 @@ Use **File > Save Project** to create an `.rsgproj` file and **File > Open Proje
 ---
 
 ## 5.Documentation
+- [Software User Manual](docs/Software_User_Manual.md) — installation, dataset preparation, model training, inference, and troubleshooting
 - [Environment Requirements](docs/ENVIRONMENT_REQUIREMENTS.md) — dependency layers, installation requirements, and compatibility notes
 
 ---
