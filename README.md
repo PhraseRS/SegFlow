@@ -101,8 +101,8 @@ Use **File > Save Project** to create an `.rsgproj` file and **File > Open Proje
 ---
 
 ## 6.Contact us
--Most development discussion happens on GitHub. Feel free to [open an issue](https://github.com/xicheng79/segflow/issues) or comment on any open issue or pull request.
--- For project discussions and questions, please use [GitHub Discussions](https://github.com/xicheng79/segflow/discussions).
+- Most development discussion happens on GitHub. Feel free to [open an issue](https://github.com/xicheng79/segflow/issues) or comment on any open issue or pull request.
+- For project discussions and questions, please use [GitHub Discussions](https://github.com/xicheng79/segflow/discussions).
 ---
 
 ## License
