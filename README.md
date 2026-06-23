@@ -1,4 +1,4 @@
-# RS-Seg-GUI
+# SegFlow
 
 A graphical workspace for remote-sensing semantic segmentation. It provides an integrated visual workflow for dataset management, sample analysis, configuration generation, model training, model evaluation, project-state restoration, and large-image inference, powered by [OpenMMLab / MMSegmentation](https://github.com/open-mmlab/mmsegmentation).
 
@@ -19,7 +19,7 @@ A graphical workspace for remote-sensing semantic segmentation. It provides an i
 
 ## 🧱 Two-Layer Environment Design (Important)
 
-> RS-Seg-GUI intentionally separates its dependencies into **two independent environments**. Please understand this design before installation.
+> SegFlow intentionally separates its dependencies into **two independent environments**. Please understand this design before installation.
 
 | Layer | Purpose | Installation | Required |
 |------|------|---------|---------|
@@ -111,28 +111,6 @@ Please note the following before installation and use:
 
 ---
 
-## 📁 Project Structure
-
-```
-RSegGUI/
-├── main.py                      # Application entry point
-├── requirements.txt             # Layer A GUI host dependencies
-├── environment_train.yml        # Layer B training/runtime conda environment
-├── install.bat / install.sh     # Installation scripts
-├── core/                        # Training, inference, project, config, and environment logic
-├── ui/                          # User interface and widgets
-├── config/                      # Config editor and parameter definitions
-├── skills/                      # Reusable image-processing and geospatial helpers
-├── utils/                       # Environment management and pyramid utilities
-├── docs/                        # Design and environment documentation
-└── example_data/                # Example VOC-style dataset
-```
-
----
-
 ## 📖 Related Documentation
 
 - [Environment Requirements](docs/ENVIRONMENT_REQUIREMENTS.md) — Dependency layers, optimization analysis, and release recommendations
-- [Architecture Diagram](docs/ARCHITECTURE_DIAGRAM.md)
-- [Framework Support Design](docs/FRAMEWORK_SUPPORT_DESIGN.md)
-- [Quick Reference](docs/QUICK_REFERENCE.md)
