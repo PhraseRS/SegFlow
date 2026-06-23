@@ -55,7 +55,7 @@ SegFlow 是一个用于遥感影像语义分割的图形化工作平台。项目
 
 项目生成的 `custom_rs_dataset.py`、`custom_live_pred_hook.py` 等模块会记录在项目文件中，并在测试和推理时通过对应文件路径显式加载。
 
-更详细的依赖分析请参阅 [`docs/ENVIRONMENT_REQUIREMENTS_zh-CN.md`](docs/ENVIRONMENT_REQUIREMENTS_zh-CN.md)。
+更详细的依赖分析请参阅 [环境要求](docs/ENVIRONMENT_REQUIREMENTS_zh-CN.md)。
 
 ---
 

@@ -55,7 +55,7 @@ The two layers communicate through **isolated subprocesses**. The GUI does not r
 
 Generated modules such as `custom_rs_dataset.py` and `custom_live_pred_hook.py` are recorded in the project file and loaded explicitly from their file paths during testing and inference.
 
-For a detailed dependency analysis, see [`docs/ENVIRONMENT_REQUIREMENTS.md`](docs/ENVIRONMENT_REQUIREMENTS.md).
+For a detailed dependency analysis, see [Environment Requirements](docs/ENVIRONMENT_REQUIREMENTS.md).
 
 ---
 
