@@ -95,22 +95,20 @@ Use **File > Save Project** to create an `.rsgproj` file and **File > Open Proje
 
 ---
 
-## ⚙️ Environment Notes
+## 📖 Documentation
 
-Please note the following before installation and use:
-
-| Item | Description |
-|------|------|
-| **Two-environment design** | The GUI host and training/runtime environments can be separate. Select the configured runtime interpreter in the GUI when training, testing, or running real inference. |
-| **Runtime interpreter** | The selected interpreter must contain compatible versions of PyTorch, MMEngine, MMCV, and MMSegmentation. Selecting the base Anaconda interpreter may cause `No module named 'mmengine'`. |
-| **Conda is optional for the GUI** | The GUI can start without conda, with environment-discovery features degraded. A configured runtime environment is required for framework-backed operations. |
-| **GPU requirements** | Training and real inference normally require a compatible NVIDIA driver and CUDA-enabled PyTorch build. Dataset management and visualization can run without a GPU. |
-| **Custom modules** | Testing and inference load generated custom modules from paths stored in the `.rsgproj` file instead of adding their directories to `PYTHONPATH`. |
-| **Rasterio recommended** | Without `rasterio`, the application can start, but multiband GeoTIFF display and pyramid/LOD support are unavailable or degraded. |
-| **Python version** | Python 3.9 or 3.10 is recommended. The OpenMMLab ecosystem may lag behind newer Python versions such as 3.12+. |
+- [Environment Requirements](docs/ENVIRONMENT_REQUIREMENTS.md) — dependency layers, installation requirements, and compatibility notes
 
 ---
 
-## 📖 Related Documentation
+## Contact Us
 
-- [Environment Requirements](docs/ENVIRONMENT_REQUIREMENTS.md) — Dependency layers, optimization analysis, and release recommendations
+- For bug reports and feature requests, please [open an issue](https://github.com/xicheng79/rs-seg-gui/issues).
+- For project discussions and questions, please use [GitHub Discussions](https://github.com/xicheng79/rs-seg-gui/discussions).
+
+---
+
+## License
+
+SegFlow is licensed under the
+[GNU General Public License v3.0 or later](LICENSE).
