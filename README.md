@@ -4,7 +4,7 @@ A graphical workspace for remote-sensing semantic segmentation. It provides an i
 
 ---
 
-## ✨ Key Features
+## 1.Key Features
 
 - **Dataset Management**: Import VOC-style datasets, browse samples, lazily load thumbnails, and resplit datasets
 - **Sample Analysis**: Class-distribution statistics, coverage analysis, metadata inspection, and dataset health checks
@@ -17,7 +17,7 @@ A graphical workspace for remote-sensing semantic segmentation. It provides an i
 
 ---
 
-## 🧱 Two-Layer Environment Design (Important)
+## 2.Two-Layer Environment Design (Important)
 
 > SegFlow intentionally separates its dependencies into **two independent environments**. Please understand this design before installation.
 
@@ -34,7 +34,7 @@ For a detailed dependency analysis, see [`docs/ENVIRONMENT_REQUIREMENTS.md`](doc
 
 ---
 
-## 🚀 Quick Installation
+## 3.Quick Installation
 
 ### Option 1: Installation Script (Recommended)
 
@@ -83,7 +83,7 @@ pip install mmengine "mmsegmentation>=1.0.0,<2.0.0"
 
 ---
 
-## ▶️ Launch
+## 4.Launch
 
 ```bash
 python main.py
@@ -95,17 +95,14 @@ Use **File > Save Project** to create an `.rsgproj` file and **File > Open Proje
 
 ---
 
-## 📖 Documentation
-
+## 5.Documentation
 - [Environment Requirements](docs/ENVIRONMENT_REQUIREMENTS.md) — dependency layers, installation requirements, and compatibility notes
 
 ---
 
-## Contact Us
-
-- For bug reports and feature requests, please [open an issue](https://github.com/xicheng79/rs-seg-gui/issues).
-- For project discussions and questions, please use [GitHub Discussions](https://github.com/xicheng79/rs-seg-gui/discussions).
-
+## 6.Contact us
+-Most development discussion happens on GitHub. Feel free to [open an issue](https://github.com/xicheng79/segflow/issues) or comment on any open issue or pull request.
+-- For project discussions and questions, please use [GitHub Discussions](https://github.com/xicheng79/segflow/discussions).
 ---
 
 ## License
