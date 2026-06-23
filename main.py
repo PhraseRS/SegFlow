@@ -33,8 +33,6 @@ def main():
         app.setFont(default_font)
     
     window = MainWindow()
-    # Language switching replaces the top-level window in-process.
-    app._main_window = window
     window.show()
     sys.exit(app.exec())
 
