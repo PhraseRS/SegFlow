@@ -27,6 +27,10 @@
 
 A graphical workspace for remote-sensing semantic segmentation. It provides an integrated visual workflow for dataset management, sample analysis, configuration generation, model training, model evaluation, project-state restoration, and large-image inference, powered by [OpenMMLab / MMSegmentation](https://github.com/open-mmlab/mmsegmentation).
 
+<p align="center">
+  <img src="docs/picture/README_image1.png" alt="SegFlow workspace preview" width="900">
+</p>
+
 ---
 
 ## 1.Key Features

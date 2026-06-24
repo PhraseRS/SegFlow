@@ -27,6 +27,10 @@
 
 SegFlow 是一个用于遥感影像语义分割的图形化工作平台。项目基于 [OpenMMLab / MMSegmentation](https://github.com/open-mmlab/mmsegmentation)，集成了数据集管理、样本分析、配置生成、模型训练、模型评估、项目状态恢复和大图推理等可视化工作流程。
 
+<p align="center">
+  <img src="docs/picture/README_image1.png" alt="SegFlow 工作区预览" width="900">
+</p>
+
 ---
 
 ## 1.主要功能
