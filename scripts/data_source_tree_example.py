@@ -8,8 +8,8 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QTreeWidgetItem, QFile
                                 QMessageBox, QGraphicsScene, QGraphicsPixmapItem, QSplitter,
                                 QGraphicsRectItem, QGraphicsLineItem, QListWidgetItem,
                                 QMenu)
-from PySide6.QtCore import Qt, QRectF, QSize, QThread, Signal, QObject, QTimer, Slot
-from PySide6.QtGui import QIcon, QPixmap, QImage, QPainter, QColor, QPen, QBrush, QAction
+from PySide6.QtCore import Qt, QRectF, QSize, QThread, Signal, QObject, QTimer, Slot, QUrl
+from PySide6.QtGui import QIcon, QPixmap, QImage, QPainter, QColor, QPen, QBrush, QAction, QDesktopServices
 from ui.main_frame_ui import Ui_MainWindow
 from core.dataset_metadata import DatasetMetadataManager
 from core.project_manager import ProjectManager
@@ -17,6 +17,8 @@ from core.project_state import InputState, ModelState, ProjectInfo, ProjectState
 from core.thumbnail_manager import ThumbnailLazyLoader
 import sys
 import os
+
+USER_MANUAL_URL = "https://holly-wildebeest-62a.notion.site/Software_User_Manual-38c5c78e12368068bcd9feaf3a70581e"
 
 
 # 视图模式常量
@@ -460,6 +462,8 @@ class MainWindow(QMainWindow):
         
         # 语言切换菜单
         self._setup_language_menu()
+        self._setup_toolbox_menu()
+        self._setup_help_menu()
 
     def _setup_language_menu(self):
         from utils.i18n_manager import I18nManager
@@ -492,6 +496,42 @@ class MainWindow(QMainWindow):
         # 插入到 menu_tools 下
         if hasattr(self.ui, 'menu_tools'):
             self.ui.menu_tools.addMenu(self.menu_language)
+
+    def _setup_toolbox_menu(self):
+        self.action_open_toolbox = QAction("Toolbox", self)
+        self.action_open_toolbox.setToolTip("Open managed SegFlow toolboxes")
+        self.action_open_toolbox.triggered.connect(self._open_toolbox_dialog)
+        self._toolbox_dialog = None
+        if hasattr(self.ui, 'menu_tools'):
+            self.ui.menu_tools.insertAction(self.menu_language.menuAction(), self.action_open_toolbox)
+
+    def _setup_help_menu(self):
+        self.action_user_manual = QAction("User Manual", self)
+        self.action_user_manual.setToolTip("Open the online SegFlow user manual")
+        self.action_user_manual.triggered.connect(self._open_user_manual)
+        if hasattr(self.ui, 'menu_help'):
+            self.ui.menu_help.insertAction(self.ui.action_about, self.action_user_manual)
+            self.ui.menu_help.insertSeparator(self.ui.action_about)
+
+    @Slot()
+    def _open_user_manual(self):
+        opened = QDesktopServices.openUrl(QUrl(USER_MANUAL_URL))
+        if not opened:
+            QMessageBox.warning(
+                self,
+                "User Manual",
+                f"Unable to open the online user manual:\n{USER_MANUAL_URL}",
+            )
+
+    @Slot()
+    def _open_toolbox_dialog(self):
+        from ui.widgets.toolbox_dialog import ToolboxDialog
+
+        if self._toolbox_dialog is None:
+            self._toolbox_dialog = ToolboxDialog(self)
+        self._toolbox_dialog.show()
+        self._toolbox_dialog.raise_()
+        self._toolbox_dialog.activateWindow()
 
     def _change_language(self, lang_code: str):
         from utils.i18n_manager import I18nManager

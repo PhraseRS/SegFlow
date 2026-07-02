@@ -1,0 +1,205 @@
+{
+  "id": "rs-seg-toolkit",
+  "name": "RS Seg Toolkit",
+  "version": "1.0.0",
+  "entrypoint": "rs_seg_toolkit",
+  "description": "Managed remote-sensing segmentation preprocessing toolbox for SegFlow.",
+  "tools": [
+    {
+      "id": "voc.build",
+      "name": "Build VOC Dataset",
+      "category": "VOC Dataset Conversion",
+      "description": "Build a VOC dataset from paired image and label directories.",
+      "command": ["voc", "build"],
+      "parameters": [
+        {"name": "image_dir", "label": "Image directory", "type": "directory", "direction": "input", "required": true, "flag": "--image-dir"},
+        {"name": "label_dir", "label": "Label directory", "type": "directory", "direction": "input", "required": true, "flag": "--label-dir"},
+        {"name": "output_root", "label": "Output VOC root", "type": "directory", "direction": "output", "required": true, "flag": "--output-root"},
+        {"name": "splits", "label": "Splits", "type": "string", "direction": "option", "default": "train:0.7,val:0.2,test:0.1", "flag": "--splits"},
+        {"name": "seed", "label": "Seed", "type": "integer", "direction": "option", "default": 42, "flag": "--seed", "advanced": true},
+        {"name": "overwrite", "label": "Overwrite output", "type": "boolean", "direction": "option", "default": false, "flag": "--overwrite"}
+      ],
+      "outputs": [
+        {"name": "voc_root", "label": "VOC dataset root", "type": "directory", "source": "output_root", "description": "Contains JPEGImages, SegmentationClass, ImageSets/Segmentation, classes.json, and toolkit_report.json."}
+      ]
+    },
+    {
+      "id": "voc.validate",
+      "name": "Validate VOC Dataset",
+      "category": "VOC Dataset Conversion",
+      "description": "Validate VOC structure, split references, image-label pairing, dimensions, and class ids.",
+      "command": ["voc", "validate"],
+      "parameters": [
+        {"name": "dataset_root", "label": "Dataset root", "type": "directory", "direction": "input", "required": true, "flag": "--dataset-root"},
+        {"name": "max_class_id", "label": "Max class id", "type": "integer", "direction": "option", "default": 255, "flag": "--max-class-id", "advanced": true}
+      ],
+      "outputs": [
+        {"name": "validation_report", "label": "Validation report", "type": "report", "source": "stdout", "description": "JSON-lines result event and text log in the toolbox panel."}
+      ]
+    },
+    {
+      "id": "raster.clip",
+      "name": "Clip Raster Patches",
+      "category": "VOC Dataset Conversion",
+      "description": "Clip either paired image/label rasters or a single raster folder with the existing clip_image.py tool.",
+      "command": ["clip"],
+      "parameters": [
+        {"name": "mode", "label": "Clip mode", "type": "enum", "direction": "input", "default": "paired", "choices": ["paired", "single"], "flag": "--mode"},
+        {"name": "src_image", "label": "Source image dir", "type": "directory", "direction": "input", "required": true, "flag": "--src-image", "visible_when": {"mode": "paired"}},
+        {"name": "src_label", "label": "Source label dir", "type": "directory", "direction": "input", "required": true, "flag": "--src-label", "visible_when": {"mode": "paired"}},
+        {"name": "src", "label": "Source raster dir", "type": "directory", "direction": "input", "required": true, "flag": "--src", "visible_when": {"mode": "single"}},
+        {"name": "dst_image", "label": "Output image patch dir", "type": "directory", "direction": "output", "required": true, "flag": "--dst-image", "visible_when": {"mode": "paired"}},
+        {"name": "dst_label", "label": "Output label patch dir", "type": "directory", "direction": "output", "required": true, "flag": "--dst-label", "visible_when": {"mode": "paired"}},
+        {"name": "dst", "label": "Output patch dir", "type": "directory", "direction": "output", "required": true, "flag": "--dst", "visible_when": {"mode": "single"}},
+        {"name": "crop_size", "label": "Crop size", "type": "integer", "direction": "option", "default": 1024, "flag": "--crop-size"},
+        {"name": "overlap_ratio", "label": "Overlap ratio", "type": "float", "direction": "option", "default": 0.0, "flag": "--overlap-ratio"},
+        {"name": "edge_policy", "label": "Edge policy", "type": "enum", "direction": "option", "default": "drop", "choices": ["append", "drop", "pad"], "flag": "--edge-policy"},
+        {"name": "dst_ext", "label": "Image/output ext", "type": "enum", "direction": "option", "default": "auto", "choices": ["auto", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".npy"], "flag": "--dst-ext"},
+        {"name": "label_dst_ext", "label": "Label output ext", "type": "enum", "direction": "option", "default": "auto", "choices": ["auto", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".npy"], "flag": "--label-dst-ext", "visible_when": {"mode": "paired"}},
+        {"name": "small_image", "label": "Small image policy", "type": "enum", "direction": "option", "default": "skip", "choices": ["skip", "pad"], "flag": "--small-image", "advanced": true},
+        {"name": "band_order", "label": "Band order", "type": "enum", "direction": "option", "default": "auto", "choices": ["auto", "bgr", "keep", "rgb"], "flag": "--band-order", "advanced": true},
+        {"name": "nodata_value", "label": "NoData value", "type": "optional_float", "direction": "option", "default": "", "flag": "--nodata-value", "advanced": true},
+        {"name": "min_valid_ratio", "label": "Min valid ratio", "type": "float", "direction": "option", "default": 0.0, "flag": "--min-valid-ratio", "advanced": true},
+        {"name": "min_foreground_ratio", "label": "Min foreground ratio", "type": "float", "direction": "option", "default": 0.0, "flag": "--min-foreground-ratio", "advanced": true, "visible_when": {"mode": "paired"}},
+        {"name": "label_ignore_value", "label": "Label ignore value", "type": "integer", "direction": "option", "default": 0, "flag": "--label-ignore-value", "advanced": true, "visible_when": {"mode": "paired"}},
+        {"name": "bgr_swap", "label": "Legacy BGR swap", "type": "boolean", "direction": "option", "default": false, "flag": "--bgr-swap", "advanced": true}
+      ],
+      "outputs": [
+        {"name": "patches", "label": "Patch outputs", "type": "directory", "source": "dst,dst_image,dst_label", "description": "Single mode writes raster patches to dst. Paired mode writes aligned image and label patches to dst_image and dst_label."}
+      ]
+    },
+    {
+      "id": "raster.rasterize",
+      "name": "Rasterize Shapefile",
+      "category": "VOC Dataset Conversion",
+      "description": "Rasterize shapefile labels against reference rasters.",
+      "command": ["script", "rasterize_shapefile.py"],
+      "parameters": [
+        {"name": "shp_dir", "label": "Shapefile dir", "type": "directory", "direction": "input", "required": true, "flag": "--shp-dir"},
+        {"name": "ref_img_dir", "label": "Reference image dir", "type": "directory", "direction": "input", "required": true, "flag": "--ref-img-dir"},
+        {"name": "save_dir", "label": "Output mask dir", "type": "directory", "direction": "output", "required": true, "flag": "--save-dir"},
+        {"name": "attribute_field", "label": "Attribute field", "type": "string", "direction": "option", "default": "ID", "flag": "--attribute-field"},
+        {"name": "target_value", "label": "Target burn value", "type": "optional_integer", "direction": "option", "default": "", "flag": "--target-value", "advanced": true}
+      ],
+      "outputs": [
+        {"name": "masks", "label": "Raster masks", "type": "directory", "source": "save_dir", "description": "One rasterized mask per matching shapefile/reference image stem."}
+      ]
+    },
+    {
+      "id": "label.remap",
+      "name": "Remap Labels",
+      "category": "VOC Dataset Conversion",
+      "description": "Remap label pixel values with the existing remap_labels.py tool.",
+      "command": ["script", "remap_labels.py"],
+      "parameters": [
+        {"name": "src", "label": "Source label dir", "type": "directory", "direction": "input", "required": true, "flag": "--src"},
+        {"name": "dst", "label": "Output label dir", "type": "directory", "direction": "output", "required": true, "flag": "--dst"},
+        {"name": "mapping", "label": "Mapping old:new", "type": "string", "direction": "option", "default": "30:1", "flag": "--mapping"},
+        {"name": "ext", "label": "Label ext", "type": "string", "direction": "option", "default": ".png", "flag": "--ext"},
+        {"name": "unmapped", "label": "Unmapped policy", "type": "enum", "direction": "option", "default": "keep", "choices": ["keep", "set"], "flag": "--unmapped", "advanced": true},
+        {"name": "unmapped_value", "label": "Unmapped value", "type": "integer", "direction": "option", "default": 0, "flag": "--unmapped-value", "advanced": true}
+      ],
+      "outputs": [
+        {"name": "remapped_labels", "label": "Remapped labels", "type": "directory", "source": "dst", "description": "Labels with the same filenames as input labels."}
+      ]
+    },
+    {
+      "id": "statistics.label_distribution",
+      "name": "Compute Label Distribution",
+      "category": "Analysis Tools",
+      "description": "Analyze semantic label class distribution.",
+      "command": ["script", "compute_label_distribution.py"],
+      "parameters": [
+        {"name": "path", "label": "Label dir", "type": "directory", "direction": "input", "required": true, "flag": "--path"},
+        {"name": "ext", "label": "Label ext", "type": "string", "direction": "option", "default": ".png", "flag": "--ext"},
+        {"name": "classes", "label": "Classes", "type": "string", "direction": "option", "default": "auto", "flag": "--classes"},
+        {"name": "ignore_value", "label": "Ignore value", "type": "optional_integer", "direction": "option", "default": "", "flag": "--ignore-value", "advanced": true},
+        {"name": "use_gdal", "label": "Use GDAL", "type": "boolean", "direction": "option", "default": false, "flag": "--use-gdal", "advanced": true}
+      ],
+      "outputs": [
+        {"name": "distribution_report", "label": "Class distribution report", "type": "report", "source": "stdout", "description": "PrettyTable report and analysis suggestions in the toolbox log."}
+      ]
+    },
+    {
+      "id": "statistics.dataset_stats",
+      "name": "Compute Dataset Stats",
+      "category": "Analysis Tools",
+      "description": "Compute raster dataset mean/std statistics.",
+      "command": ["script", "compute_dataset_stats.py"],
+      "parameters": [
+        {"name": "path", "label": "Image dir", "type": "directory", "direction": "input", "required": true, "flag": "--path"},
+        {"name": "ext", "label": "Image ext", "type": "string", "direction": "option", "default": ".tif", "flag": "--ext"},
+        {"name": "nodata", "label": "NoData value", "type": "optional_float", "direction": "option", "default": "", "flag": "--nodata", "advanced": true},
+        {"name": "no_normalize", "label": "Skip normalize", "type": "boolean", "direction": "option", "default": false, "flag": "--no-normalize", "advanced": true},
+        {"name": "no_gdal", "label": "Skip GDAL", "type": "boolean", "direction": "option", "default": false, "flag": "--no-gdal", "advanced": true}
+      ],
+      "outputs": [
+        {"name": "stats_report", "label": "Mean/std report", "type": "report", "source": "stdout", "description": "Band count, dtype, pixel count, mean, std, and skipped file count in the toolbox log."}
+      ]
+    },
+    {
+      "id": "statistics.training_metrics",
+      "name": "Visualize Training Metrics",
+      "category": "Analysis Tools",
+      "description": "Parse training metrics from checkpoint filenames and render an HTML chart.",
+      "command": ["script", "visualize_training_metrics.py"],
+      "parameters": [
+        {"name": "log_dir", "label": "Checkpoint/log dir", "type": "directory", "direction": "input", "required": true, "flag": "--log-dir"},
+        {"name": "file_ext", "label": "Checkpoint ext", "type": "string", "direction": "option", "default": ".pth", "flag": "--file-ext"},
+        {"name": "metrics", "label": "Metric names", "type": "string_list", "direction": "option", "default": "Epoch Train_Loss Val_Loss Train_f_score Val_f_score Train_pre_loss Val_pre_loss", "flag": "--metrics"},
+        {"name": "title", "label": "Chart title", "type": "string", "direction": "option", "default": "BiSeNetv2 Training Logs", "flag": "--title", "advanced": true}
+      ],
+      "outputs": [
+        {"name": "html_chart", "label": "HTML metrics chart", "type": "file", "source": "log_dir/metrics_chart.html", "description": "Interactive pyecharts HTML chart written into the log directory."}
+      ]
+    },
+    {
+      "id": "export.png_to_geotiff",
+      "name": "Attach GeoTIFF Coordinates",
+      "category": "Raster Tools",
+      "description": "Attach reference GeoTIFF georeferencing to a PNG mask.",
+      "command": ["script", "convert_png_to_geotiff.py"],
+      "parameters": [
+        {"name": "ref", "label": "Reference GeoTIFF", "type": "file", "direction": "input", "required": true, "flag": "--ref"},
+        {"name": "mask", "label": "PNG mask", "type": "file", "direction": "input", "required": true, "flag": "--mask"},
+        {"name": "out", "label": "Output GeoTIFF", "type": "file", "direction": "output", "required": true, "flag": "--out"},
+        {"name": "force", "label": "Force size mismatch", "type": "boolean", "direction": "option", "default": false, "flag": "--force", "advanced": true}
+      ],
+      "outputs": [
+        {"name": "geotiff", "label": "Georeferenced GeoTIFF", "type": "file", "source": "out", "description": "Mask pixels written as GeoTIFF with reference projection and geotransform."}
+      ]
+    },
+    {
+      "id": "file.change_extension",
+      "name": "Batch Change Extension",
+      "category": "Utility Tools",
+      "description": "Batch rename file extensions without changing encoding.",
+      "command": ["script", "batch_change_extension.py"],
+      "parameters": [
+        {"name": "src", "label": "Source dir", "type": "directory", "direction": "input", "required": true, "flag": "--src"},
+        {"name": "dst", "label": "Output dir", "type": "directory", "direction": "output", "required": true, "flag": "--dst"},
+        {"name": "old_ext", "label": "Old ext", "type": "string", "direction": "option", "default": ".png", "flag": "--old-ext"},
+        {"name": "new_ext", "label": "New ext", "type": "string", "direction": "option", "default": ".tif", "flag": "--new-ext"}
+      ],
+      "outputs": [
+        {"name": "renamed_files", "label": "Renamed/copied files", "type": "directory", "source": "dst", "description": "Files copied to the output directory with a new extension. Encoding is not converted."}
+      ]
+    },
+    {
+      "id": "file.rename_gis",
+      "name": "Batch Rename GIS Files",
+      "category": "Utility Tools",
+      "description": "Batch rename GIS files from a mapping file.",
+      "command": ["script", "batch_rename_gis_files.py"],
+      "parameters": [
+        {"name": "mapping", "label": "Mapping file", "type": "file", "direction": "input", "required": true, "flag": "--mapping"},
+        {"name": "target", "label": "Target dir", "type": "directory", "direction": "input", "required": true, "flag": "--target"},
+        {"name": "kinds", "label": "GIS kinds", "type": "string_list", "direction": "option", "default": "tif shp", "flag": "--kinds"},
+        {"name": "apply", "label": "Apply changes", "type": "boolean", "direction": "option", "default": false, "flag": "--apply"}
+      ],
+      "outputs": [
+        {"name": "renamed_gis_files", "label": "Renamed GIS files", "type": "directory", "source": "target", "description": "When Apply changes is enabled, target files and sidecars are renamed in place. Otherwise output is a dry-run log."}
+      ]
+    }
+  ]
+}
