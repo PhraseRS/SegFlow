@@ -130,14 +130,20 @@ python main.py
 
 ---
 
-## 5.文档
+## 5.测试数据集
+
+- [SegFlow 示例数据集（百度网盘）](https://pan.baidu.com/s/19oimOyu0l7Ouc2WHPwEaFQ)（提取码：`wpur`）— 可直接用于验证数据集导入、样本浏览、数据分析以及模型训练与评估流程。
+
+---
+
+## 6.文档
 
 - [软件用户手册](docs/Software_User_Manual_zh-CN.md) — 安装、数据准备、模型训练、推理和常见问题说明
 - [环境要求](docs/ENVIRONMENT_REQUIREMENTS_zh-CN.md) — 依赖分层、安装要求和兼容性说明
 
 ---
 
-## 6.联系我们
+## 7.联系我们
 
 - 如需报告错误或提出功能建议，请[创建 Issue](https://github.com/xicheng79/segflow/issues)。
 - 如需讨论项目或咨询问题，请使用 [GitHub Discussions](https://github.com/xicheng79/segflow/discussions)。

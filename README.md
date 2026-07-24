@@ -124,13 +124,19 @@ Use **File > Save Project** to create an `.rsgproj` file and **File > Open Proje
 
 ---
 
-## 5.Documentation
+## 5.Test Dataset
+
+- [SegFlow Sample Dataset (Baidu Netdisk)](https://pan.baidu.com/s/19oimOyu0l7Ouc2WHPwEaFQ) (extraction code: `wpur`) — a ready-to-use dataset for validating dataset import, sample browsing, data analysis, and the model training and evaluation workflow.
+
+---
+
+## 6.Documentation
 - [Software User Manual](docs/Software_User_Manual.md) — installation, dataset preparation, model training, inference, and troubleshooting
 - [Environment Requirements](docs/ENVIRONMENT_REQUIREMENTS.md) — dependency layers, installation requirements, and compatibility notes
 
 ---
 
-## 6.Contact us
+## 7.Contact us
 - Most development discussion happens on GitHub. Feel free to [open an issue](https://github.com/xicheng79/segflow/issues) or comment on any open issue or pull request.
 - For project discussions and questions, please use [GitHub Discussions](https://github.com/xicheng79/segflow/discussions).
 ---

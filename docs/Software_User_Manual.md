@@ -117,6 +117,8 @@ This chapter describes the core functional operations of the software. Common fu
 
 On the Data Profile page, click Load Dataset on the left and select the dataset root directory. The software automatically detects the dataset structure. After successful detection, the dataset can be loaded, and the numbers of training, validation, and test samples are displayed on the left.
 
+To quickly become familiar with dataset loading and subsequent operations, download the [SegFlow Sample Dataset from Baidu Netdisk](https://pan.baidu.com/s/19oimOyu0l7Ouc2WHPwEaFQ) using the extraction code `wpur`. After downloading and extracting the archive, select the extracted dataset root directory. This dataset can be used to validate dataset import, sample browsing, data analysis, and the model training and evaluation workflow.
+
 <img src="picture/image4.png" style="width:5.75417in;height:3.825in" />
 
 The software uses the standard PASCAL VOC dataset structure. Make sure that your directory strictly follows the format below to avoid loading failures caused by spelling errors:
