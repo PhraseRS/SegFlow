@@ -49,10 +49,10 @@ BACKBONE_REGISTRY = [
     BackboneEntry('Swin-Transformer', 'Swin-Large', 'swin_large', 'swin', 'swin-large*upernet*512x512.py', [512], 512, 'ImageNet-22K', 'https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/swin/swin_large_patch4_window12_384_22k_20220412-6580f57d.pth'),
 
     # --- UperNet ---
-    BackboneEntry('UperNet', 'Swin-Tiny', 'swin_tiny', 'swin', 'upernet_swin-tiny*512x512.py', [512], 512, 'ImageNet-1K', 'https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/swin/swin_tiny_patch4_window7_224_20220317-1cdeb081.pth'),
-    BackboneEntry('UperNet', 'Swin-Base', 'swin_base', 'swin', 'upernet_swin-base*512x512.py', [512], 512, 'ImageNet-22K', 'https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/swin/swin_base_patch4_window12_384_20220317-55b0104a.pth'),
+    # BackboneEntry('UperNet', 'Swin-Tiny', 'swin_tiny', 'swin', 'upernet_swin-tiny*512x512.py', [512], 512, 'ImageNet-1K', 'https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/swin/swin_tiny_patch4_window7_224_20220317-1cdeb081.pth'),
+    # BackboneEntry('UperNet', 'Swin-Base', 'swin_base', 'swin', 'upernet_swin-base*512x512.py', [512], 512, 'ImageNet-22K', 'https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/swin/swin_base_patch4_window12_384_20220317-55b0104a.pth'),
     BackboneEntry('UperNet', 'ResNet-50', 'resnet50', 'upernet', 'upernet_r50*512x512.py', [256, 512], 512, 'ImageNet-1K', 'https://download.openmmlab.com/pretrain/third_party/resnet50_v1c-2cccc1ad.pth'),
-    BackboneEntry('UperNet', 'ConvNeXt-Tiny', 'convnext_tiny', 'convnext', 'upernet_convnext-tiny*512x512*.py', [512], 512, 'ImageNet-1K', 'https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/convnext/convnext-t_3rdparty_32xb128-noema_in1k_20220301-795e9634.pth'),
+    # BackboneEntry('UperNet', 'ConvNeXt-Tiny', 'convnext_tiny', 'convnext', 'upernet_convnext-tiny*512x512*.py', [512], 512, 'ImageNet-1K', 'https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/convnext/convnext-t_3rdparty_32xb128-noema_in1k_20220301-795e9634.pth'),
 
     # --- Mask2Former ---
     # 注意：Mask2Former 官方 ADE20K 配置文件的命名尺寸因 Backbone 而异：
@@ -72,19 +72,19 @@ BACKBONE_REGISTRY = [
     # --- DeepLabV3+ ---
     BackboneEntry('DeepLabV3+', 'ResNet-50', 'resnet50', 'deeplabv3plus', 'deeplabv3plus_r50*d8*512x512.py', [256, 512], 512, 'ImageNet-1K', 'https://download.openmmlab.com/pretrain/third_party/resnet50_v1c-2cccc1ad.pth'),
     BackboneEntry('DeepLabV3+', 'ResNet-101', 'resnet101', 'deeplabv3plus', 'deeplabv3plus_r101*d8*512x512.py', [256, 512], 512, 'ImageNet-1K', 'https://download.openmmlab.com/pretrain/third_party/resnet101_v1c-e67eebb6.pth'),
-    BackboneEntry('DeepLabV3+', 'MobileNetV2', 'mobilenet_v2', 'mobilenet_v2', 'deeplabv3plus_m-v2*d8*512x512.py', [256, 512], 512, 'ImageNet-1K', 'https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/mobilenet_v2/mobilenet_v2_batch256_imagenet-ff34753d.pth'),
-    BackboneEntry('DeepLabV3+', 'MobileNetV3', 'mobilenet_v3_large', 'mobilenet_v3', 'deeplabv3plus_m-v3*512x512*.py', [256, 512], 512, 'ImageNet-1K', 'https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/mobilenet_v3/lraspp_m-v3-d8_8xb4-320k_ade20k-512x512_20221109_214317-0e0e4dfd.pth'),
+    # BackboneEntry('DeepLabV3+', 'MobileNetV2', 'mobilenet_v2', 'mobilenet_v2', 'deeplabv3plus_m-v2*d8*512x512.py', [256, 512], 512, 'ImageNet-1K', 'https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/mobilenet_v2/mobilenet_v2_batch256_imagenet-ff34753d.pth'),
+    # BackboneEntry('DeepLabV3+', 'MobileNetV3', 'mobilenet_v3_large', 'mobilenet_v3', 'deeplabv3plus_m-v3*512x512*.py', [256, 512], 512, 'ImageNet-1K', 'https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/mobilenet_v3/lraspp_m-v3-d8_8xb4-320k_ade20k-512x512_20221109_214317-0e0e4dfd.pth'),
 
     # --- FCN ---
-    BackboneEntry('FCN', 'ResNet-18', 'resnet18', 'fcn', 'fcn_r18*d8*512x512*.py', [256, 512], 512, 'ImageNet-1K', 'https://download.openmmlab.com/pretrain/third_party/resnet18_v1c-b5776b93.pth'),
+    # BackboneEntry('FCN', 'ResNet-18', 'resnet18', 'fcn', 'fcn_r18*d8*512x512*.py', [256, 512], 512, 'ImageNet-1K', 'https://download.openmmlab.com/pretrain/third_party/resnet18_v1c-b5776b93.pth'),
     BackboneEntry('FCN', 'ResNet-50', 'resnet50', 'fcn', 'fcn_r50*d8*512x512.py', [256, 512], 512, 'ImageNet-1K', 'https://download.openmmlab.com/pretrain/third_party/resnet50_v1c-2cccc1ad.pth'),
     BackboneEntry('FCN', 'ResNet-101', 'resnet101', 'fcn', 'fcn_r101*d8*512x512.py', [256, 512], 512, 'ImageNet-1K', 'https://download.openmmlab.com/pretrain/third_party/resnet101_v1c-e67eebb6.pth'),
-    BackboneEntry('FCN', 'HRNet-W32', 'hrnet_w32', 'hrnet', 'fcn_hr32*512x512*.py', [512], 512, 'ImageNet-1K', 'https://download.openmmlab.com/pretrain/third_party/hrnetv2_w32_imagenet_pretrained-dc9eeb4f.pth'),
-    BackboneEntry('FCN', 'HRNet-W48', 'hrnet_w48', 'hrnet', 'fcn_hr48*512x512.py', [512], 512, 'ImageNet-1K', 'https://download.openmmlab.com/pretrain/third_party/hrnetv2_w48_imagenet_pretrained-e0af9343.pth'),
+    # BackboneEntry('FCN', 'HRNet-W32', 'hrnet_w32', 'hrnet', 'fcn_hr32*512x512*.py', [512], 512, 'ImageNet-1K', 'https://download.openmmlab.com/pretrain/third_party/hrnetv2_w32_imagenet_pretrained-dc9eeb4f.pth'),
+    # BackboneEntry('FCN', 'HRNet-W48', 'hrnet_w48', 'hrnet', 'fcn_hr48*512x512.py', [512], 512, 'ImageNet-1K', 'https://download.openmmlab.com/pretrain/third_party/hrnetv2_w48_imagenet_pretrained-e0af9343.pth'),
 
     # --- HRNet+OCR ---
-    BackboneEntry('HRNet+OCR', 'HRNet-W32', 'hrnet_w32', 'ocrnet', 'ocrnet_hr32*512x512*.py', [512], 512, 'ImageNet-1K', 'https://download.openmmlab.com/pretrain/third_party/hrnetv2_w32_imagenet_pretrained-dc9eeb4f.pth'),
-    BackboneEntry('HRNet+OCR', 'HRNet-W48', 'hrnet_w48', 'ocrnet', 'ocrnet_hr48*512x512*.py', [512], 512, 'ImageNet-1K', 'https://download.openmmlab.com/pretrain/third_party/hrnetv2_w48_imagenet_pretrained-e0af9343.pth'),
+    # BackboneEntry('HRNet+OCR', 'HRNet-W32', 'hrnet_w32', 'ocrnet', 'ocrnet_hr32*512x512*.py', [512], 512, 'ImageNet-1K', 'https://download.openmmlab.com/pretrain/third_party/hrnetv2_w32_imagenet_pretrained-dc9eeb4f.pth'),
+    # BackboneEntry('HRNet+OCR', 'HRNet-W48', 'hrnet_w48', 'ocrnet', 'ocrnet_hr48*512x512*.py', [512], 512, 'ImageNet-1K', 'https://download.openmmlab.com/pretrain/third_party/hrnetv2_w48_imagenet_pretrained-e0af9343.pth'),
 
     # --- UNet ---
     BackboneEntry('UNet', 'ResNet-50', 'resnet50', 'unet', 'unet_s5*d16_fcn*r50*d8*512x512.py', [256, 512], 512, 'ImageNet-1K', 'https://download.openmmlab.com/pretrain/third_party/resnet50_v1c-2cccc1ad.pth'),

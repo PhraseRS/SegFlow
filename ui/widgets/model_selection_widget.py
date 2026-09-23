@@ -29,7 +29,8 @@ from config.backbone_registry import METHOD_BACKBONE_MAP, BACKBONE_CHOICES
 # 注意：每组内算法按首字母排序，组与组之间用分隔标题项隔开
 METHOD_GROUPS = [
     ('Transformer', ['Mask2Former', 'SegFormer', 'Swin-Transformer', 'UperNet']),
-    ('CNN', ['DeepLabV3+', 'FCN', 'HRNet+OCR', 'PSPNet', 'UNet', 'UNet++']),
+    # ('CNN', ['DeepLabV3+', 'FCN', 'HRNet+OCR', 'PSPNet', 'UNet', 'UNet++']),
+    ('CNN', ['DeepLabV3+', 'FCN', 'PSPNet']),
 ]
 
 

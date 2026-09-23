@@ -95,6 +95,51 @@ def _detect_suffix(dir_path: str, default: str = '.jpg') -> str:
     return default
 
 
+def _sync_mask2former_class_weight(decode_head: dict, num_classes: int) -> bool:
+    """Keep Mask2Former classification weights aligned with ``num_classes``.
+
+    Mask2Former has one extra no-object classification channel, so its
+    ``loss_cls.class_weight`` must contain ``num_classes + 1`` values.  The
+    helper is deliberately restricted to Mask2FormerHead and therefore does
+    not alter loss configuration for other segmentation heads.
+
+    Returns ``True`` when the configuration was changed.
+    """
+    if not isinstance(decode_head, dict):
+        return False
+
+    head_type = str(decode_head.get('type', '')).rsplit('.', 1)[-1]
+    if head_type != 'Mask2FormerHead':
+        return False
+
+    loss_cls = decode_head.get('loss_cls')
+    if not isinstance(loss_cls, dict):
+        return False
+
+    class_weight = loss_cls.get('class_weight')
+    if not isinstance(class_weight, (list, tuple)) or not class_weight:
+        return False
+
+    expected_length = num_classes + 1
+    if len(class_weight) == expected_length:
+        return False
+
+    # A list with one value per semantic class is treated as a custom class
+    # weighting request; only Mask2Former's no-object weight is appended.
+    if len(class_weight) == num_classes:
+        loss_cls['class_weight'] = list(class_weight) + [0.1]
+        return True
+
+    # Base ADE20K/Cityscapes configs have already expanded their class-weight
+    # expression by the time Config.fromfile() returns.  Preserve the final
+    # no-object coefficient while discarding the inherited dataset weights.
+    no_object_weight = class_weight[-1]
+    if not isinstance(no_object_weight, (int, float)):
+        no_object_weight = 0.1
+    loss_cls['class_weight'] = [1.0] * num_classes + [no_object_weight]
+    return True
+
+
 class MMSegTrainer(BaseTrainer):
     """
     MMSegmentation 框架训练适配器
@@ -302,6 +347,9 @@ class MMSegTrainer(BaseTrainer):
             if hasattr(cfg, 'model'):
                 if hasattr(cfg.model, 'decode_head'):
                     cfg.model.decode_head.num_classes = num_classes
+                    _sync_mask2former_class_weight(
+                        cfg.model.decode_head, num_classes
+                    )
                 if hasattr(cfg.model, 'auxiliary_head'):
                     cfg.model.auxiliary_head.num_classes = num_classes
 
