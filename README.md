@@ -68,6 +68,9 @@ For a detailed dependency analysis, see [Environment Requirements](docs/ENVIRONM
 ### Option 1: Installation Script (Recommended)
 
 **Windows:**
+
+> ⚠️ **It is strongly recommended to run this script in Anaconda Prompt or Miniconda Prompt**. Running it directly in the native Windows CMD by double-clicking it may cause Conda to fail to activate properly during execution.
+
 ```bat
 install.bat
 ```

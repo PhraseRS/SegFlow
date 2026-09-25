@@ -69,6 +69,8 @@ SegFlow 是一个用于遥感影像语义分割的图形化工作平台。项目
 
 **Windows：**
 
+> ⚠️ **强烈推荐在 Anaconda Prompt / Miniconda Prompt 终端下运行本脚本**，如果直接在原生的系统 CMD 下双击运行，可能导致 Conda 无法在 BAT 环境下正确激活并完成构建。
+
 ```bat
 install.bat
 ```
