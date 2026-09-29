@@ -1,0 +1,6 @@
+# 覆盖根目录 test_*.py 忽略规则，保留 MCP 测试及本次修正的回归测试。
+!test_mcp_server.py
+!test_mcp_protocol.py
+!test_config_advisor.py
+!test_core_logic.py
+!test_framework_adapters.py

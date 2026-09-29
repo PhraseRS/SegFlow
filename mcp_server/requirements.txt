@@ -1,0 +1,6 @@
+# MCP 宿主 Python >= 3.10；官方 SDK 自带 FastMCP，无需不存在的 fastmcp extra。
+mcp>=1.12,<2
+numpy>=1.24
+opencv-python-headless>=4.8
+# 配置生成在 python_env_path 指向的环境中需要 mmengine>=0.10。
+# 真实训练/评估/推理的依赖见 environment_train.yml。

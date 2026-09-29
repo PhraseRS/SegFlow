@@ -29,6 +29,7 @@ env/
 .vscode/
 .idea/
 .claude/
+.gemini/
 *.swp
 *.swo
 *~
