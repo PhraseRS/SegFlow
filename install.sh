@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================
-# RS-Seg-GUI 一键安装脚本 (Linux / macOS)
+# SegFlow 一键安装脚本 (Linux / macOS)
 # ------------------------------------------------------------
 # 该脚本会：
 #   1) 安装 GUI 宿主环境依赖 (requirements.txt)
@@ -37,10 +37,33 @@ fi
 
 echo
 echo "============================================================"
-echo " RS-Seg-GUI 安装程序 (Linux / macOS)"
+echo " SegFlow 安装程序 (Linux / macOS)"
 echo "  CUDA 标记 : ${CUDA_TAG}"
 echo "  Torch 标记: ${TORCH_TAG}"
 echo "============================================================"
+echo
+
+# ---------- 环境检测 ----------
+echo "正在检测基础环境..."
+
+# 1. 检查 Python 版本
+if ! "$PY" -c "import sys; sys.exit(0 if sys.version_info >= (3,9) else 1)" 2>/dev/null; then
+    echo "[错误] 当前 Python 解释器 ($PY) 版本低于 3.9，无法满足 SegFlow 运行需求。"
+    exit 1
+fi
+
+# 2. 检查 nvidia-smi (如果选择了 CUDA )
+if [ "$CUDA_TAG" != "cpu" ]; then
+    if ! command -v nvidia-smi >/dev/null 2>&1; then
+        echo "[警告] 未检测到 'nvidia-smi' 命令，当前指定需要 GPU ($CUDA_TAG) 运算环境！"
+        echo "       若您的设备不支持 GPU，推荐按 Ctrl+C 终止，并带上 cpu 参数重试，例如："
+        echo "       ./install.sh cpu"
+        echo "============================================================"
+        read -p "按回车键继续强制安装..." </dev/tty || true
+    fi
+fi
+
+echo "环境检测完毕，即将开始安装流程。"
 echo
 
 # ---------- 步骤 1: 安装 GUI 宿主环境 ----------

@@ -27,6 +27,10 @@
 
 A graphical workspace for remote-sensing semantic segmentation. It provides an integrated visual workflow for dataset management, sample analysis, configuration generation, model training, model evaluation, project-state restoration, and large-image inference, powered by [OpenMMLab / MMSegmentation](https://github.com/open-mmlab/mmsegmentation).
 
+<p align="center">
+  <img src="docs/picture/README_image1.png" alt="SegFlow workspace preview" width="900">
+</p>
+
 ---
 
 ## 1.Key Features
@@ -55,7 +59,7 @@ The two layers communicate through **isolated subprocesses**. The GUI does not r
 
 Generated modules such as `custom_rs_dataset.py` and `custom_live_pred_hook.py` are recorded in the project file and loaded explicitly from their file paths during testing and inference.
 
-For a detailed dependency analysis, see [`docs/ENVIRONMENT_REQUIREMENTS.md`](docs/ENVIRONMENT_REQUIREMENTS.md).
+For a detailed dependency analysis, see [Environment Requirements](docs/ENVIRONMENT_REQUIREMENTS.md).
 
 ---
 
@@ -64,6 +68,9 @@ For a detailed dependency analysis, see [`docs/ENVIRONMENT_REQUIREMENTS.md`](doc
 ### Option 1: Installation Script (Recommended)
 
 **Windows:**
+
+> ⚠️ **It is strongly recommended to run this script in Anaconda Prompt or Miniconda Prompt**. Running it directly in the native Windows CMD by double-clicking it may cause Conda to fail to activate properly during execution.
+
 ```bat
 install.bat
 ```
@@ -120,13 +127,19 @@ Use **File > Save Project** to create an `.rsgproj` file and **File > Open Proje
 
 ---
 
-## 5.Documentation
+## 5.Test Dataset
+
+- [SegFlow Sample Dataset (Baidu Netdisk)](https://pan.baidu.com/s/19oimOyu0l7Ouc2WHPwEaFQ) (extraction code: `wpur`) — a ready-to-use dataset for validating dataset import, sample browsing, data analysis, and the model training and evaluation workflow.
+
+---
+
+## 6.Documentation
 - [Software User Manual](docs/Software_User_Manual.md) — installation, dataset preparation, model training, inference, and troubleshooting
 - [Environment Requirements](docs/ENVIRONMENT_REQUIREMENTS.md) — dependency layers, installation requirements, and compatibility notes
 
 ---
 
-## 6.Contact us
+## 7.Contact us
 - Most development discussion happens on GitHub. Feel free to [open an issue](https://github.com/xicheng79/segflow/issues) or comment on any open issue or pull request.
 - For project discussions and questions, please use [GitHub Discussions](https://github.com/xicheng79/segflow/discussions).
 ---

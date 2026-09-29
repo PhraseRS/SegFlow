@@ -24,6 +24,7 @@ channels:
 dependencies:
   - python=3.9
   - gdal              # 大图分块推理：GeoTIFF 读取 + 地理参考写出
+  - rasterio>=1.3.0   # 通过 conda 安装以免与 pip 源发生 DLL 灾难性冲突
   - pip
  # - pip:
  #     - torch>=2.0

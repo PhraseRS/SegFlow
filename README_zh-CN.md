@@ -27,6 +27,10 @@
 
 SegFlow 是一个用于遥感影像语义分割的图形化工作平台。项目基于 [OpenMMLab / MMSegmentation](https://github.com/open-mmlab/mmsegmentation)，集成了数据集管理、样本分析、配置生成、模型训练、模型评估、项目状态恢复和大图推理等可视化工作流程。
 
+<p align="center">
+  <img src="docs/picture/README_image1.png" alt="SegFlow 工作区预览" width="900">
+</p>
+
 ---
 
 ## 1.主要功能
@@ -55,7 +59,7 @@ SegFlow 是一个用于遥感影像语义分割的图形化工作平台。项目
 
 项目生成的 `custom_rs_dataset.py`、`custom_live_pred_hook.py` 等模块会记录在项目文件中，并在测试和推理时通过对应文件路径显式加载。
 
-更详细的依赖分析请参阅 [`docs/ENVIRONMENT_REQUIREMENTS_zh-CN.md`](docs/ENVIRONMENT_REQUIREMENTS_zh-CN.md)。
+更详细的依赖分析请参阅 [环境要求](docs/ENVIRONMENT_REQUIREMENTS_zh-CN.md)。
 
 ---
 
@@ -64,6 +68,8 @@ SegFlow 是一个用于遥感影像语义分割的图形化工作平台。项目
 ### 方式一：使用安装脚本（推荐）
 
 **Windows：**
+
+> ⚠️ **强烈推荐在 Anaconda Prompt / Miniconda Prompt 终端下运行本脚本**，如果直接在原生的系统 CMD 下双击运行，可能导致 Conda 无法在 BAT 环境下正确激活并完成构建。
 
 ```bat
 install.bat
@@ -126,14 +132,20 @@ python main.py
 
 ---
 
-## 5.文档
+## 5.测试数据集
+
+- [SegFlow 示例数据集（百度网盘）](https://pan.baidu.com/s/19oimOyu0l7Ouc2WHPwEaFQ)（提取码：`wpur`）— 可直接用于验证数据集导入、样本浏览、数据分析以及模型训练与评估流程。
+
+---
+
+## 6.文档
 
 - [软件用户手册](docs/Software_User_Manual_zh-CN.md) — 安装、数据准备、模型训练、推理和常见问题说明
 - [环境要求](docs/ENVIRONMENT_REQUIREMENTS_zh-CN.md) — 依赖分层、安装要求和兼容性说明
 
 ---
 
-## 6.联系我们
+## 7.联系我们
 
 - 如需报告错误或提出功能建议，请[创建 Issue](https://github.com/xicheng79/segflow/issues)。
 - 如需讨论项目或咨询问题，请使用 [GitHub Discussions](https://github.com/xicheng79/segflow/discussions)。

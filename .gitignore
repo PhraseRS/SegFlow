@@ -44,6 +44,7 @@ pretrain/
 *.csv
 *.log
 health_check_report.csv
+example_data/
 
 # Test files (optional)
 test_*.py
@@ -54,3 +55,4 @@ check_*.py
 # Temporary files
 *.tmp
 *.bak
+*/.cache/
