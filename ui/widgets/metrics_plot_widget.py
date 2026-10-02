@@ -4,6 +4,11 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel
 from PySide6.QtCore import Qt
 try:
     import pyqtgraph as pg
+    # 设置 pyqtgraph 全局背景为白色，前景色为黑色（更适应白天模式），也可选用暗黑。
+    # 必须在所有 PlotWidget 创建之前设置
+    pg.setConfigOption('background', '#FFFFFF')
+    pg.setConfigOption('foreground', '#333333')
+    pg.setConfigOptions(antialias=True) # 开启抗锯齿
     HAS_PYQTGRAPH = True
 except ImportError:
     HAS_PYQTGRAPH = False
@@ -36,11 +41,6 @@ class MetricsPlotWidget(QWidget):
             self.layout.addWidget(fallback_label)
             return
             
-        # 设置 pyqtgraph 全局背景为白色，前景色为黑色（更适应白天模式），也可选用暗黑。
-        pg.setConfigOption('background', '#FFFFFF')
-        pg.setConfigOption('foreground', '#333333')
-        pg.setConfigOptions(antialias=True) # 开启抗锯齿
-        
         # 1. 训练 Loss 图表 (上方)
         self.loss_plot = pg.PlotWidget(title="Training Loss")
         self.loss_plot.showGrid(x=True, y=True, alpha=0.3)
@@ -67,8 +67,17 @@ class MetricsPlotWidget(QWidget):
         # 添加图例
         self.val_plot.addLegend()
         
-        # X 轴联动：拖拽下方图表时，上方图表同步平移缩放
-        self.loss_plot.setXLink(self.val_plot)
+        # 强制设置坐标轴字体为 Segoe UI，避免 Qt6 在 Windows 下尝试使用 Fixedsys 导致 DirectWrite 崩溃
+        from PySide6.QtGui import QFont
+        safe_font = QFont("Segoe UI", 9)
+        for plot_widget in (self.loss_plot, self.val_plot):
+            plot_widget.getAxis('bottom').setTickFont(safe_font)
+            plot_widget.getAxis('left').setTickFont(safe_font)
+            plot_widget.getAxis('bottom').setStyle(autoExpandTextSpace=False)
+            plot_widget.getAxis('left').setStyle(autoExpandTextSpace=False)
+        
+        # X 轴联动可能导致一个有数据一个没数据时 X 轴范围被空图表锁定为 [0, 1]
+        # self.loss_plot.setXLink(self.val_plot)  # 暂时禁用联动以保证自适应工作
         
         self.layout.addWidget(self.loss_plot)
         self.layout.addWidget(self.val_plot)
@@ -82,6 +91,9 @@ class MetricsPlotWidget(QWidget):
         
         # 每隔几个点或实时 set_data 都可以，pyqtgraph 性能足够
         self.loss_curve.setData(self.train_iters, self.train_losses)
+        # 强制开启自适应并重置视口（解决单点或空图表时不自动展开的问题）
+        self.loss_plot.getViewBox().enableAutoRange(axis='xy', enable=True)
+        self.loss_plot.getViewBox().setAutoVisible(x=True, y=True)
         
     def update_val_metric(self, iter_num: int, miou: float, macc: float = 0.0):
         """插入一条验证集指标记录。"""

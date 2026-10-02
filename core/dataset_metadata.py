@@ -114,6 +114,10 @@ def _worker_process(db_path, samples_queue, progress_queue, stop_event, total_sa
             })
     
     conn.close()
+    # Persist before announcing completion; reopening must not depend on UI jobs.
+    if processed == total_samples and not stop_event.is_set():
+        from core.quality_cache import certify
+        certify(db_path, os.path.dirname(db_path))
     progress_queue.put({'type': 'done', 'processed': processed})
 
 
@@ -539,15 +543,18 @@ class DatasetMetadataManager:
         self.labels_dir = labels_dir
     
     def is_cache_valid(self, samples_info):
-        """检查缓存是否有效"""
+        """Reuse statistics only when the persistent file certificate matches."""
         if self.database is None:
             return False
-        
-        cached_ids = self.database.get_sample_ids()
-        current_ids = set(s[0] for s in samples_info)
-        
-        return cached_ids == current_ids
-    
+        from core.quality_cache import valid_cache
+        if valid_cache(self.database.db_path, self.data_root,
+                       (sample[0] for sample in samples_info)):
+            return True
+        with sqlite3.connect(self.database.db_path) as conn:
+            conn.execute('DELETE FROM sample_stats')
+            conn.execute('DELETE FROM quality_snapshot')
+        return False
+
     def get_aggregated_stats(self):
         """获取聚合统计数据（从数据库读取）"""
         if self.database is None:

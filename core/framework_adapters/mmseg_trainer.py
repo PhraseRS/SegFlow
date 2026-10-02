@@ -42,34 +42,34 @@ class LivePredictionHook(Hook):
         # 只处理本次随机抽到的那个 batch
         if batch_idx != self._target_idx:
             return
-        
+
         try:
             if not outputs:
                 return
-                
+
             sample = outputs[0]
             img_path = getattr(sample, 'img_path', '')
-            
+
             if not img_path:
                 return
 
             iter_num = getattr(runner, 'iter', 0)
             pred_tensor = sample.pred_sem_seg.data[0].cpu().numpy()
-            
+
             out_dir = os.path.join(runner.work_dir, 'live_predictions')
             os.makedirs(out_dir, exist_ok=True)
-            
+
             safe_name = os.path.basename(img_path).rsplit('.', 1)[0]
             pred_path = os.path.join(out_dir, f"iter_{iter_num}_{safe_name}_pred.png")
             gt_path = os.path.join(out_dir, f"iter_{iter_num}_{safe_name}_gt.png")
-            
+
             # Save raw prediction and gt masks
             cv2.imencode('.png', pred_tensor.astype(np.uint8))[1].tofile(pred_path)
-            
+
             if hasattr(sample, 'gt_sem_seg'):
                 gt_tensor = sample.gt_sem_seg.data[0].cpu().numpy()
                 cv2.imencode('.png', gt_tensor.astype(np.uint8))[1].tofile(gt_path)
-            
+
             # Use a strict JSON format for robust logging parsing
             msg = {
                 "type": "live_prediction",
@@ -88,11 +88,75 @@ def _detect_suffix(dir_path: str, default: str = '.jpg') -> str:
     """扫描目录下第一个文件的扩展名，无文件时返回 default。"""
     if not os.path.isdir(dir_path):
         return default
-    for f in os.listdir(dir_path):
-        _, ext = os.path.splitext(f)
+    for filename in os.listdir(dir_path):
+        _, ext = os.path.splitext(filename)
         if ext:
             return ext.lower()
     return default
+
+
+
+def _dataset_file_check(data_root: str) -> tuple:
+    """校验 VOC 数据集三份列表引用的影像和标注是否存在。"""
+    image_dir = os.path.join(data_root, 'JPEGImages')
+    label_dir = os.path.join(data_root, 'SegmentationClass')
+    split_dir = os.path.join(data_root, 'ImageSets', 'Segmentation')
+    missing = []
+    counts = {}
+
+    import cv2
+    import numpy as np
+
+    def find_existing(directory, sample_id):
+        if not os.path.isdir(directory):
+            return None
+        stem = os.path.splitext(sample_id.strip().replace('\\', '/'))[0]
+        for name in os.listdir(directory):
+            if name.lower().startswith(stem.lower() + '.'):
+                return os.path.join(directory, name)
+        return None
+
+    def readable_image(path):
+        # imdecode + fromfile 可避免 Windows 下非 ASCII 路径导致 imread 失败。
+        try:
+            data = np.fromfile(path, dtype=np.uint8)
+            return cv2.imdecode(data, cv2.IMREAD_UNCHANGED) is not None
+        except (OSError, ValueError, cv2.error):
+            return False
+
+    for split in ('train', 'val', 'test'):
+        list_path = os.path.join(split_dir, split + '.txt')
+        if not os.path.isfile(list_path):
+            missing.append(f'{split}.txt 不存在: {list_path}')
+            counts[split] = 0
+            continue
+        with open(list_path, 'r', encoding='utf-8-sig') as stream:
+            sample_ids = [line.strip() for line in stream if line.strip()]
+        counts[split] = len(sample_ids)
+        for sample_id in sample_ids:
+            image_path = find_existing(image_dir, sample_id)
+            label_path = find_existing(label_dir, sample_id)
+            if not image_path:
+                missing.append(f'{split}: 影像不存在 {sample_id}')
+            elif not readable_image(image_path):
+                missing.append(f'{split}: 影像无法解码（文件可能损坏） {image_path}')
+            if not label_path:
+                missing.append(f'{split}: 标注不存在 {sample_id}')
+            elif not readable_image(label_path):
+                missing.append(f'{split}: 标注无法解码（文件可能损坏） {label_path}')
+
+    if not os.path.isdir(image_dir):
+        missing.insert(0, f'影像目录不存在: {image_dir}')
+    if not os.path.isdir(label_dir):
+        missing.insert(0, f'标注目录不存在: {label_dir}')
+    if missing:
+        preview = '\\n'.join(missing[:20])
+        more = f'\\n...另有 {len(missing) - 20} 项' if len(missing) > 20 else ''
+        raise FileNotFoundError(
+            f'数据集校验失败（train/val/test 共 {sum(counts.values())} 个样本）:\\n'
+            f'{preview}{more}\\n数据根目录: {data_root}'
+        )
+    return counts
 
 
 def _sync_mask2former_class_weight(decode_head: dict, num_classes: int) -> bool:
@@ -192,7 +256,7 @@ class MMSegTrainer(BaseTrainer):
             from mmengine.config import Config
             import mmengine.utils.misc
             import mmengine.config.config
-            
+
             # ==========================================================
             # [神级黑客补丁 2.0]：强制“物理阉割” MMEngine 的自动导包函数！
             # 因为 GUI 只需要修改文本参数，根本不需要真正导入 mmdet 等庞大的包。
@@ -202,7 +266,7 @@ class MMSegTrainer(BaseTrainer):
             mmengine.utils.misc.import_modules_from_strings = dummy_func
             mmengine.config.config.import_modules_from_strings = dummy_func
             # ==========================================================
-            
+
         except ImportError:
             raise ImportError(
                 "mmengine not installed. Please run: pip install mmengine"
@@ -223,7 +287,7 @@ class MMSegTrainer(BaseTrainer):
             if hasattr(cfg, 'train_cfg'):
                 cfg.train_cfg.max_iters = int(max_iters)
                 cfg.train_cfg.type = 'IterBasedTrainLoop'
-                
+
                 # 优先读取用户在 UI 中设置的 val_interval，无设置时用保底公式
                 val_interval = int(ui_params.get('val_interval') or 0) or max(50, int(max_iters) // 10)
                 cfg.train_cfg.val_interval = val_interval
@@ -267,31 +331,40 @@ class MMSegTrainer(BaseTrainer):
         # ====== 数据加载器 ======
         batch_size = ui_params.get('batch_size', 2)
         num_workers = ui_params.get('num_workers', 4)
+        # 必须同时修改验证集和测试集的线程数，否则在进入 val_loop 时会瞬间启动多个废弃子进程把系统内存撑爆
+        # 另外：Windows 下必须开启 persistent_workers=True 否则 val_loop 启动子进程极易报 PermissionError: [WinError 5]
+        use_persistent = int(num_workers) > 0
+        
         if hasattr(cfg, 'train_dataloader'):
             cfg.train_dataloader.batch_size = int(batch_size)
             cfg.train_dataloader.num_workers = int(num_workers)
-        
-        # 必须同时修改验证集和测试集的线程数，否则在进入 val_loop 时会瞬间启动多个废弃子进程把系统内存撑爆
+            if use_persistent:
+                cfg.train_dataloader.persistent_workers = True
+
         if hasattr(cfg, 'val_dataloader'):
             cfg.val_dataloader.num_workers = int(num_workers)
-            # 验证集通常不应该开多 batch 容易 OOM，可以固定为 1 或者随之修改
             cfg.val_dataloader.batch_size = max(1, int(batch_size) // 2)
-            
+            if use_persistent:
+                cfg.val_dataloader.persistent_workers = True
+
         if hasattr(cfg, 'test_dataloader'):
             cfg.test_dataloader.num_workers = int(num_workers)
+            if use_persistent:
+                cfg.test_dataloader.persistent_workers = True
 
         # ====== 数据集路径 ======
         data_root = ui_params.get('data_root')
         if data_root:
-            data_root = data_root.replace('\\', '/')
+            data_root = os.path.abspath(os.path.normpath(data_root))
+            # Data Insight owns content validation; training consumes its report.
             if hasattr(cfg, 'data_root'):
                 cfg.data_root = data_root
-            
+
             def process_segmentation_split(obj, default_ann):
                 if isinstance(obj, dict):
                     if 'data_root' in obj:
                         obj['data_root'] = data_root
-                    
+
                     # === 强制修正 VOC 格式的子目录，防止基底配置 (如 ADE20k) 的自带路径引发 FolderNotFound ===
                     if 'data_prefix' in obj:
                         obj['data_prefix'] = dict(
@@ -313,15 +386,15 @@ class MMSegTrainer(BaseTrainer):
                             # 清除基底 config 可能残留的 metainfo 字段，
                             # 类别定义已写入 RSFreeVOCDataset.METAINFO，无需再传参数
                             obj.pop('metainfo', None)
-                        
+
                         # 兼容强转 Dataset 类型后带来的必填项缺失问题
                         if 'ann_file' not in obj or not obj['ann_file']:
                             obj['ann_file'] = default_ann
-                            
+
                     # 同步清洗 Pipeline 里的毒瘤参数 (尤其是 ADE20K 喜欢自带的 reduce_zero_label=True)
                     if obj.get('type') == 'LoadAnnotations':
                         obj['reduce_zero_label'] = False
-                            
+
                     # 兼容可能存在的 aug.txt 级联数据
                     if 'ann_file' in obj and 'aug.txt' in obj['ann_file']:
                         obj['ann_file'] = 'ImageSets/Segmentation/train.txt'
@@ -331,7 +404,7 @@ class MMSegTrainer(BaseTrainer):
                 elif isinstance(obj, list):
                     for item in obj:
                         process_segmentation_split(item, default_ann)
-                            
+
             # 分别对 train, val, test 树进行独立的深度递归注射，赋予正确的 ann_file
             if hasattr(cfg, 'train_dataloader'):
                 process_segmentation_split(cfg.train_dataloader, 'ImageSets/Segmentation/train.txt')
@@ -488,7 +561,7 @@ class MMSegTrainer(BaseTrainer):
 
         # ====== 保存 ======
         cfg.dump(save_path)
-        
+
         # --- 硬核补丁：绕过 MMEngine 底层 AST 锁死机制，直接对落盘文件进行文本替换 ---
         data_root = ui_params.get('data_root')
         if data_root:
@@ -574,10 +647,10 @@ class MMSegTrainer(BaseTrainer):
         # [终极解毒补丁] 清理 PyInstaller 的环境变量污染
         # ========================================================
         env = os.environ.copy()
-        
+
         # 1. 删掉 PyInstaller 偷偷塞进来的 PYTHONHOME
         env.pop('PYTHONHOME', None)
-        
+
         # 2. 彻底抛弃被污染的旧 PYTHONPATH，只保留当前的工作目录！
         env.pop('PYTHONPATH', None)
         env['PYTHONPATH'] = os.path.abspath(work_dir)
@@ -705,7 +778,7 @@ class MMSegTrainer(BaseTrainer):
             return None
 
         line = line.strip()
-        
+
         if "[LIVE_PRED]" in line:
             try:
                 json_str = line.split("[LIVE_PRED]", 1)[1].strip()

@@ -112,7 +112,7 @@ call python -m pip install --upgrade pip
 if errorlevel 1 goto install_err
 call python -m pip install -r requirements.txt
 if errorlevel 1 goto install_err
-call python -m pip install pyqtgraph openmim qtawesome
+call python -m pip install openmim qtawesome
 if errorlevel 1 goto install_err
 
 

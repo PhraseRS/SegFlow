@@ -86,7 +86,7 @@ class ModelSelectionWidget(QWidget):
                 self.combo_method.addItem(method)
         self.combo_method.setToolTip(self.tr("Select segmentation algorithm/architecture"))
         # 默认选中第一个 Transformer 算法（跳过分隔项）
-        self.combo_method.setCurrentText('Mask2Former')
+        self.combo_method.setCurrentText('SegFormer')
         top_form.addRow("Algorithm:", self.combo_method)
 
         self.combo_backbone = QComboBox()

@@ -26,11 +26,9 @@ def main():
     # 初始化多语言
     I18nManager.setup_translator(app)
     
-    # 设置默认字体，避免 QFont::setPointSize 警告
-    default_font = app.font()
-    if default_font.pointSize() <= 0:
-        default_font.setPointSize(9)
-        app.setFont(default_font)
+    # 设置默认字体，避免 QFont::setPointSize 警告和 DirectWrite "Inter" 字体崩溃
+    default_font = QFont("Segoe UI", 9)
+    app.setFont(default_font)
     
     window = MainWindow()
     window.show()

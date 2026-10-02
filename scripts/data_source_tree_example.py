@@ -28,7 +28,7 @@ VIEW_MODE_GRID = 1
 
 class DataSourceManager:
     """数据源管理器 - 负责管理树形控件中的数据"""
-    
+
     def __init__(self, tree_widget):
         self.tree = tree_widget
         self.train_node = None
@@ -38,78 +38,78 @@ class DataSourceManager:
         self.images_dir = None  # 影像目录
         self.labels_dir = None  # 标签目录
         self._init_tree_structure()
-    
+
     def _init_tree_structure(self):
         """初始化树形结构：创建三个固定的顶级节点"""
         self.tree.clear()
-        
+
         # 创建三个顶级节点
         self.train_node = QTreeWidgetItem(self.tree)
         self.train_node.setText(0, "📂 Train Set [0 samples]")
         self.train_node.setData(0, Qt.ItemDataRole.UserRole, {"type": "parent", "dataset": "train"})
-        
+
         self.val_node = QTreeWidgetItem(self.tree)
         self.val_node.setText(0, "📂 Val Set [0 samples]")
         self.val_node.setData(0, Qt.ItemDataRole.UserRole, {"type": "parent", "dataset": "val"})
-        
+
         self.test_node = QTreeWidgetItem(self.tree)
         self.test_node.setText(0, "📂 Test Set [0 samples]")
         self.test_node.setData(0, Qt.ItemDataRole.UserRole, {"type": "parent", "dataset": "test"})
-        
+
         # 默认展开所有节点
         self.tree.expandAll()
-    
+
     def load_from_txt_files(self, data_root):
         """
         从 train.txt, val.txt, test.txt 加载样本列表（支持VOC格式）
-        
+
         VOC格式：txt文件在 ImageSets/Segmentation/ 目录下
         其他格式：txt文件在根目录下
-        
+
         Args:
             data_root: 数据根目录
         """
         self.data_root = data_root
-        
+
         # Auto检测影像和标签目录
         self._detect_directories()
-        
+
         # 清空现有数据
         self.train_node.takeChildren()
         self.val_node.takeChildren()
         self.test_node.takeChildren()
-        
+
         # VOC格式：ImageSets/Segmentation/train.txt
         voc_txt_dir = os.path.join(data_root, 'ImageSets', 'Segmentation')
-        
+
         # 加载各个数据集（优先VOC格式路径）
         datasets = {
             'train': self.train_node,
             'val': self.val_node,
             'test': self.test_node
         }
-        
+
         # 构建txt文件路径列表
         txt_paths = {}
         for dataset_type in datasets.keys():
             # 优先检查VOC格式路径
             voc_path = os.path.join(voc_txt_dir, f'{dataset_type}.txt')
             root_path = os.path.join(data_root, f'{dataset_type}.txt')
-            
+
             if os.path.exists(voc_path):
                 txt_paths[dataset_type] = voc_path
             elif os.path.exists(root_path):
                 txt_paths[dataset_type] = root_path
             else:
                 txt_paths[dataset_type] = None
-        
+
         # 转换为原有格式
         datasets = {
             'train': (txt_paths['train'], self.train_node),
             'val': (txt_paths['val'], self.val_node),
             'test': (txt_paths['test'], self.test_node)
         }
-        
+
         for dataset_type, (txt_path, parent_node) in datasets.items():
             if txt_path and os.path.exists(txt_path):
                 try:
@@ -123,22 +123,22 @@ class DataSourceManager:
                     print(f"❌ Load {txt_path} Failed: {e}")
             else:
                 print(f"⚠️  {dataset_type}.txt 不存在，跳过")
-            
+
             # 更新计数
             self._update_count(parent_node)
-        
+
         # 展开所有节点
         self.tree.expandAll()
-    
+
     def _detect_directories(self):
         """Auto检测影像和标签目录（支持VOC格式）"""
         if not self.data_root:
             return
-        
+
         # VOC格式目录命名
         image_dirs = ['JPEGImages', 'images', 'img', 'image', 'imgs', 'data']
         label_dirs = ['SegmentationClass', 'labels', 'label', 'masks', 'mask', 'annotations', 'ann']
-        
+
         # 检测影像目录
         for dir_name in image_dirs:
             path = os.path.join(self.data_root, dir_name)
@@ -146,7 +146,7 @@ class DataSourceManager:
                 self.images_dir = path
                 print(f"📁 检测到影像目录: {path}")
                 break
-        
+
         # 检测标签目录
         for dir_name in label_dirs:
             path = os.path.join(self.data_root, dir_name)
@@ -154,17 +154,17 @@ class DataSourceManager:
                 self.labels_dir = path
                 print(f"📁 Detected label dir: {path}")
                 break
-        
+
         # 如果没有检测到，使用VOC默认路径
         if not self.images_dir:
             self.images_dir = os.path.join(self.data_root, 'JPEGImages')
         if not self.labels_dir:
             self.labels_dir = os.path.join(self.data_root, 'SegmentationClass')
-    
+
     def get_sample_paths(self, sample_id, dataset_type):
         """
         获取样本的影像和标签路径（支持VOC格式）
-        
+
         VOC格式目录结构：
         data_root/
         ├── JPEGImages/          # 所有影像（不分train/val/test子目录）
@@ -177,31 +177,31 @@ class DataSourceManager:
             ├── train.txt
             ├── val.txt
             └── test.txt
-        
+
         Args:
             sample_id: 样本ID
             dataset_type: 数据集类型 ('train', 'val', 'test')
-        
+
         Returns:
             tuple: (image_path, label_path) 或 (None, None)
         """
         if not self.data_root:
             return None, None
-        
+
         # 支持的影像扩展名
         image_exts = ['.jpg', '.jpeg', '.png', '.tif', '.tiff', '.bmp']
         label_exts = ['.png', '.tif', '.tiff', '.jpg', '.jpeg', '.bmp']
-        
+
         image_path = None
         label_path = None
-        
+
         # VOC格式：影像和标签都在同一目录下，不分train/val/test子目录
         # 查找影像文件
         search_paths = [
             self.images_dir,  # VOC: JPEGImages/
             os.path.join(self.images_dir, dataset_type),  # 兼容其他格式
         ]
-        
+
         for base_path in search_paths:
             if not os.path.isdir(base_path):
                 continue
@@ -212,13 +212,13 @@ class DataSourceManager:
                     break
             if image_path:
                 break
-        
+
         # 查找标签文件
         search_paths = [
             self.labels_dir,  # VOC: SegmentationClass/
             os.path.join(self.labels_dir, dataset_type),  # 兼容其他格式
         ]
-        
+
         for base_path in search_paths:
             if not os.path.isdir(base_path):
                 continue
@@ -229,9 +229,9 @@ class DataSourceManager:
                     break
             if label_path:
                 break
-        
+
         return image_path, label_path
-    
+
     def _add_sample_node(self, parent_node, sample_id, dataset_type):
         """添加样本子节点"""
         child = QTreeWidgetItem(parent_node)
@@ -242,11 +242,11 @@ class DataSourceManager:
             "sample_id": sample_id,
             "dataset": dataset_type
         })
-    
+
     def add_sample(self, dataset_type, sample_id):
         """
         添加样本到指定数据集
-        
+
         Args:
             dataset_type: 'train', 'val', 或 'test'
             sample_id: 样本ID，如 'image_0001'
@@ -257,38 +257,38 @@ class DataSourceManager:
             'val': self.val_node,
             'test': self.test_node
         }.get(dataset_type)
-        
+
         if parent_node is None:
             print(f"Error: Unknown dataset type '{dataset_type}'")
             return
-        
+
         # 创建子节点
         self._add_sample_node(parent_node, sample_id, dataset_type)
-        
+
         # 更新父节点的样本计数
         self._update_count(parent_node)
-    
+
     def add_samples_batch(self, dataset_type, sample_ids):
         """Batch Add Samples"""
         for sample_id in sample_ids:
             self.add_sample(dataset_type, sample_id)
-    
+
     def remove_selected_sample(self):
         """删除当前选中的样本（不能删除顶级节点）"""
         current_item = self.tree.currentItem()
         if current_item is None:
             return
-        
+
         # 检查是No是顶级节点
         parent = current_item.parent()
         if parent is None:
             print("Cannot delete top-level nodes (Train/Val/Test)")
             return
-        
+
         # 删除子节点
         parent.removeChild(current_item)
         self._update_count(parent)
-    
+
     def clear_dataset(self, dataset_type):
         """清空指定数据集的所有样本"""
         parent_node = {
@@ -296,11 +296,11 @@ class DataSourceManager:
             'val': self.val_node,
             'test': self.test_node
         }.get(dataset_type)
-        
+
         if parent_node:
             parent_node.takeChildren()  # 移除所有子节点
             self._update_count(parent_node)
-    
+
     def get_samples(self, dataset_type):
         """获取指定数据集的所有样本ID"""
         parent_node = {
@@ -308,10 +308,10 @@ class DataSourceManager:
             'val': self.val_node,
             'test': self.test_node
         }.get(dataset_type)
-        
+
         if parent_node is None:
             return []
-        
+
         samples = []
         for i in range(parent_node.childCount()):
             child = parent_node.child(i)
@@ -321,9 +321,9 @@ class DataSourceManager:
             else:
                 sample_id = node_data
             samples.append(sample_id)
-        
+
         return samples
-    
+
     def get_all_samples(self):
         """获取所有数据集的样本"""
         return {
@@ -331,26 +331,26 @@ class DataSourceManager:
             'val': self.get_samples('val'),
             'test': self.get_samples('test')
         }
-    
+
     def _update_count(self, parent_node):
         """更新父节点显示的样本数量"""
         count = parent_node.childCount()
         node_data = parent_node.data(0, Qt.ItemDataRole.UserRole)
-        
+
         if isinstance(node_data, dict):
             dataset_type = node_data.get('dataset', '')
         else:
             dataset_type = node_data
-        
+
         # 更新显示文本
         labels = {
             'train': f"📂 Train Set [{count} samples]",
             'val': f"📂 Val Set [{count} samples]",
             'test': f"📂 Test Set [{count} samples]"
         }
-        
+
         parent_node.setText(0, labels.get(dataset_type, f"Unknown [{count} samples]"))
-    
+
     def is_parent_node(self, item):
         """判断是No为父节点"""
         if item is None:
@@ -359,7 +359,7 @@ class DataSourceManager:
         if isinstance(node_data, dict):
             return node_data.get('type') == 'parent'
         return item.parent() is None
-    
+
     def is_leaf_node(self, item):
         """判断是No为叶子节点（样本节点）"""
         if item is None:
@@ -368,17 +368,17 @@ class DataSourceManager:
         if isinstance(node_data, dict):
             return node_data.get('type') == 'leaf'
         return item.parent() is not None
-    
+
     def get_sample_info(self, item):
         """
         获取样本节点的信息
-        
+
         Returns:
             dict: {'sample_id': str, 'dataset': str} 或 None
         """
         if not self.is_leaf_node(item):
             return None
-        
+
         node_data = item.data(0, Qt.ItemDataRole.UserRole)
         if isinstance(node_data, dict):
             return {
@@ -390,12 +390,12 @@ class DataSourceManager:
 
 class MainWindow(QMainWindow):
     """MainWindow"""
-    
+
     def __init__(self):
         super().__init__()
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
-        
+
         # --- 注入实时训练曲线组件 (训练指标 Tab 内部) ---
         try:
             from ui.widgets.metrics_plot_widget import MetricsPlotWidget
@@ -408,15 +408,15 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print(f"MetricsPlotWidget loading failed: {e}")
             self.metrics_plot = None
-            
+
         self._last_train_iter = 0
-        
+
         # 当前视图模式
         self.current_view_mode = VIEW_MODE_DETAIL
-        
+
         # 初始化数据源管理器
         self.data_manager = DataSourceManager(self.ui.treeWidget_dataSources)
-        
+
         # 初始化元数据管理器
         self.metadata_manager = DatasetMetadataManager()
 
@@ -424,32 +424,32 @@ class MainWindow(QMainWindow):
         self._current_project_path = ""
         self._current_data_root = ""
         self._setup_project_actions()
-        
+
         # 影像查看器 (SmartCanvas 已在 UI 中创建)
         self.image_viewer = self.ui.graphicsView_canvas
-        
+
         # 初始化缩略图懒加载管理器
         self.thumbnail_manager = ThumbnailLazyLoader(self.ui.listWidget_thumbnails, thumbnail_size=120)
-        
+
         # 防抖定时器（用于图层设置变化时刷新）
         self._layer_refresh_timer = QTimer()
         self._layer_refresh_timer.setSingleShot(True)
         self._layer_refresh_timer.setInterval(50)  # 50ms 防抖
         self._layer_refresh_timer.timeout.connect(self._do_refresh_layer_settings)
-        
+
         # Phase 4: 训练线程状态
         self._training_thread = None
         self._current_advisor = None  # ConfigAdvisor 实例缓存
-        
+
         # 连接信号
         self._connect_signals()
-        
+
         # 初始化图层控制
         self._init_layer_controls()
-        
+
         # 初始化视图切换
         self._init_view_switcher()
-        
+
         # Phase 5: 训练结果联动推理面板
         from PySide6.QtWidgets import QPushButton
         self.btn_send_to_inference = QPushButton("🚀 Model just trained -> Sent to Inference")
@@ -459,7 +459,7 @@ class MainWindow(QMainWindow):
         self.ui.verticalLayout_actions.addWidget(self.btn_send_to_inference)
         self.btn_send_to_inference.clicked.connect(self._on_send_to_inference_clicked)
         self._last_work_dir = None
-        
+
         # 语言切换菜单
         self._setup_language_menu()
         self._setup_toolbox_menu()
@@ -469,30 +469,30 @@ class MainWindow(QMainWindow):
         from utils.i18n_manager import I18nManager
         from PySide6.QtWidgets import QMenu, QMessageBox
         from PySide6.QtGui import QActionGroup
-        
+
         # 创建 Language 菜单
         self.menu_language = QMenu("Language", self)
-        
+
         # 获取当前语言
         current_lang = I18nManager.get_current_language()
-        
+
         # 动作组，确保单选
         lang_group = QActionGroup(self)
-        
+
         action_en = QAction("English", self, checkable=True)
         if current_lang == "en":
             action_en.setChecked(True)
         action_en.triggered.connect(lambda: self._change_language("en"))
         lang_group.addAction(action_en)
         self.menu_language.addAction(action_en)
-        
+
         action_zh = QAction("简体中文", self, checkable=True)
         if current_lang == "zh_CN":
             action_zh.setChecked(True)
         action_zh.triggered.connect(lambda: self._change_language("zh_CN"))
         lang_group.addAction(action_zh)
         self.menu_language.addAction(action_zh)
-        
+
         # 插入到 menu_tools 下
         if hasattr(self.ui, 'menu_tools'):
             self.ui.menu_tools.addMenu(self.menu_language)
@@ -536,15 +536,15 @@ class MainWindow(QMainWindow):
     def _change_language(self, lang_code: str):
         from utils.i18n_manager import I18nManager
         from PySide6.QtWidgets import QMessageBox
-        
+
         if I18nManager.get_current_language() == lang_code:
             return
-            
+
         I18nManager.set_language(lang_code)
-        
+
         QMessageBox.information(
-            self, 
-            "Language Changed" if lang_code == "en" else "语言已更改", 
+            self,
+            "Language Changed" if lang_code == "en" else "语言已更改",
             "Language has been changed. Please restart the application to take effect.\n\n"
             "语言已更改，请重启应用程序生效。"
         )
@@ -800,7 +800,7 @@ class MainWindow(QMainWindow):
         message = "工程文件已加载/保存，但存在路径Info:\n" + "\n".join(warnings)
         self._log_to_bottom(message)
         QMessageBox.warning(self, "工程路径Info", message)
-    
+
     def _init_view_switcher(self):
         """初始化视图切换器"""
         # 默认显示详情视图，数据集加载前禁用视图切换按钮
@@ -809,53 +809,53 @@ class MainWindow(QMainWindow):
         self.ui.action_gridView.setChecked(False)
         self.ui.action_detailView.setEnabled(False)
         self.ui.action_gridView.setEnabled(False)
-    
+
     def _connect_signals(self):
         """连接所有信号"""
         # 添加样本按钮
         self.ui.pushButton_addSample.clicked.connect(self.on_add_sample)
-        
+
         # 数据集概览 - 重新划分按钮（通过 Header action）
         self.ui.btn_resplit.clicked.connect(self.on_resplit_dataset)
-        
+
         # 树控件的点击信号
         self.ui.treeWidget_dataSources.currentItemChanged.connect(self.on_tree_item_changed)
         self.ui.treeWidget_dataSources.itemClicked.connect(self.on_tree_item_clicked)
-        
+
         # 树控件右键菜单 (Phase 2: 样本列表快捷交互)
         self.ui.treeWidget_dataSources.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.ui.treeWidget_dataSources.customContextMenuRequested.connect(self._show_tree_context_menu)
-        
+
         # 图层控制
         self.ui.checkBox_baseImage.stateChanged.connect(self.on_base_image_toggled)
         self.ui.checkBox_overlayPrediction.stateChanged.connect(self.on_overlay_toggled)
         self.ui.checkBox_labelOnly.stateChanged.connect(self.on_label_only_toggled)
         self.ui.slider_opacity.valueChanged.connect(self.on_opacity_changed)
-        
+
         # 卷帘对比
         self.ui.checkBox_swipeCompare.stateChanged.connect(self.on_swipe_toggled)
         self.ui.slider_swipe.valueChanged.connect(self.on_swipe_position_changed)
-        
+
         # 视图控制
         self.ui.action_zoomIn.triggered.connect(self.image_viewer.zoom_in)
         self.ui.action_zoomOut.triggered.connect(self.image_viewer.zoom_out)
         self.ui.action_fitToWindow.triggered.connect(self.image_viewer.fit_to_window)
-        
+
         # 视图切换
         self.ui.action_detailView.triggered.connect(self.on_switch_to_detail_view)
         self.ui.action_gridView.triggered.connect(self.on_switch_to_grid_view)
-        
+
         # 网格视图双击
         self.ui.listWidget_thumbnails.itemDoubleClicked.connect(self.on_thumbnail_double_clicked)
-        
+
         # 网格视图单击同步 (Phase 1.1: Right -> Left)
         self.ui.listWidget_thumbnails.currentItemChanged.connect(self._on_thumbnail_single_clicked)
-        
+
         # 健康检查卡片过滤信号
         self.ui.widget_healthCheck.filterRequested.connect(self._on_health_filter_requested)
         self.ui.widget_healthCheck.clearFilterRequested.connect(self.clear_tree_filter)
         self.ui.widget_healthCheck.rescanRequested.connect(self._on_health_rescan)
-        
+
         # 推理面板信号连接
         self.ui.inference_panel.log_message.connect(self._log_to_bottom)
         self.ui.inference_panel.model_loaded.connect(self._on_inference_model_loaded)
@@ -874,19 +874,20 @@ class MainWindow(QMainWindow):
         self.ui.inference_panel.visualization_settings.apply_requested.connect(
             self._on_prediction_visualization_apply
         )
-        
+
         # 双向同步：GIS 图层控制 <-> 推理面板
         # 方向 1: 左侧 GIS 底图变化 -> 右侧推理面板输入路径
         self.ui.gisCanvas.base_image_set.connect(self._sync_base_image_to_inference)
-        
+
         # 方向 2: 右侧推理面板选择图像 -> 左侧 GIS 底图
         self.ui.inference_panel.input_path_selected.connect(self._sync_inference_to_base_image)
-        
+
         # Phase 3.3: 推荐训练配置分发逻辑
         self.ui.widget_advisorConfig.generate_requested.connect(self._on_generate_recommend_config)
-        
+
         # Phase 4: 训练控制按钮
-        self.ui.pushButton_run.clicked.connect(self._on_start_training)
+        from ui.dataset_quality_controller import DatasetQualityController
+        self.dataset_quality = DatasetQualityController(self)
         self.ui.pushButton_stop.clicked.connect(self._on_stop_training)
         self.ui.pushButton_stop.setEnabled(False)
         self.ui.pushButton_export.clicked.connect(self._on_export_config)
@@ -896,7 +897,7 @@ class MainWindow(QMainWindow):
             self.ui.widget_classConfig.set_num_classes
         )
         self.ui.widget_classConfig.config_changed.connect(self._on_config_params_changed)
-        
+
         # 联动：当 ModelSelection 的 Backbone 改变时，通知 WeightSelection 更新预训练模型下拉列表
         self.ui.widget_modelSelection.combo_backbone.currentTextChanged.connect(
             self.ui.widget_weightSelection.update_backbone
@@ -912,7 +913,7 @@ class MainWindow(QMainWindow):
         initial_framework = self.ui.widget_modelSelection.combo_framework.currentText()
         initial_packages = get_required_packages(initial_framework)
         self.ui.widget_envConfig.set_framework(initial_framework, initial_packages)
-        
+
         # ========== 核心：主 Tab 与侧边栏联动 ==========
         # 右侧 Tab 切换时，Auto切换左侧侧边栏
         self.ui.tabWidget_contextControl.currentChanged.connect(self._on_main_tab_changed)
@@ -940,7 +941,7 @@ class MainWindow(QMainWindow):
         self.ui.label_opacityValue.setText(f"{self.ui.slider_opacity.value()}%")
         # 设置初始卷帘位置显示
         self.ui.label_swipeValue.setText(f"{self.ui.slider_swipe.value()}%")
-    
+
     def on_add_sample(self):
         """添加样本按钮点击事件 - 从VOC格式数据集加载"""
         # 打开文件夹选择对话框
@@ -950,13 +951,13 @@ class MainWindow(QMainWindow):
             "",
             QFileDialog.Option.ShowDirsOnly
         )
-        
+
         if not data_root:
             return
-        
+
         # 验证VOC格式结构
         is_valid, error_msg = self._validate_voc_structure(data_root)
-        
+
         if not is_valid:
             QMessageBox.critical(
                 self,
@@ -974,7 +975,7 @@ class MainWindow(QMainWindow):
                 f"详细说明请参考项目文档。"
             )
             return
-        
+
         # 保存数据根目录
         self._current_data_root = data_root
 
@@ -986,7 +987,8 @@ class MainWindow(QMainWindow):
             and hasattr(self.ui.inference_panel, 'set_data_root')
         ):
             self.ui.inference_panel.set_data_root(data_root)
-        
+
+        self.ui.widget_workDirectory.set_dataset_root(data_root)
         # 加载数据
         self.data_manager.load_from_txt_files(data_root)
         self._sync_inference_dataset_context()
@@ -996,16 +998,16 @@ class MainWindow(QMainWindow):
         self.ui.action_detailView.setEnabled(True)
         self.ui.action_gridView.setEnabled(True)
         self.on_switch_to_detail_view()
-        
+
         # Phase 1.4: 设置缩略图磁盘缓存目录
         self.thumbnail_manager.set_cache_dir(data_root)
-        
+
         # 更新数据集概览（基本统计）
         self._update_dataset_overview()
-        
+
         # 使用 AnalysisPanel 智能启动统计流程
         self._initialize_analysis_panel(data_root)
-    
+
     def _initialize_analysis_panel(self, data_root):
         """使用 AnalysisPanel 智能启动统计流程"""
         # 收集样本信息
@@ -1034,16 +1036,16 @@ class MainWindow(QMainWindow):
             images_dir,
             labels_dir
         )
-    
+
     def _on_analysis_started(self):
         """分析开始回调"""
         self.statusBar().showMessage("Analyzing dataset...")
-    
+
     def _on_analysis_finished(self):
         """分析完成回调"""
         self.statusBar().showMessage("数据集分析完成")
         self._on_metadata_ready()
-    
+
     def _on_analysis_error(self, error_msg):
         """分析Error回调"""
         self.statusBar().showMessage(f"分析Error: {error_msg}")
@@ -1063,47 +1065,47 @@ class MainWindow(QMainWindow):
         """加载缓存的元数据，或启动后台进程计算（保留用于兼容）"""
         # 初始化数据库
         self.metadata_manager.init_database(data_root)
-        
+
         # 收集样本信息
         samples_info = []
         for dataset_type in ['train', 'val', 'test']:
             for sample_id in self.data_manager.get_samples(dataset_type):
                 samples_info.append((sample_id, dataset_type))
-        
+
         # 连接信号
         self.metadata_manager.signals.progress.connect(self._on_metadata_progress)
         self.metadata_manager.signals.finished.connect(self._on_metadata_finished)
         self.metadata_manager.signals.error.connect(self._on_metadata_error)
-        
+
         # 检查缓存是No有效
         if self.metadata_manager.is_cache_valid(samples_info):
             print("✅ Using cached metadata")
             self.statusBar().showMessage("Metadata cache loaded")
             self._on_metadata_ready()
             return
-        
+
         # 缓存无效，启动后台进程计算
         print("🔄 启动后台进程计算元数据...")
         self.statusBar().showMessage("Calculating dataset metadata (background)...")
-        
+
         labels_dir = self.data_manager.labels_dir
         self.metadata_manager.start_calculation(samples_info, labels_dir)
-    
+
     def _on_metadata_progress(self, current, total, sample_id):
         """元数据计算进度回调（已在后端降频，约每50-100个样本触发一次）"""
         self.statusBar().showMessage(f"Analyzing samples... {current}/{total} ({sample_id})")
         # 更新统计面板（从数据库读取，毫秒级）
         self._on_metadata_ready()
-    
+
     def _on_metadata_finished(self):
         """元数据计算完成回调"""
         self.statusBar().showMessage("数据集分析完成")
         self._on_metadata_ready()
-    
+
     def _on_metadata_error(self, error_msg):
         """元数据计算Error回调"""
         print(f"⚠️ 元数据计算Error: {error_msg}")
-    
+
     def _on_metadata_ready(self):
         """元数据准备就绪，更新UI（从数据库读取）- UI 层分流逻辑"""
         # 优先从 AnalysisPanel 获取统计数据
@@ -1111,27 +1113,27 @@ class MainWindow(QMainWindow):
         if not stats:
             # 回退到直接从 metadata_manager 获取
             stats = self.metadata_manager.get_aggregated_stats()
-        
+
         if stats:
             # 1. 更新类别分布卡片（传递 image_counts）
             self._update_class_distribution(
                 stats.get('class_distribution', {}),
                 stats.get('image_counts', {})
             )
-            
+
             # 2. 更新覆盖率分析卡片
             self._update_coverage_analysis()
-            
+
             # 3. 更新健康检查卡片
             self._update_health_check()
-            
+
             # Phase 3.3: 启用推荐配置按钮 (该按钮已重构至 AdvisorConfigWidget)
             if hasattr(self.ui, 'pushButton_applyRecommend'):
                 self.ui.pushButton_applyRecommend.setEnabled(True)
-    
+
     def _update_class_distribution(self, class_distribution, image_counts=None):
         """更新类别分布面板
-        
+
         Args:
             class_distribution: 各类别像素总数 {class_id: pixel_count}
             image_counts: 各类别出现在多少张图像中 {class_id: image_count}
@@ -1139,29 +1141,29 @@ class MainWindow(QMainWindow):
         if not class_distribution:
             self.ui.widget_classDistribution.clear()
             return
-        
+
         # 按类别ID排序
-        sorted_classes = sorted(class_distribution.items(), 
+        sorted_classes = sorted(class_distribution.items(),
                                 key=lambda x: int(x[0]))
-        
+
         # 准备数据格式
         class_vals = [str(k) for k, v in sorted_classes]
         pixel_counts = [int(v) for k, v in sorted_classes]
-        
+
         # 使用真实的 image_counts（如果提供），No则默认为0
         if image_counts:
             img_counts = [int(image_counts.get(k, 0)) for k, v in sorted_classes]
         else:
             img_counts = [0] * len(class_vals)
-        
+
         stats = {
             'class_vals': class_vals,
             'pixel_counts': pixel_counts,
             'image_counts': img_counts
         }
-        
+
         self.ui.widget_classDistribution.set_data(stats)
-    
+
     def _update_coverage_analysis(self):
         """更新覆盖率分析面板"""
         # 从 AnalysisPanel 的 metadata_manager 获取数据库
@@ -1169,14 +1171,14 @@ class MainWindow(QMainWindow):
         if database is None:
             self.ui.widget_coverageAnalysis.clear()
             return
-        
+
         image_records = database.get_image_records()
         if not image_records:
             self.ui.widget_coverageAnalysis.clear()
             return
-        
+
         self.ui.widget_coverageAnalysis.set_data(image_records)
-    
+
     def _update_health_check(self):
         """更新健康检查面板"""
         # 从 AnalysisPanel 的 metadata_manager 获取数据库
@@ -1184,62 +1186,62 @@ class MainWindow(QMainWindow):
         if database is None:
             self.ui.widget_healthCheck.clear()
             return
-        
+
         # 获取健康检查问题汇总
         health_data = database.get_health_check_issues()
         if not health_data:
             self.ui.widget_healthCheck.clear()
             return
-        
+
         # 设置数据根目录（用于右键菜单功能）
         if hasattr(self, '_current_data_root') and self._current_data_root:
             self.ui.widget_healthCheck.set_data_root(self._current_data_root)
-        
+
         # 设置问题数据
         issues = {
             'fatal': health_data.get('fatal', {}),
             'warning': health_data.get('warning', {})
         }
         total_samples = health_data.get('total_samples', 0)
-        
+
         self.ui.widget_healthCheck.set_issues(issues, total_samples)
-    
+
     def _on_generate_recommend_config(self):
         """
         Phase 3.3: 生成并分发推荐训练配置
-        
+
         从 MetadataDatabase 构建 ConfigAdvisor，
         生成推荐摘要并显示在 Task Config 面板中，
         并将推荐的配置分发给通用详细配置与高级配置页签。
         """
         self.ui.widget_advisorConfig.show_loading()
-        
+
         database = self.ui.analysis_panel.metadata_manager.database
         if database is None:
             self._log_to_bottom("⚠️ No metadata DB, please load dataset")
             self.ui.widget_advisorConfig.clear()
             return
-        
+
         try:
             from core.config_advisor import ConfigAdvisor
-            
+
             advisor = ConfigAdvisor.from_database(database)
             self._current_advisor = advisor
             summary = advisor.get_summary()
-            
+
             # Phase 4: 填充 AdvisorConfigWidget
             rs_params = advisor.recommend_rs_params()
             self.ui.widget_advisorConfig.set_advisor_params(rs_params)
-            
+
             # 高级参数推荐清查（如有）
             self.ui.widget_advancedConfig.clear_all_recommendations()
             advanced_recs = {}
             self.ui.widget_advancedConfig.set_recommendations(advanced_recs)
-            
+
             # 分发数据增强与常规设置给 HyperparamTabsWidget
             self.ui.widget_hyperparamTabs.clear_all_recommendations()
             hyper_recs = {}
-            
+
             if 'in_channels' in rs_params:
                 hyper_recs['in_channels'] = {
                     'value': rs_params['in_channels'],
@@ -1255,7 +1257,7 @@ class MainWindow(QMainWindow):
             class_names = rs_params.get('class_names') or []
             if class_names:
                 self.ui.widget_classConfig.load_from_advisor(class_names)
-            
+
             if 'crop_size' in rs_params:
                 crop = rs_params['crop_size']
                 crop_val = crop[0] if isinstance(crop, (list, tuple)) else crop
@@ -1269,13 +1271,13 @@ class MainWindow(QMainWindow):
                     'value': True,
                     'reason': "Class imbalance detected, recommend loss weight compensation"
                 }
-                
+
             if 'loss_config' in rs_params and rs_params['loss_config'] and 'type' in rs_params['loss_config']:
                 hyper_recs['loss_type'] = {
                     'value': rs_params['loss_config']['type'],
                     'reason': rs_params['loss_config'].get('_reason', "Dynamic loss adaptation based on dataset features")
                 }
-            
+
             aug_config = advisor.recommend_augmentation()
             # 根据 aug_config 设置布尔类型的 aug_xxx
             aug_types = [aug.get('type') for aug in aug_config.get('augmentations', [])]
@@ -1285,21 +1287,21 @@ class MainWindow(QMainWindow):
                 hyper_recs['aug_photo_distortion'] = {'value': True, 'reason': "Add PhotometricDistortion for robustness"}
             if 'RandomRotate' in aug_types:
                 hyper_recs['aug_random_rotate'] = {'value': True, 'reason': "Add RandomRotate for orientation variance"}
-            
+
             self.ui.widget_hyperparamTabs.set_recommendations(hyper_recs)
-            
+
             # 监听全局的一键应用信号
             try:
                 self.ui.widget_advisorConfig.apply_all_requested.disconnect()
             except RuntimeError:
                 pass  # 未连接时不抛错
             self.ui.widget_advisorConfig.apply_all_requested.connect(self._on_apply_all_recommendations)
-            
+
             # 切换到 Task Config tab
             task_config_idx = self.ui.tabWidget_contextControl.indexOf(self.ui.tab_taskConfig)
             if task_config_idx >= 0:
                 self.ui.tabWidget_contextControl.setCurrentIndex(task_config_idx)
-            
+
             # 获取推荐的 crop_size 并应用到推理策略
             aug_config = advisor.recommend_augmentation()
             for aug in aug_config.get('augmentations', []):
@@ -1307,9 +1309,9 @@ class MainWindow(QMainWindow):
                     crop_size = aug.get('crop_size', (512, 512))
                     self.ui.inference_panel.spinBox_cropSize.setValue(crop_size[0])
                     break
-            
+
             self._log_to_bottom(f"💡 Recommended config applied")
-            
+
         except Exception as e:
             self.ui.widget_advisorConfig.clear()
             self._log_to_bottom(f"❌ Recommended config gen failed: {e}")
@@ -1329,12 +1331,12 @@ class MainWindow(QMainWindow):
         Phase 4: 点击「运行」按钮 → 收集参数 → 生成配置 → 启动训练线程
         """
         from PySide6.QtWidgets import QMessageBox
-        
+
         # 检查是No已有训练在运行
         if self._training_thread is not None and self._training_thread.isRunning():
             QMessageBox.warning(self, "Training in Progress", "已有训练任务在运行，请先停止当前训练。")
             return
-        
+
         # 检查数据集是No已加载
         if not hasattr(self, '_current_data_root') or not self._current_data_root:
             QMessageBox.warning(self, "Dataset Not Loaded", "Please load VOC dataset via 'Add Sample'.")
@@ -1351,21 +1353,21 @@ class MainWindow(QMainWindow):
                     "请先在“环境准备状态”面板中选择或校验 Python 解释器。",
                 )
                 return
-        
+
         try:
             # ====== Step 1: 收集 UI 参数 ======
             model_params = self.ui.widget_modelSelection.get_params()
             weight_params = self.ui.widget_weightSelection.get_params()
             advisor_params = self.ui.widget_advisorConfig.get_params()
             hyper_params = self.ui.widget_hyperparamTabs.get_params()
-            
+
             # 合并 model_params 和 weight_params 作为向下传递的完整模型参数
             full_model_params = {**model_params, **weight_params}
-            
+
             # 新增：收集底层高级配置 (专家表单) 以及 JSON 覆写
             advanced_params = self.ui.widget_advancedConfig.get_params()
             json_overrides = self.ui.widget_advancedConfig.get_overrides()
-            
+
             # 使用 ConfigAggregator 执行优先级合并
             from core.config_aggregator import ConfigAggregator
             aggregator = ConfigAggregator()
@@ -1375,12 +1377,12 @@ class MainWindow(QMainWindow):
                 advisor_params=advisor_params,
                 json_overrides=json_overrides
             )
-            
+
             self._log_to_bottom(f"📋 Model: {model_params['backbone']} | "
                                 f"优化器: {final_ui_params.get('optimizer', 'Unknown')} | "
                                 f"LR: {final_ui_params.get('learning_rate', 'Unknown')} | "
                                 f"MaxIters: {final_ui_params.get('max_iters', 'Unknown')}")
-            
+
             # ====== Step 2: 组装 ui_params ======
             # 查找 base config（从 mmseg 包中查找，或使用用户指定路径）
             base_config = self._find_base_config(full_model_params)
@@ -1388,12 +1390,12 @@ class MainWindow(QMainWindow):
                 # Auto查找失败 → 弹出文件选择对话框让用户手动选取
                 from PySide6.QtWidgets import QFileDialog
                 self._log_to_bottom("⚠️ Auto-find failed, please manually select base config")
-                
+
                 # 使用上次选择的路径作为默认目录
                 start_dir = getattr(self, '_last_config_dir', '')
-                
+
                 base_config, _ = QFileDialog.getOpenFileName(
-                    self, 
+                    self,
                     f"选择 {full_model_params['backbone']} 的 MMSeg 基础配置文件",
                     start_dir,
                     "Python 配置文件 (*.py);;所有文件 (*)"
@@ -1401,12 +1403,12 @@ class MainWindow(QMainWindow):
                 if not base_config:
                     self._log_to_bottom("❌ 用户Cancel了配置文件选择")
                     return
-                
+
                 # 缓存目录以便下次使用
                 import os
                 self._last_config_dir = os.path.dirname(base_config)
                 self._log_to_bottom(f"📄 User selected config: {base_config}")
-            
+
             # 将基础配置和前面合并的参数打包，准备传给 MMSegTrainer
             ui_params = {}
             ui_params.update(final_ui_params)  # 先放入所有高级配置
@@ -1427,15 +1429,16 @@ class MainWindow(QMainWindow):
             # ====== Step 3: 生成训练配置文件 ======
             import os
             import tempfile
-            
+
             work_dir = os.path.join(self._current_data_root, 'work_dirs',
                                      f"{model_params['backbone_key']}_{hyper_params['max_iters']}iters")
+            work_dir = self.ui.widget_workDirectory.resolve(work_dir)
             os.makedirs(work_dir, exist_ok=True)
-            
+
             config_save_path = os.path.join(work_dir, 'train_config.py')
-            
+
             from core.framework_adapters.mmseg_trainer import MMSegTrainer
-            
+
             trainer = MMSegTrainer()
             config_path = trainer.generate_config(ui_params, advisor_params, config_save_path)
             self._last_config_path = config_path  # 缓存供导出功能使用
@@ -1473,7 +1476,7 @@ class MainWindow(QMainWindow):
             )
             if python_path:
                 self._log_to_bottom(f"🐍 使用解释器: {python_path}")
-            
+
             # 连接信号
             self._training_thread.log_raw.connect(self._on_training_log_raw)
             self._training_thread.log_parsed.connect(self._on_training_log_parsed)
@@ -1481,17 +1484,19 @@ class MainWindow(QMainWindow):
             self._training_thread.training_finished.connect(self._on_training_finished)
             self._training_thread.training_error.connect(self._on_training_error)
             self._training_thread.live_prediction_updated.connect(self._on_live_prediction_updated)
-            
+
             # 更新按钮状态
             self.ui.pushButton_run.setEnabled(False)
             self.ui.pushButton_stop.setEnabled(True)
             self.statusBar().showMessage("🚀 Training in progress...")
-            
-            # 启动前清理旧的曲线残留并Auto切换到指标 Tab
+
+            # 启动前清理旧的曲线残留
             if getattr(self, 'metrics_plot', None):
                 self.metrics_plot.clear_plots()
-                self.ui.tabWidget_bottom.setCurrentWidget(self.ui.tab_metrics)
             
+            # 在训练时，底部状态栏默认展示 logs 标签
+            self.ui.tabWidget_bottom.setCurrentWidget(self.ui.tab_logs)
+
             # 同步清理任务配置仓表板内嵌的图表
             if hasattr(self.ui, 'page_taskConfigDashboard'):
                 dashboard_plot = getattr(
@@ -1499,22 +1504,22 @@ class MainWindow(QMainWindow):
                 )
                 if dashboard_plot:
                     dashboard_plot.clear_plots()
-                
+
             # 启动
             self._training_thread.start()
             self._log_to_bottom(f"🚀 Training started!")
-            
+
             # 切换到训练视图
             if hasattr(self.ui, 'page_taskConfigDashboard'):
                 self.ui.page_taskConfigDashboard.switch_to_training()
-                
+
         except Exception as e:
             self._log_to_bottom(f"❌ 训练启动失败: {e}")
             import traceback
             traceback.print_exc()
             QMessageBox.critical(self, "训练启动失败", f"Error: {e}")
             self._reset_training_ui()
-    
+
     def _on_stop_training(self):
         """Phase 4: 点击「停止」按钮 → 停止训练线程"""
         if self._training_thread is not None and self._training_thread.isRunning():
@@ -1524,7 +1529,7 @@ class MainWindow(QMainWindow):
             self.ui.pushButton_stop.setEnabled(False)
         else:
             self._log_to_bottom("⚠️ 没有正在运行的训练任务")
-    
+
     def _on_training_log_raw(self, line: str):
         """训练原始日志输出"""
         line = line.strip()
@@ -1532,11 +1537,11 @@ class MainWindow(QMainWindow):
             self.ui.textEdit_logs.append(line)
             scrollbar = self.ui.textEdit_logs.verticalScrollBar()
             scrollbar.setValue(scrollbar.maximum())
-    
+
     def _on_training_log_parsed(self, parsed: dict):
         """训练结构化日志处理"""
         log_type = parsed.get('type', '')
-        
+
         if log_type == 'train_loss':
             iter_num = parsed.get('iter', 0)
             self._last_train_iter = iter_num  # 保存当前 iter 供 validation 使用
@@ -1548,7 +1553,7 @@ class MainWindow(QMainWindow):
             if eta:
                 msg += f"  ETA: {eta}"
             self.statusBar().showMessage(msg)
-            
+
             # 更新实时曲线 (指标 Tab)
             if getattr(self, 'metrics_plot', None):
                 self.metrics_plot.update_train_loss(iter_num, loss)
@@ -1559,12 +1564,12 @@ class MainWindow(QMainWindow):
                 )
                 if dashboard_plot:
                     dashboard_plot.update_train_loss(iter_num, loss)
-            
+
         elif log_type == 'val_metric':
             miou = parsed.get('mIoU', 0)
             macc = parsed.get('mAcc', 0)
             self._log_to_bottom(f"✅ 验证结果 — mIoU: {miou:.4f}  mAcc: {macc:.4f}")
-            
+
             # 更新实时散点/折线 (指标 Tab)
             if getattr(self, 'metrics_plot', None):
                 self.metrics_plot.update_val_metric(self._last_train_iter, miou, macc)
@@ -1582,14 +1587,18 @@ class MainWindow(QMainWindow):
             strip = getattr(self.ui.page_taskConfigDashboard.training_view, 'prediction_strip', None)
             if strip:
                 strip.update_live_predictions(parsed)
-    
+
     def _on_training_progress(self, current: int, total: int):
         """训练进度更新"""
         pct = (current / total * 100) if total > 0 else 0
-        self.statusBar().showMessage(
-            f"🚀 Training in Progress: {current}/{total}  ({pct:.1f}%)"
-        )
-    
+        msg = f"🚀 Training in Progress: {current}/{total}  ({pct:.1f}%)"
+        self.statusBar().showMessage(msg)
+        
+        # 接入底部状态栏的 progress 标签进行百分比显示
+        self.ui.progressBar_task.setMaximum(total)
+        self.ui.progressBar_task.setValue(current)
+        self.ui.label_progressInfo.setText(msg)
+
     def _on_training_finished(self, exit_code: int):
         """训练完成回调"""
         if exit_code == 0:
@@ -1602,12 +1611,12 @@ class MainWindow(QMainWindow):
             self._log_to_bottom(f"⚠️ Training exit (exit code: {exit_code})")
             self.statusBar().showMessage(f"⚠️ Training exit (code: {exit_code})")
         self._reset_training_ui()
-    
+
     def _on_training_error(self, error_msg: str):
         """训练Error回调"""
         self._log_to_bottom(f"❌ Training error: {error_msg}")
         self.statusBar().showMessage(f"训练Error: {error_msg[:60]}")
-    
+
     def _reset_training_ui(self):
         """重置训练相关 UI 状态"""
         self.ui.pushButton_run.setEnabled(True)
@@ -1693,17 +1702,17 @@ class MainWindow(QMainWindow):
         if save_path:
             shutil.copy2(config_path, save_path)
             self.statusBar().showMessage(f"✅ Config exported to: {save_path}")
-        
+
     def _on_send_to_inference_clicked(self):
         """一键打包流转至推理分析面板"""
         if not hasattr(self, '_last_work_dir') or not self._last_work_dir:
             return
-            
+
         work_dir = self._last_work_dir
-        
+
         if hasattr(self, '_current_data_root') and self._current_data_root:
             self.ui.inference_panel.scan_trained_models(self._current_data_root)
-            
+
         success = self.ui.inference_panel.select_model_by_dir(work_dir)
         if success:
             index = self.ui.tabWidget_contextControl.indexOf(self.ui.tab_inferenceVis)
@@ -1711,12 +1720,12 @@ class MainWindow(QMainWindow):
                 self.ui.tabWidget_contextControl.setCurrentIndex(index)
             self._log_to_bottom(f"🚀 Auto-routed to Inference panel and triggered load")
             self.btn_send_to_inference.setVisible(False)
-            
+
             # --- 核心行动：真正触发模型在显存中的加载动作，而不仅是填上文件路径 ---
             self.ui.inference_panel.pushButton_loadModel.click()
         else:
             self._log_to_bottom("⚠️ Route failed: Could not find generated model record")
-    
+
     def _find_base_config(self, model_params: dict) -> str:
         """
         Phase 4: 根据模型参数查找 base config 文件路径。
@@ -1740,10 +1749,10 @@ class MainWindow(QMainWindow):
             return ''
 
         sub_dir, file_pattern = entry
-        
+
         # ====== 收集候选 configs 根目录 ======
         config_roots = []
-        
+
         # 策略 1: 从 mmseg.__file__ 上溯查找
         try:
             import mmseg
@@ -1756,27 +1765,27 @@ class MainWindow(QMainWindow):
             self._log_to_bottom(f"🔍 mmseg 路径: {mmseg_dir}")
         except (ImportError, Exception):
             pass
-        
+
         # 策略 2: 从 sys.executable 推算 site-packages 并查找 egg-link
         if not config_roots:
             import sys
-            
+
             # 收集所有可能的 site-packages 路径
             site_packages_dirs = set()
-            
+
             # 2a: 从 sys.executable 推算（EXE模式下会失效）
             exe_dir = os.path.dirname(sys.executable)
-            site_packages_dirs.add(os.path.join(exe_dir, 'Lib', 'site-packages')) 
+            site_packages_dirs.add(os.path.join(exe_dir, 'Lib', 'site-packages'))
 
             # =========================================================
             # [新增防坑补丁]：穿透 EXE，直接定位真实的 Conda 炼丹炉
             # =========================================================
-            
+
             # 补丁 1：从启动脚本的系统环境变量中抓取 CONDA 路径
             conda_prefix = os.environ.get('CONDA_PREFIX')
             if conda_prefix:
                 site_packages_dirs.add(os.path.join(conda_prefix, 'Lib', 'site-packages'))
-                
+
             # 补丁 2：从软件右侧 "环境准备状态" 面板中用户选中的路径推算
             try:
                 from core.env_state_manager import EnvStateManager
@@ -1794,18 +1803,18 @@ class MainWindow(QMainWindow):
                     site_packages_dirs.add(sp)
             except Exception:
                 pass
-            
+
             # 2c: 从 sys.path 获取
             for p in sys.path:
                 if 'site-packages' in p and os.path.isdir(p):
                     site_packages_dirs.add(p)
-            
+
             self._log_to_bottom(f"🔍 Searching site-packages: {[sp for sp in site_packages_dirs if os.path.isdir(sp)]}")
-            
+
             for sp_dir in site_packages_dirs:
                 if not os.path.isdir(sp_dir):
                     continue
-                    
+
                 # 查找 egg-link 文件
                 egg_link = os.path.join(sp_dir, 'mmsegmentation.egg-link')
                 if os.path.isfile(egg_link):
@@ -1820,7 +1829,7 @@ class MainWindow(QMainWindow):
                                 break
                         except (UnicodeDecodeError, OSError):
                             continue
-                
+
                 # 直接查找 mmseg 包目录
                 mmseg_pkg = os.path.join(sp_dir, 'mmseg')
                 if os.path.isdir(mmseg_pkg):
@@ -1829,27 +1838,27 @@ class MainWindow(QMainWindow):
                         os.path.join(os.path.dirname(mmseg_pkg), 'configs'),
                     ])
                     self._log_to_bottom(f"🔍 site-packages mmseg: {mmseg_pkg}")
-        
+
         # 策略 2: 项目本地 configs/
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         config_roots.append(os.path.join(project_root, 'configs'))
-        
+
         # ====== 在候选目录中搜索 ======
         for config_root in config_roots:
             if not os.path.isdir(config_root):
                 continue
-            
+
             target_dir = os.path.join(config_root, sub_dir)
             if not os.path.isdir(target_dir):
                 continue
-            
+
             # glob 模糊匹配
             matches = glob.glob(os.path.join(target_dir, file_pattern))
             if matches:
                 result = matches[0]
                 self._log_to_bottom(f"✅ 找到配置: {result}")
                 return result
-        
+
         # ====== 策略 3: 递归 glob 搜索（更宽松） ======
         for config_root in config_roots:
             if not os.path.isdir(config_root):
@@ -1859,7 +1868,7 @@ class MainWindow(QMainWindow):
                 result = matches[0]
                 self._log_to_bottom(f"✅ Found config (recursive): {result}")
                 return result
-        
+
         # 日志输出搜索过的路径，帮助调试
         self._log_to_bottom(f"❌ Not found {backbone_key} 的配置文件")
         self._log_to_bottom(f"   Search mode: {sub_dir}/{file_pattern}")
@@ -1870,32 +1879,32 @@ class MainWindow(QMainWindow):
     def _on_health_filter_requested(self, issue_type: str):
         """
         健康检查卡片过滤请求回调
-        
+
         交互流程：
         1. 用户点击问题行（如 "🔴 尺寸不匹配 [ 2 项 ]"）
         2. 左侧文件列表过滤显示问题文件
         3. Auto加载第一个问题文件到主视图
-        
+
         Args:
             issue_type: 问题类型（如 'empty_mask', 'corrupt_file' 等）
         """
         print(f"🔍 健康检查过滤请求: {issue_type}")
-        
+
         # 从数据库获取问题文件列表
         database = self.ui.analysis_panel.metadata_manager.database
         if database is None:
             return
-        
+
         problem_samples = database.get_samples_by_issue(issue_type)
         if not problem_samples:
             self.statusBar().showMessage(f"未找到 {issue_type} 类型的问题文件")
             return
-        
+
         print(f"📋 Found {len(problem_samples)} 个问题文件: {problem_samples[:5]}...")
-        
+
         # 过滤树形控件：隐藏非问题文件，只显示问题文件
         self._filter_tree_by_samples(problem_samples, issue_type)
-        
+
         # Auto选中并加载第一个问题文件
         if problem_samples:
             first_sample_id = problem_samples[0]
@@ -1909,7 +1918,7 @@ class MainWindow(QMainWindow):
                     'sample_id': first_sample_id,
                     'dataset': dataset_type
                 })
-        
+
         self.statusBar().showMessage(f"Filtered display {len(problem_samples)} 个 {issue_type} 问题文件")
 
     def _on_health_rescan(self):
@@ -1923,58 +1932,58 @@ class MainWindow(QMainWindow):
     def _filter_tree_by_samples(self, sample_ids: list, issue_type: str):
         """
         过滤树形控件，只显示指定的样本
-        
+
         Args:
             sample_ids: 要显示的样本ID列表
             issue_type: 问题类型（用于更新父节点标题）
         """
         sample_set = set(sample_ids)
-        
+
         # 遍历所有数据集节点
-        for parent_node in [self.data_manager.train_node, 
-                           self.data_manager.val_node, 
+        for parent_node in [self.data_manager.train_node,
+                           self.data_manager.val_node,
                            self.data_manager.test_node]:
             visible_count = 0
-            
+
             # 遍历子节点
             for i in range(parent_node.childCount()):
                 child = parent_node.child(i)
                 node_data = child.data(0, Qt.ItemDataRole.UserRole)
-                
+
                 if isinstance(node_data, dict):
                     sample_id = node_data.get('sample_id', '')
                 else:
                     sample_id = child.text(0)
-                
+
                 # 根据是No在问题列表中决定显示/隐藏
                 if sample_id in sample_set:
                     child.setHidden(False)
                     visible_count += 1
                 else:
                     child.setHidden(True)
-            
+
             # 更新父节点标题显示过滤后的数量
             node_data = parent_node.data(0, Qt.ItemDataRole.UserRole)
             dataset_type = node_data.get('dataset', '') if isinstance(node_data, dict) else ''
-            
+
             labels = {
                 'train': f"📂 Train Set [Filtered: {visible_count}个]",
                 'val': f"📂 Val Set [Filtered: {visible_count}个]",
                 'test': f"📂 Test Set [Filtered: {visible_count}个]"
             }
             parent_node.setText(0, labels.get(dataset_type, f"Unknown [{visible_count}个]"))
-            
+
             # 展开有问题文件的节点
             if visible_count > 0:
                 parent_node.setExpanded(True)
-    
+
     def _find_sample_dataset(self, sample_id: str) -> str:
         """
         查找样本所属的数据集类型
-        
+
         Args:
             sample_id: 样本ID
-        
+
         Returns:
             str: 数据集类型 ('train', 'val', 'test') 或空字符串
         """
@@ -1983,24 +1992,24 @@ class MainWindow(QMainWindow):
             if sample_id in samples:
                 return dataset_type
         return ''
-    
+
     def clear_tree_filter(self):
         """
         清除树形控件过滤，恢复显示所有样本
         """
-        for parent_node in [self.data_manager.train_node, 
-                           self.data_manager.val_node, 
+        for parent_node in [self.data_manager.train_node,
+                           self.data_manager.val_node,
                            self.data_manager.test_node]:
             # 显示所有子节点
             for i in range(parent_node.childCount()):
                 child = parent_node.child(i)
                 child.setHidden(False)
-            
+
             # 恢复父节点标题
             self.data_manager._update_count(parent_node)
-        
+
         self.statusBar().showMessage("已清除过滤，显示所有样本")
-    
+
     def _update_dataset_overview(self):
         """更新数据集概览面板"""
         train_samples = self.data_manager.get_samples('train')
@@ -2016,31 +2025,31 @@ class MainWindow(QMainWindow):
         # 有数据时启用 Resplit 按钮
         total = train_count + val_count + test_count
         self.ui.btn_resplit.setEnabled(total > 0)
-        
+
         # 当数据集发生变化时，如果当前处于任务配置选项卡，则主动刷新一次蓝图
         if self.ui.tabWidget_contextControl.currentIndex() == 1:
             self._update_task_config_dashboard()
-    
+
     def _validate_voc_structure(self, data_root):
         """
         验证目录是No为有效的VOC格式结构（仅检查第一级目录）
-        
+
         Returns:
             tuple: (is_valid: bool, error_message: str)
         """
         errors = []
-        
+
         # 检查第一级目录中必须存在的目录
         # 1. JPEGImages 目录
         jpeg_dir = os.path.join(data_root, 'JPEGImages')
         if not os.path.isdir(jpeg_dir):
             errors.append("Missing JPEGImages directory")
-        
+
         # 2. SegmentationClass 目录
         seg_dir = os.path.join(data_root, 'SegmentationClass')
         if not os.path.isdir(seg_dir):
             errors.append("Missing SegmentationClass directory")
-        
+
         # 3. ImageSets 目录
         imagesets_dir = os.path.join(data_root, 'ImageSets')
         if not os.path.isdir(imagesets_dir):
@@ -2054,20 +2063,20 @@ class MainWindow(QMainWindow):
                 # 检查至少存在 train.txt 或 val.txt
                 train_txt = os.path.join(seg_sets_dir, 'train.txt')
                 val_txt = os.path.join(seg_sets_dir, 'val.txt')
-                
+
                 if not os.path.isfile(train_txt) and not os.path.isfile(val_txt):
                     errors.append("ImageSets/Segmentation/ 中缺少 train.txt 和 val.txt")
-        
+
         if errors:
             return False, "\n".join(f"• {e}" for e in errors)
-        
+
         return True, ""
-    
+
     def on_tree_item_changed(self, current, previous):
         """树控件当前项改变事件"""
         if current is None:
             return
-        
+
         # 判断节点类型
         if self.data_manager.is_parent_node(current):
             # 点击父节点：显示统计信息
@@ -2075,11 +2084,11 @@ class MainWindow(QMainWindow):
             dataset = node_data.get('dataset', '') if isinstance(node_data, dict) else ''
             count = current.childCount()
             self.statusBar().showMessage(f"数据集: {dataset.upper()} | Samples: {count}")
-            
+
             # 如果在网格视图模式，过滤显示该数据集的样本
             if self.current_view_mode == VIEW_MODE_GRID:
                 self._filter_grid_by_dataset(dataset)
-            
+
         elif self.data_manager.is_leaf_node(current):
             # 点击叶子节点：加载样本可视化
             sample_info = self.data_manager.get_sample_info(current)
@@ -2089,38 +2098,38 @@ class MainWindow(QMainWindow):
                     self._select_thumbnail_in_grid(sample_info['sample_id'], sample_info['dataset'])
                 else:
                     self.load_sample_visualization(sample_info)
-    
+
     def _filter_grid_by_dataset(self, dataset_type):
         """根据数据集类型过滤网格视图（懒加载模式）"""
         # 清空现有内容
         self.thumbnail_manager.clear()
-        
+
         # 只获取指定数据集的样本
         if dataset_type:
             samples = self.data_manager.get_samples(dataset_type)
-            
+
             if not samples:
                 self.statusBar().showMessage(f"{dataset_type.upper()}: 无样本")
                 return
-            
+
             # 添加样本（只创建占位项）
             for sample_id in samples:
                 image_path, label_path = self.data_manager.get_sample_paths(sample_id, dataset_type)
                 key = f"{dataset_type}_{sample_id}"
                 self.thumbnail_manager.add_sample(key, sample_id, dataset_type, image_path, label_path)
-            
+
             self.statusBar().showMessage(f"{dataset_type.upper()}: Total {len(samples)} samples")
-            
+
             # 触发初始加载（只加载可见区域）
             self.thumbnail_manager.trigger_initial_load()
-    
+
     def on_tree_item_clicked(self, item, column):
         """树控件项点击事件"""
         # 这里可以添加额外的点击处理逻辑
         pass
-    
+
     # ==================== Phase 1.1: 双向选择同步 ====================
-    
+
     def _on_thumbnail_single_clicked(self, current, previous):
         """
         网格视图单击事件 (Phase 1.1: Right -> Left)
@@ -2129,24 +2138,24 @@ class MainWindow(QMainWindow):
         """
         if current is None:
             return
-        
+
         sample_info = current.data(Qt.ItemDataRole.UserRole)
         if not sample_info or not isinstance(sample_info, dict):
             return
-        
+
         sample_id = sample_info.get('sample_id', '')
         dataset_type = sample_info.get('dataset', '')
-        
+
         if not sample_id:
             return
-        
+
         # 使用 blockSignals 防止树形控件的 currentItemChanged 反向触发
         self.ui.treeWidget_dataSources.blockSignals(True)
         self._select_sample_in_tree(sample_id, dataset_type)
         self.ui.treeWidget_dataSources.blockSignals(False)
-        
+
         self.statusBar().showMessage(f'已同步选中: {sample_id} ({dataset_type.upper()})')
-    
+
     def _select_thumbnail_in_grid(self, sample_id, dataset_type):
         """
         在网格视图中高亮指定样本 (Phase 1.1: Left -> Right)
@@ -2154,7 +2163,7 @@ class MainWindow(QMainWindow):
         使用 blockSignals 防止无限循环触发。
         """
         target_key = f"{dataset_type}_{sample_id}"
-        
+
         # 遍历 listWidget 查找匹配的项
         for i in range(self.ui.listWidget_thumbnails.count()):
             item = self.ui.listWidget_thumbnails.item(i)
@@ -2170,46 +2179,46 @@ class MainWindow(QMainWindow):
                     )
                     self.ui.listWidget_thumbnails.blockSignals(False)
                     break
-    
+
     def _show_tree_context_menu(self, pos):
         """
         树控件右键菜单 (Phase 2: 样本列表快捷交互)
-        
+
         提供：
         - 📋 Copy Filename
         - 🔗 Copy Full Path
         - 📂 在文件夹中显示 (Reveal in Explorer)
-        
+
         引用 Skill: skills.skill_file_utils
         """
         from skills.skill_file_utils import (
             reveal_in_explorer, copy_path_to_clipboard, copy_filename_to_clipboard
         )
-        
+
         item = self.ui.treeWidget_dataSources.itemAt(pos)
         if item is None or not self.data_manager.is_leaf_node(item):
             return
-        
+
         sample_info = self.data_manager.get_sample_info(item)
         if not sample_info:
             return
-        
+
         sample_id = sample_info['sample_id']
         dataset_type = sample_info['dataset']
         image_path, label_path = self.data_manager.get_sample_paths(sample_id, dataset_type)
-        
+
         # 优先使用影像路径，没有则用标签路径
         target_path = image_path or label_path
-        
+
         menu = QMenu(self)
-        
+
         # 操作 1：复制文件名
         action_copy_name = QAction('📋 Copy Filename', self)
         action_copy_name.triggered.connect(
             lambda: self._do_copy_filename(sample_id, target_path)
         )
         menu.addAction(action_copy_name)
-        
+
         # 操作 2：复制完整路径
         action_copy_path = QAction('🔗 Copy Full Path', self)
         action_copy_path.setEnabled(target_path is not None)
@@ -2217,9 +2226,9 @@ class MainWindow(QMainWindow):
             lambda: self._do_copy_path(target_path)
         )
         menu.addAction(action_copy_path)
-        
+
         menu.addSeparator()
-        
+
         # 操作 3：在文件夹中显示
         action_reveal = QAction('📂 在文件夹中显示', self)
         action_reveal.setEnabled(target_path is not None)
@@ -2227,9 +2236,9 @@ class MainWindow(QMainWindow):
             lambda: self._do_reveal_in_explorer(target_path)
         )
         menu.addAction(action_reveal)
-        
+
         menu.exec(self.ui.treeWidget_dataSources.viewport().mapToGlobal(pos))
-    
+
     def _do_copy_filename(self, sample_id, file_path):
         """复制文件名到剪贴板"""
         from skills.skill_file_utils import copy_filename_to_clipboard
@@ -2240,7 +2249,7 @@ class MainWindow(QMainWindow):
             from PySide6.QtWidgets import QApplication
             QApplication.clipboard().setText(sample_id)
         self.statusBar().showMessage(f'已复制文件名: {sample_id}')
-    
+
     def _do_copy_path(self, file_path):
         """复制完整路径到剪贴板"""
         from skills.skill_file_utils import copy_path_to_clipboard
@@ -2248,7 +2257,7 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(f'Copied path: {file_path}')
         else:
             self.statusBar().showMessage('⚠️ Cannot copy path')
-    
+
     def _do_reveal_in_explorer(self, file_path):
         """在文件管理器中显示"""
         from skills.skill_file_utils import reveal_in_explorer
@@ -2256,22 +2265,22 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(f'已在文件管理器中定位: {os.path.basename(file_path)}')
         else:
             self.statusBar().showMessage('⚠️ Cannot locate file')
-    
+
     def load_sample_visualization(self, sample_info):
         """
         加载样本可视化
-        
+
         Args:
             sample_info: {'sample_id': str, 'dataset': str}
         """
         sample_id = sample_info['sample_id']
         dataset = sample_info['dataset']
-        
+
         print(f"🖼️ Load sample visualization: {sample_id} (来自 {dataset} Dataset)")
-        
+
         # 获取影像和标签路径
         image_path, label_path = self.data_manager.get_sample_paths(sample_id, dataset)
-        
+
         if image_path:
             # 加载影像和标签
             self.image_viewer.load_sample(image_path, label_path)
@@ -2296,7 +2305,7 @@ class MainWindow(QMainWindow):
             # 没有找到影像文件
             self.image_viewer.clear()
             self.statusBar().showMessage(f"⚠️ Sample not found {sample_id}'s image file")
-            
+
             # 显示Info信息
             QMessageBox.information(
                 self,
@@ -2309,21 +2318,21 @@ class MainWindow(QMainWindow):
                 f"- images/{sample_id}.tif\n"
                 f"- labels/{sample_id}.png"
             )
-    
+
     def on_base_image_toggled(self, state):
         """底图可见性切换"""
         self.image_viewer.set_image_visible(state == Qt.CheckState.Checked.value)
         # 网格视图模式下刷新缩略图
         if self.current_view_mode == VIEW_MODE_GRID:
             self._schedule_layer_refresh()
-    
+
     def on_overlay_toggled(self, state):
         """叠加层可见性切换"""
         self.image_viewer.set_label_visible(state == Qt.CheckState.Checked.value)
         # 网格视图模式下刷新缩略图
         if self.current_view_mode == VIEW_MODE_GRID:
             self._schedule_layer_refresh()
-    
+
     def on_label_only_toggled(self, state):
         """单独显示标签切换"""
         if state == Qt.CheckState.Checked.value:
@@ -2336,7 +2345,7 @@ class MainWindow(QMainWindow):
             self.ui.checkBox_baseImage.setChecked(True)
             self.ui.slider_opacity.setValue(70)
         # 网格视图模式下刷新缩略图（由于上面的setChecked会触发各自的toggled事件，这里不需要额外刷新）
-    
+
     def on_opacity_changed(self, value):
         """透明度滑块变化"""
         self.image_viewer.set_label_opacity(value)
@@ -2344,24 +2353,24 @@ class MainWindow(QMainWindow):
         # 网格视图模式下刷新缩略图
         if self.current_view_mode == VIEW_MODE_GRID:
             self._schedule_layer_refresh()
-    
+
     def _schedule_layer_refresh(self):
         """调度图层刷新（防抖）"""
         self._layer_refresh_timer.start()
-    
+
     def _do_refresh_layer_settings(self):
         """执行图层设置刷新"""
         show_image = self.ui.checkBox_baseImage.isChecked()
         show_label = self.ui.checkBox_overlayPrediction.isChecked()
         opacity = self.ui.slider_opacity.value()
         self.thumbnail_manager.set_layer_settings(show_image, show_label, opacity)
-    
+
     def on_swipe_toggled(self, state):
         """卷帘对比模式切换"""
         enabled = state == Qt.CheckState.Checked.value
         self.ui.slider_swipe.setEnabled(enabled)
         self.image_viewer.set_swipe_enabled(enabled)
-        
+
         if enabled:
             # 禁用其他图层控制选项
             self.ui.checkBox_baseImage.setEnabled(False)
@@ -2374,26 +2383,26 @@ class MainWindow(QMainWindow):
             self.ui.checkBox_overlayPrediction.setEnabled(True)
             self.ui.checkBox_labelOnly.setEnabled(True)
             self.ui.slider_opacity.setEnabled(True)
-    
+
     def on_swipe_position_changed(self, value):
         """卷帘位置滑块变化"""
         self.image_viewer.set_swipe_position(value)
         self.ui.label_swipeValue.setText(f"{value}%")
-    
+
     # ==================== 主 Tab 与侧边栏联动 ====================
-    
+
     # 视图模式常量
     VIEW_MODE_GIS = 2  # GIS 视图（推理模式）
-    
+
     def _on_main_tab_changed(self, index: int):
         """
         主 Tab 切换时的处理槽函数
-        
+
         Tab Index 与 Sidebar Stack Index 映射关系:
         - Tab 0 (Data Profile)    -> Sidebar 0 (SampleManagementSidebar), View 0/1 (Detail/Grid)
         - Tab 1 (Task Config)     -> Sidebar 0 (SampleManagementSidebar), View 0/1 (Detail/Grid)
         - Tab 2 (Inference)       -> Sidebar 1 (GISLayerControlSidebar), View 2 (GIS)
-        
+
         Args:
             index: 当前激活的 Tab 索引
         """
@@ -2403,10 +2412,10 @@ class MainWindow(QMainWindow):
             1: 0,  # Task Config  -> SampleManagement
             2: 1,  # Inference    -> GISLayerControl
         }
-        
+
         sidebar_index = TAB_TO_SIDEBAR_MAP.get(index, 0)
         self.ui.sidebar_stack.setCurrentIndex(sidebar_index)
-        
+
         # 切换到推理模式时，显示 GIS 视图
         if index == 2:
             self.ui.stackedWidget_views.setCurrentIndex(2)  # GIS View
@@ -2423,28 +2432,28 @@ class MainWindow(QMainWindow):
         is_data_insight = (index == 0)
         self.ui.action_detailView.setEnabled(is_data_insight and dataset_loaded)
         self.ui.action_gridView.setEnabled(is_data_insight and dataset_loaded)
-            
+
         # 根据模式更新状态栏Info
         mode_names = {
             0: "数据洞察模式",
-            1: "Task Config Mode", 
+            1: "Task Config Mode",
             2: "推理可视化模式"
         }
         self.statusBar().showMessage(f"Switched to {mode_names.get(index, '未知模式')}")
-            
+
     def _update_task_config_dashboard(self):
         """更新任务配置仪表盘状态"""
         if not hasattr(self.ui, 'page_taskConfigDashboard'):
             return
-            
+
         # 如果正在训练中，切到监控视图并返回
         if self._training_thread and self._training_thread.isRunning():
             self.ui.page_taskConfigDashboard.switch_to_training()
             return
-            
+
         # No则切换到蓝图并在上面显示参数
         self.ui.page_taskConfigDashboard.switch_to_blueprint()
-        
+
         # 收集全部参数给 Dashboard 显示
         try:
             params = {}
@@ -2467,9 +2476,9 @@ class MainWindow(QMainWindow):
                 train_samples = self.data_manager.get_samples('train')
                 val_samples = self.data_manager.get_samples('val')
                 params['dataset_samples'] = len(train_samples) + len(val_samples)
-            
+
             self.ui.page_taskConfigDashboard.update_config_params(params)
-            
+
             # 从数据集中随机提取最多3个样本显示预览
             import random
             train_samples = self.data_manager.get_samples('train')
@@ -2485,90 +2494,90 @@ class MainWindow(QMainWindow):
                         'name': sid
                     })
                 self.ui.page_taskConfigDashboard.blueprint_view.preview_strip.update_previews(preview_data)
-                
+
         except Exception as e:
             print(f"Update dashboard error: {e}")
-    
+
     def on_switch_to_detail_view(self):
         """切换到详情视图"""
         self.current_view_mode = VIEW_MODE_DETAIL
         self.ui.stackedWidget_views.setCurrentIndex(VIEW_MODE_DETAIL)
         self.ui.action_detailView.setChecked(True)
         self.ui.action_gridView.setChecked(False)
-        
+
         # 启用卷帘对比功能
         self.ui.checkBox_swipeCompare.setEnabled(True)
-        
+
         # Phase 1.3: 启用 Canvas 专用工具按钮
         self.ui.action_zoomIn.setEnabled(True)
         self.ui.action_zoomOut.setEnabled(True)
         self.ui.action_fitToWindow.setEnabled(True)
-        
+
         self.statusBar().showMessage('已切换到详情视图')
-    
+
     def on_switch_to_grid_view(self):
         """Switch to Grid View"""
         self.current_view_mode = VIEW_MODE_GRID
         self.ui.stackedWidget_views.setCurrentIndex(VIEW_MODE_GRID)
         self.ui.action_gridView.setChecked(True)
         self.ui.action_detailView.setChecked(False)
-        
+
         # 禁用卷帘对比功能（网格视图下不可用）
         self.ui.checkBox_swipeCompare.setEnabled(False)
         self.ui.slider_swipe.setEnabled(False)
-        
+
         # Phase 1.3: 禁用 Canvas 专用工具按钮（缩放等）
         self.ui.action_zoomIn.setEnabled(False)
         self.ui.action_zoomOut.setEnabled(False)
         self.ui.action_fitToWindow.setEnabled(False)
-        
+
         # 初始化图层设置
         show_image = self.ui.checkBox_baseImage.isChecked()
         show_label = self.ui.checkBox_overlayPrediction.isChecked()
         opacity = self.ui.slider_opacity.value()
         self.thumbnail_manager.set_layer_settings(show_image, show_label, opacity)
-        
+
         # 加载缩略图（懒加载模式）
         self._populate_grid_view()
-    
+
     def _populate_grid_view(self):
         """填充网格视图（只创建占位项，懒加载缩略图）"""
         # 清空现有内容
         self.thumbnail_manager.clear()
-        
+
         # 收集所有样本信息
         all_samples = self.data_manager.get_all_samples()
         total = sum(len(samples) for samples in all_samples.values())
-        
+
         if total == 0:
             self.statusBar().showMessage("Grid View: No Samples")
             return
-        
+
         # 添加所有样本（只创建占位项）
         for dataset_type, samples in all_samples.items():
             for sample_id in samples:
                 image_path, label_path = self.data_manager.get_sample_paths(sample_id, dataset_type)
                 key = f"{dataset_type}_{sample_id}"
                 self.thumbnail_manager.add_sample(key, sample_id, dataset_type, image_path, label_path)
-        
+
         self.statusBar().showMessage(f"网格视图: Total {total} samples")
-        
+
         # 触发初始加载（只加载可见区域）
         self.thumbnail_manager.trigger_initial_load()
-    
+
     def on_thumbnail_double_clicked(self, item):
         """缩略图双击事件 - 切换到详情视图并显示该样本"""
         sample_info = item.data(Qt.ItemDataRole.UserRole)
         if sample_info:
             # 切换到详情视图
             self.on_switch_to_detail_view()
-            
+
             # 在树形控件中定位到该样本
             self._select_sample_in_tree(sample_info['sample_id'], sample_info['dataset'])
-            
+
             # 加载样本
             self.load_sample_visualization(sample_info)
-    
+
     def _select_sample_in_tree(self, sample_id, dataset_type):
         """在树形控件中选中指定样本"""
         # 获取对应的父节点
@@ -2577,10 +2586,10 @@ class MainWindow(QMainWindow):
             'val': self.data_manager.val_node,
             'test': self.data_manager.test_node
         }.get(dataset_type)
-        
+
         if not parent_node:
             return
-        
+
         # 遍历子节点查找匹配的样本
         for i in range(parent_node.childCount()):
             child = parent_node.child(i)
@@ -2592,20 +2601,20 @@ class MainWindow(QMainWindow):
                 self.ui.treeWidget_dataSources.setCurrentItem(child)
                 # 滚动到中间位置
                 self.ui.treeWidget_dataSources.scrollToItem(
-                    child, 
+                    child,
                     self.ui.treeWidget_dataSources.ScrollHint.PositionAtCenter
                 )
                 break
-    
+
     # ========================================
     # 推理面板回调方法
     # ========================================
-    
+
     def _on_inference_model_loaded(self, model_info: dict):
         """推理模型加载完成回调"""
         self.statusBar().showMessage("推理模型已加载")
         self._log_to_bottom(f"✅ Model load complete: {model_info.get('config', 'unknown')}")
-    
+
     def _on_inference_started(self):
         """推理开始回调"""
         self.statusBar().showMessage("正在执行推理...")
@@ -2614,66 +2623,66 @@ class MainWindow(QMainWindow):
         """推理Error回调"""
         self.statusBar().showMessage(f"Inference error: {error_msg}")
         self._log_to_bottom(f"❌ Inference error: {error_msg}")
-    
+
     def _log_to_bottom(self, message: str):
         """输出日志到底部日志面板"""
         from datetime import datetime
         timestamp = datetime.now().strftime("%H:%M:%S")
         log_message = f"[{timestamp}] {message}"
-        
+
         print(log_message)
         self.ui.textEdit_logs.append(log_message)
-        
+
         scrollbar = self.ui.textEdit_logs.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
-    
+
     # ========================================
     # 双向同步槽方法
     # ========================================
-    
+
     def _sync_base_image_to_inference(self, path: str):
         """
         同步方向 1: 左侧 GIS 底图变化 -> 右侧推理面板输入路径
-        
+
         触发条件: 当用户在左侧 GISCanvasWidget 中成功加载底图时
-        
+
         Args:
             path: 底图文件路径
         """
         if not path:
             return
-        
+
         # 直接同步路径到推理面板的输入影像框
         self.ui.inference_panel.set_image_path(path)
         self._log_to_bottom(f"🔄 [Sync] GIS base map -> Inference input: {os.path.basename(path)}")
-    
+
     def _sync_inference_to_base_image(self, path: str):
         """
         同步方向 2: 右侧推理面板选择图像 -> 左侧 GIS 底图
-        
+
         触发条件: 当用户在右侧 InferencePanel 中选择/浏览输入图像时
-        
+
         Args:
             path: 图像文件路径
         """
         if not path or not os.path.exists(path):
             return
-        
+
         # 检查是No支持的图像格式
         supported_exts = {'.tif', '.tiff', '.png', '.jpg', '.jpeg', '.bmp'}
         ext = os.path.splitext(path)[1].lower()
         if ext not in supported_exts:
             self._log_to_bottom(f"⚠️ 不支持同步的文件格式: {ext}")
             return
-        
+
         # 加载到 GIS 画布，使用 suppress_signal=True 防止循环
         success = self.ui.gisCanvas.load_base_image(path, suppress_signal=True)
-        
+
         if success:
             self._log_to_bottom(f"🔄 [Sync] Inference input -> GIS base map: {os.path.basename(path)}")
         else:
             self._log_to_bottom(f"⚠️ [Sync Failed] Cannot load image to GIS base map: {os.path.basename(path)}")
-    
+
     def on_resplit_dataset(self):
         """重新划分数据集"""
         # 获取当前数据集统计
@@ -2700,96 +2709,96 @@ class MainWindow(QMainWindow):
         dialog.resplit_confirmed.connect(self._perform_resplit)
 
         dialog.exec()
-    
+
     def _perform_resplit(self, mode, params):
         """执行数据集重新划分
-        
+
         Args:
             mode: 划分模式 ('auto', 'custom_count', 'custom_select')
             params: 划分参数
         """
         import random
-        
+
         # 获取所有样本
         all_samples = []
         all_samples.extend(self.data_manager.get_samples('train'))
         all_samples.extend(self.data_manager.get_samples('val'))
         all_samples.extend(self.data_manager.get_samples('test'))
-        
+
         if not all_samples:
             QMessageBox.warning(self, "Error", "No samples available for resplit.")
             return
-        
+
         # 根据模式执行不同的划分逻辑
         if mode == 'auto':
             # Auto化划分
             if params.get('shuffle', True):
                 random.seed(params.get('seed', 42))
                 random.shuffle(all_samples)
-            
+
             total_count = len(all_samples)
             train_count = int(total_count * params['train_ratio'])
             val_count = int(total_count * params['val_ratio'])
             test_count = total_count - train_count - val_count
-            
+
             train_samples = all_samples[:train_count]
             val_samples = all_samples[train_count:train_count + val_count]
             test_samples = all_samples[train_count + val_count:]
-            
+
         elif mode == 'custom_count':
             # 数量模式
             random.shuffle(all_samples)
-            
+
             train_count = params['train_count']
             val_count = params['val_count']
             test_count = params['test_count']
-            
+
             train_samples = all_samples[:train_count]
             val_samples = all_samples[train_count:train_count + val_count]
             test_samples = all_samples[train_count + val_count:train_count + val_count + test_count]
-            
+
         elif mode == 'custom_select':
             # 选择模式
             train_samples = []
             val_samples = []
             test_samples = []
-            
+
             # 根据用户的分配构建样本列表
             for assignment in params['sample_assignments']:
                 sample_name = assignment['name']
                 split_type = assignment['split']
-                
+
                 if split_type == 'Train':
                     train_samples.append(sample_name)
                 elif split_type == 'Val':
                     val_samples.append(sample_name)
                 elif split_type == 'Test':
                     test_samples.append(sample_name)
-        
+
         else:
             QMessageBox.warning(self, "Error", f"Unknown split mode: {mode}")
             return
-        
+
         # 清空现有数据集
         self.data_manager.clear_dataset('train')
         self.data_manager.clear_dataset('val')
         self.data_manager.clear_dataset('test')
-        
+
         # 添加新的样本分配
         self.data_manager.add_samples_batch('train', train_samples)
         self.data_manager.add_samples_batch('val', val_samples)
         self.data_manager.add_samples_batch('test', test_samples)
-        
+
         # 保存新的划分到txt文件
         if hasattr(self.data_manager, 'data_root') and self.data_manager.data_root:
             self._save_split_to_txt()
-        
+
         # 更新数据集概览
         self.ui.widget_datasetOverview.update_data(len(train_samples), len(val_samples), len(test_samples))
         self._sync_inference_dataset_context()
-        
+
         self.statusBar().showMessage("数据集重新划分完成")
-        
+
         QMessageBox.information(
             self,
             "划分完成",
@@ -2803,7 +2812,7 @@ class MainWindow(QMainWindow):
         if self._current_data_root:
             self.ui.analysis_panel.stop_analysis()
             self._initialize_analysis_panel(self._current_data_root)
-    
+
     def _sync_inference_dataset_context(self):
         if (
             not hasattr(self, 'ui')
@@ -2859,22 +2868,22 @@ class MainWindow(QMainWindow):
     def _on_prediction_initializing(self, input_path, expected_output_filename):
         """
         预测初始化回调：设置图层为加载状态
-        
+
         Args:
             input_path: 输入文件路径
             expected_output_filename: 预期输出文件名
         """
         self._log_to_bottom(f"🔄 Prepare to receive prediction: {expected_output_filename}...")
-        
+
         # 切换到 Inference 视图
         if self.ui.tabWidget_contextControl.currentIndex() != 2:
             self.ui.tabWidget_contextControl.setCurrentIndex(2)
-            
+
         # 调用 GISCanvasWidget 的 set_prediction_loading 方法
         # 如果该方法不存在，需要先在 GISCanvasWidget 中实现
         if hasattr(self.ui.gisCanvas, 'set_prediction_loading'):
             self.ui.gisCanvas.set_prediction_loading(expected_output_filename)
-    
+
     def _on_inference_finished(self, result):
         """推理完成回调"""
         print(f"🔵 _on_inference_finished 被调用")
@@ -2887,13 +2896,13 @@ class MainWindow(QMainWindow):
         # 显示结果
         mask = result.get('mask')
         output_path = result.get('output_path')
-        
+
         print(f"   mask is None: {mask is None}")
         print(f"   output_path: {output_path}")
         palette = None
         if hasattr(self.ui.inference_panel, 'visualization_settings'):
             palette = self.ui.inference_panel.visualization_settings.get_current_palette()
-        
+
         if mask is not None:
              self._log_to_bottom(f"✅ Inference complete, results ready")
 
@@ -2918,17 +2927,17 @@ class MainWindow(QMainWindow):
                 print(f"   → 尝试直接使用 output_path: {output_path}")
                 self._log_to_bottom(f"🔄 加载大图推理结果: {output_path}")
                 self.ui.gisCanvas.inject_prediction(output_path, palette=palette)
-    
+
     def _save_split_to_txt(self):
         """Save dataset split to txt file"""
         if not hasattr(self.data_manager, 'data_root') or not self.data_manager.data_root:
             return
-        
+
         data_root = self.data_manager.data_root
-        
+
         # 检查是No为VOC格式（存在ImageSets/Segmentation目录）
         voc_txt_dir = os.path.join(data_root, 'ImageSets', 'Segmentation')
-        
+
         # 确定保存路径
         if os.path.exists(voc_txt_dir):
             # VOC格式，保存到ImageSets/Segmentation/
@@ -2936,14 +2945,14 @@ class MainWindow(QMainWindow):
         else:
             # 其他格式，保存到数据根目录
             save_dir = data_root
-        
+
         # 保存各个数据集
         datasets = {
             'train': self.data_manager.get_samples('train'),
             'val': self.data_manager.get_samples('val'),
             'test': self.data_manager.get_samples('test')
         }
-        
+
         for dataset_type, samples in datasets.items():
             txt_path = os.path.join(save_dir, f'{dataset_type}.txt')
             try:
@@ -2954,11 +2963,11 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 print(f"❌ 保存 {txt_path} Failed: {e}")
                 QMessageBox.warning(self, "保存失败", f"无法保存 {dataset_type}.txt: {e}")
-    
+
     def closeEvent(self, event):
         """
         窗口关闭事件 - 清理后台线程
-        
+
         解决问题: QThread: Destroyed while thread is still running
         """
         # 停止 SmartCanvas 的后台加载线程
@@ -2967,7 +2976,7 @@ class MainWindow(QMainWindow):
                 self.image_viewer._cleanup_thread()
             except Exception as e:
                 print(f"⚠️ Clean image_viewer thread error: {e}")
-        
+
         # 停止 GISCanvasWidget 的后台线程（如果有）
         if hasattr(self.ui, 'gisCanvas') and self.ui.gisCanvas is not None:
             try:
@@ -2975,7 +2984,7 @@ class MainWindow(QMainWindow):
                     self.ui.gisCanvas._cleanup_thread()
             except Exception as e:
                 print(f"⚠️ Clean gisCanvas thread error: {e}")
-        
+
         # 停止 AnalysisPanel 的后台线程（如果有）
         if hasattr(self.ui, 'analysis_panel') and self.ui.analysis_panel is not None:
             try:
@@ -2983,7 +2992,7 @@ class MainWindow(QMainWindow):
                     self.ui.analysis_panel.stop_analysis()
             except Exception as e:
                 print(f"⚠️ Clean analysis_panel thread error: {e}")
-        
+
         # 停止 InferencePanel 的后台线程（如果有）
         if hasattr(self.ui, 'inference_panel') and self.ui.inference_panel is not None:
             try:
@@ -2991,7 +3000,7 @@ class MainWindow(QMainWindow):
                     self.ui.inference_panel.stop_inference()
             except Exception as e:
                 print(f"⚠️ 清理 inference_panel 线程时出错: {e}")
-        
+
         # Phase 4: 停止训练线程
         if self._training_thread is not None and self._training_thread.isRunning():
             try:
@@ -2999,21 +3008,21 @@ class MainWindow(QMainWindow):
                 self._training_thread.wait(3000)
             except Exception as e:
                 print(f"⚠️ Clean training thread error: {e}")
-        
+
         # 调用父类的 closeEvent
         super().closeEvent(event)
 
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    
+
     # 设置默认字体，避免 QFont::setPointSize 警告
     from PySide6.QtGui import QFont
     default_font = app.font()
     if default_font.pointSize() <= 0:
         default_font.setPointSize(9)
         app.setFont(default_font)
-    
+
     window = MainWindow()
     window.show()
     sys.exit(app.exec())

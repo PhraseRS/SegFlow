@@ -95,6 +95,10 @@ class TrainingThread(QThread):
 
             # 等待进程结束
             exit_code = process.wait()
+            # Windows 可能返回超大无符号整数(如 Ctrl+C 的 0xC000013A = 3221225786)
+            # PySide6 的 Signal(int) 要求 32位有符号数，导致 OverflowError
+            if exit_code > 2147483647:
+                exit_code = exit_code - 4294967296
             self.training_finished.emit(exit_code)
 
         except FileNotFoundError as e:

@@ -93,7 +93,7 @@ class Ui_MainWindow(object):
         self.splitter_horizontal.setObjectName(u"splitter_horizontal")
         self.splitter_horizontal.setOrientation(Qt.Orientation.Horizontal)
         self.splitter_horizontal.setMinimumHeight(200)  # 设置最小高度，允许底部面板扩展
-        
+
         # ========== 左侧面板：上下文感知侧边栏 (Context-Aware Sidebar) ==========
         # 使用 QStackedWidget 实现动态切换
         # Index 映射:
@@ -103,17 +103,17 @@ class Ui_MainWindow(object):
         self.sidebar_stack.setObjectName(u"sidebar_stack")
         self.sidebar_stack.setMinimumWidth(250)
         self.sidebar_stack.setMaximumWidth(400)
-        
+
         # Sidebar Index 0: 样本管理侧边栏 (用于 Data Profile 和 Task Config)
         self.sidebar_sampleManagement = SampleManagementSidebar()
         self.sidebar_sampleManagement.setObjectName(u"sidebar_sampleManagement")
         self.sidebar_stack.addWidget(self.sidebar_sampleManagement)
-        
+
         # Sidebar Index 1: GIS 图层控制侧边栏 (用于 Inference)
         self.sidebar_gisLayerControl = GISLayerControlSidebar()
         self.sidebar_gisLayerControl.setObjectName(u"sidebar_gisLayerControl")
         self.sidebar_stack.addWidget(self.sidebar_gisLayerControl)
-        
+
         # 为了向后兼容，创建别名引用
         self.treeWidget_dataSources = self.sidebar_sampleManagement.treeWidget_dataSources
         self.pushButton_addSample = self.sidebar_sampleManagement.pushButton_addSample
@@ -125,18 +125,18 @@ class Ui_MainWindow(object):
         self.checkBox_swipeCompare = self.sidebar_sampleManagement.checkBox_swipeCompare
         self.slider_swipe = self.sidebar_sampleManagement.slider_swipe
         self.label_swipeValue = self.sidebar_sampleManagement.label_swipeValue
-        
+
         self.splitter_horizontal.addWidget(self.sidebar_stack)
         self.centerPanel = QWidget(self.splitter_horizontal)
         self.centerPanel.setObjectName(u"centerPanel")
         self.verticalLayout_center = QVBoxLayout(self.centerPanel)
         self.verticalLayout_center.setObjectName(u"verticalLayout_center")
         self.verticalLayout_center.setContentsMargins(0, 0, 0, 0)
-        
+
         # 使用 QStackedWidget 切换视图
         self.stackedWidget_views = QStackedWidget(self.centerPanel)
         self.stackedWidget_views.setObjectName(u"stackedWidget_views")
-        
+
         # 页面0: 详情视图 (Detail View)
         self.page_detailView = QWidget()
         self.page_detailView.setObjectName(u"page_detailView")
@@ -148,7 +148,7 @@ class Ui_MainWindow(object):
         self.graphicsView_canvas.setMinimumSize(QSize(300, 200))  # 降低最小高度，允许底部面板扩展
         self.verticalLayout_detailView.addWidget(self.graphicsView_canvas)
         self.stackedWidget_views.addWidget(self.page_detailView)
-        
+
         # 页面1: 网格视图 (Grid View)
         self.page_gridView = QWidget()
         self.page_gridView.setObjectName(u"page_gridView")
@@ -167,7 +167,7 @@ class Ui_MainWindow(object):
         self.listWidget_thumbnails.setMinimumSize(QSize(300, 200))  # 降低最小高度，允许底部面板扩展
         self.verticalLayout_gridView.addWidget(self.listWidget_thumbnails)
         self.stackedWidget_views.addWidget(self.page_gridView)
-        
+
         # 页面2: GIS 视图 (用于推理可视化)
         self.page_gisView = QWidget()
         self.page_gisView.setObjectName(u"page_gisView")
@@ -179,12 +179,12 @@ class Ui_MainWindow(object):
         self.gisCanvas.setMinimumSize(QSize(300, 200))  # 降低最小高度，允许底部面板扩展
         self.verticalLayout_gisView.addWidget(self.gisCanvas)
         self.stackedWidget_views.addWidget(self.page_gisView)
-        
+
         # 页面3: 任务配置与训练仪表盘 (Task Config Dashboard)
         self.page_taskConfigDashboard = TaskConfigDashboard(self.centerPanel)
         self.page_taskConfigDashboard.setObjectName(u"page_taskConfigDashboard")
         self.stackedWidget_views.addWidget(self.page_taskConfigDashboard)
-        
+
         # 连接 GIS 侧边栏与 GIS 画布
         self.sidebar_gisLayerControl.set_canvas(self.gisCanvas)
 
@@ -196,22 +196,22 @@ class Ui_MainWindow(object):
         self.verticalLayout_right = QVBoxLayout(self.rightPanel)
         self.verticalLayout_right.setObjectName(u"verticalLayout_right")
         self.verticalLayout_right.setContentsMargins(0, 0, 0, 0)
-        
+
         # 右侧面板：上下文属性与控制 (Context & Control)
         self.tabWidget_contextControl = QTabWidget(self.rightPanel)
         self.tabWidget_contextControl.setObjectName(u"tabWidget_contextControl")
-        
+
         # ========== Tab 1: 数据洞察 (Data Profile) ==========
         self.tab_dataProfile = QWidget()
         self.tab_dataProfile.setObjectName(u"tab_dataProfile")
         self.verticalLayout_dataProfile = QVBoxLayout(self.tab_dataProfile)
         self.verticalLayout_dataProfile.setObjectName(u"verticalLayout_dataProfile")
         self.verticalLayout_dataProfile.setContentsMargins(0, 0, 0, 0)
-        
+
         # 使用 AnalysisPanel 智能分析面板
         self.analysis_panel = AnalysisPanel(self.tab_dataProfile)
         self.analysis_panel.setObjectName(u"analysis_panel")
-        
+
         # === 顶部：数据集概览（永远可见）===
         self.panel_datasetOverview = CollapsiblePanel(QCoreApplication.translate("MainWindow", "Dataset Overview", None), expanded=True)
         self.widget_datasetOverview = DatasetOverviewWidget()
@@ -226,11 +226,11 @@ class Ui_MainWindow(object):
         )
         self.btn_resplit.setEnabled(False)  # 默认禁用，有数据时启用
         self.analysis_panel.set_overview_widget(self.panel_datasetOverview)
-        
+
         # === 底部：深度图表（可折叠面板容器）===
         self.collapsible_dataProfile = CollapsibleContainer()
         self.collapsible_dataProfile.setObjectName(u"collapsible_dataProfile")
-        
+
         # 面板1: 类别分布 (Class Distribution)
         self.panel_classDistribution = self.collapsible_dataProfile.add_panel(QCoreApplication.translate("MainWindow", "Class Distribution", None), expanded=True)
         self.widget_classDistribution = ClassDistributionWidget()
@@ -238,13 +238,13 @@ class Ui_MainWindow(object):
         self.panel_classDistribution.add_widget(self.widget_classDistribution)
         # 将权重按钮添加到标题栏
         self.panel_classDistribution.add_header_widget(self.widget_classDistribution.get_header_button())
-        
+
         # 面板2: 覆盖率分析 (Coverage Analysis)
         self.panel_coverageAnalysis = self.collapsible_dataProfile.add_panel(QCoreApplication.translate("MainWindow", "Coverage Analysis", None), expanded=False)
         self.widget_coverageAnalysis = CoverageAnalysisCard()
         self.widget_coverageAnalysis.setObjectName(u"widget_coverageAnalysis")
         self.panel_coverageAnalysis.add_widget(self.widget_coverageAnalysis)
-        
+
         # 面板3: 健康检查 (Health Check)
         self.panel_healthCheck = self.collapsible_dataProfile.add_panel(QCoreApplication.translate("MainWindow", "Health Check", None), expanded=False)
         self.widget_healthCheck = HealthCheckCard()
@@ -252,39 +252,39 @@ class Ui_MainWindow(object):
         self.panel_healthCheck.add_widget(self.widget_healthCheck)
         # 将摘要控件添加到标题栏
         self.panel_healthCheck.add_header_widget(self.widget_healthCheck.get_header_widget())
-        
+
         # 将深度图表设置为 AnalysisPanel 的底部组件
         self.analysis_panel.set_charts_widget(self.collapsible_dataProfile)
-        
+
         self.verticalLayout_dataProfile.addWidget(self.analysis_panel)
-        
+
         self.tabWidget_contextControl.addTab(self.tab_dataProfile, "")
-        
+
         # ========== Tab 2: 任务配置 (Task Config) ==========
         self.tab_taskConfig = QWidget()
         self.tab_taskConfig.setObjectName(u"tab_taskConfig")
         self.verticalLayout_taskConfig = QVBoxLayout(self.tab_taskConfig)
         self.verticalLayout_taskConfig.setObjectName(u"verticalLayout_taskConfig")
         self.verticalLayout_taskConfig.setContentsMargins(0, 0, 0, 0)
-        
+
         # 添加滚动区域，使内容在空间不足时可滚动
         self.scrollArea_taskConfig = QScrollArea(self.tab_taskConfig)
         self.scrollArea_taskConfig.setObjectName(u"scrollArea_taskConfig")
         self.scrollArea_taskConfig.setWidgetResizable(True)
         self.scrollArea_taskConfig.setFrameShape(QScrollArea.Shape.NoFrame)
-        
+
         # 滚动区域内容容器
         self.scrollAreaWidget_taskConfig = QWidget()
         self.scrollAreaWidget_taskConfig.setObjectName(u"scrollAreaWidget_taskConfig")
         self.verticalLayout_taskConfigContent = QVBoxLayout(self.scrollAreaWidget_taskConfig)
         self.verticalLayout_taskConfigContent.setObjectName(u"verticalLayout_taskConfigContent")
-        
+
         # 1. 模型选择组
         self.groupBox_modelSelection = QGroupBox(self.scrollAreaWidget_taskConfig)
         self.groupBox_modelSelection.setObjectName(u"groupBox_modelSelection")
         self.verticalLayout_model = QVBoxLayout(self.groupBox_modelSelection)
         self.verticalLayout_model.setContentsMargins(6, 6, 6, 6)
-        
+
         self.widget_modelSelection = ModelSelectionWidget(self.groupBox_modelSelection)
         self.widget_modelSelection.setObjectName(u"widget_modelSelection")
         self.verticalLayout_model.addWidget(self.widget_modelSelection)
@@ -295,12 +295,12 @@ class Ui_MainWindow(object):
         self.groupBox_weightSelection.setObjectName(u"groupBox_weightSelection")
         self.verticalLayout_weight = QVBoxLayout(self.groupBox_weightSelection)
         self.verticalLayout_weight.setContentsMargins(6, 6, 6, 6)
-        
+
         self.widget_weightSelection = WeightSelectionWidget(self.groupBox_weightSelection)
         self.widget_weightSelection.setObjectName(u"widget_weightSelection")
         self.verticalLayout_weight.addWidget(self.widget_weightSelection)
         self.verticalLayout_taskConfigContent.addWidget(self.groupBox_weightSelection)
-        
+
         # 3. 类别配置组
         self.groupBox_classConfig = QGroupBox(self.scrollAreaWidget_taskConfig)
         self.groupBox_classConfig.setObjectName(u"groupBox_classConfig")
@@ -334,18 +334,18 @@ class Ui_MainWindow(object):
         self.widget_hyperparamTabs.setObjectName(u"widget_hyperparamTabs")
         self.verticalLayout_hyperparams.addWidget(self.widget_hyperparamTabs)
         self.verticalLayout_taskConfigContent.addWidget(self.groupBox_hyperparams)
-        
+
         # 参数配置 - 嵌入高级配置组件
         self.groupBox_paramConfig = QGroupBox(self.scrollAreaWidget_taskConfig)
         self.groupBox_paramConfig.setObjectName(u"groupBox_paramConfig")
         self.verticalLayout_paramConfig = QVBoxLayout(self.groupBox_paramConfig)
         self.verticalLayout_paramConfig.setObjectName(u"verticalLayout_paramConfig")
         self.verticalLayout_paramConfig.setContentsMargins(6, 6, 6, 6)
-        
+
         self.widget_advancedConfig = AdvancedConfigWidget(self.groupBox_paramConfig)
         self.widget_advancedConfig.setObjectName(u"widget_advancedConfig")
         self.verticalLayout_paramConfig.addWidget(self.widget_advancedConfig)
-        
+
         self.verticalLayout_taskConfigContent.addWidget(self.groupBox_paramConfig)
 
         # 运行前检查：环境准备状态（Preflight Check）
@@ -366,7 +366,11 @@ class Ui_MainWindow(object):
         self.groupBox_actions.setObjectName(u"groupBox_actions")
         self.verticalLayout_actions = QVBoxLayout(self.groupBox_actions)
         self.verticalLayout_actions.setObjectName(u"verticalLayout_actions")
-        
+
+        from ui.widgets.work_directory_widget import WorkDirectoryWidget
+        self.widget_workDirectory = WorkDirectoryWidget(self.groupBox_actions)
+        self.verticalLayout_actions.addWidget(self.widget_workDirectory)
+
         self.pushButton_run = QPushButton(self.groupBox_actions)
         self.pushButton_run.setObjectName(u"pushButton_run")
         self.verticalLayout_actions.addWidget(self.pushButton_run)
@@ -377,47 +381,47 @@ class Ui_MainWindow(object):
         self.pushButton_export.setObjectName(u"pushButton_export")
         self.verticalLayout_actions.addWidget(self.pushButton_export)
         self.verticalLayout_taskConfigContent.addWidget(self.groupBox_actions)
-        
+
         self.verticalSpacer_taskConfig = QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
         self.verticalLayout_taskConfigContent.addItem(self.verticalSpacer_taskConfig)
-        
+
         # 将内容容器设置到滚动区域
         self.scrollArea_taskConfig.setWidget(self.scrollAreaWidget_taskConfig)
         self.verticalLayout_taskConfig.addWidget(self.scrollArea_taskConfig)
-        
+
         self.tabWidget_contextControl.addTab(self.tab_taskConfig, "")
-        
+
         # ========== Tab 3: 推理可视化 (Inference) ==========
         self.tab_inferenceVis = QWidget()
         self.tab_inferenceVis.setObjectName(u"tab_inferenceVis")
         self.verticalLayout_inferenceVis = QVBoxLayout(self.tab_inferenceVis)
         self.verticalLayout_inferenceVis.setObjectName(u"verticalLayout_inferenceVis")
         self.verticalLayout_inferenceVis.setContentsMargins(0, 0, 0, 0)
-        
+
         # 添加滚动区域，使内容在空间不足时可滚动
         self.scrollArea_inferenceVis = QScrollArea(self.tab_inferenceVis)
         self.scrollArea_inferenceVis.setObjectName(u"scrollArea_inferenceVis")
         self.scrollArea_inferenceVis.setWidgetResizable(True)
         self.scrollArea_inferenceVis.setFrameShape(QScrollArea.Shape.NoFrame)
-        
+
         # 使用新的 InferencePanel 组件
         self.inference_panel = InferencePanel()
         self.inference_panel.setObjectName(u"inference_panel")
-        
+
         # 将 InferencePanel 设置为滚动区域的内容
         self.scrollArea_inferenceVis.setWidget(self.inference_panel)
         self.verticalLayout_inferenceVis.addWidget(self.scrollArea_inferenceVis)
-        
+
         self.tabWidget_contextControl.addTab(self.tab_inferenceVis, "")
-        
+
         self.verticalLayout_right.addWidget(self.tabWidget_contextControl)
 
         self.splitter_horizontal.addWidget(self.rightPanel)
-        
+
         # 设置水平分割器初始大小比例（左侧栏 : 中心区域 : 右侧面板）
         # 中心面板约占45%
         self.splitter_horizontal.setSizes([280, 630, 490])
-        
+
         self.splitter_vertical.addWidget(self.splitter_horizontal)
         self.bottomPanel = QWidget(self.splitter_vertical)
         self.bottomPanel.setObjectName(u"bottomPanel")
@@ -474,7 +478,7 @@ class Ui_MainWindow(object):
         self.verticalLayout_bottom.addWidget(self.tabWidget_bottom)
 
         self.splitter_vertical.addWidget(self.bottomPanel)
-        
+
         # 设置垂直分割器的初始大小比例（主内容区域 : 底部面板 = 680 : 170）
         # UI-10：略微下调上半占比、上调日志面板占比，让分界线区域更显眼
         self.splitter_vertical.setSizes([680, 170])
@@ -576,11 +580,11 @@ class Ui_MainWindow(object):
         self.action_detailView.setText(QCoreApplication.translate("MainWindow", u"Detail View", None))
         self.action_gridView.setText(QCoreApplication.translate("MainWindow", u"Grid View", None))
         # 侧边栏组件内部已设置文本，无需在此翻译
-        
+
         # Tab 1: 数据洞察（使用可折叠面板，标题在组件中设置）
         self.tabWidget_contextControl.setTabText(self.tabWidget_contextControl.indexOf(self.tab_dataProfile), QCoreApplication.translate("MainWindow", u"Data Profile", None))
         # widget_datasetOverview, widget_classDistribution, widget_coverageAnalysis, widget_healthCheck 使用自定义组件，无需设置文本
-        
+
         # Tab 2: 任务配置
         self.tabWidget_contextControl.setTabText(self.tabWidget_contextControl.indexOf(self.tab_taskConfig), QCoreApplication.translate("MainWindow", u"Task Config", None))
 
@@ -594,11 +598,11 @@ class Ui_MainWindow(object):
         self.pushButton_run.setText(QCoreApplication.translate("MainWindow", u"Run", None))
         self.pushButton_stop.setText(QCoreApplication.translate("MainWindow", u"Stop", None))
         self.pushButton_export.setText(QCoreApplication.translate("MainWindow", u"Export", None))
-        
+
         # Tab 3: 推理可视化
         self.tabWidget_contextControl.setTabText(self.tabWidget_contextControl.indexOf(self.tab_inferenceVis), QCoreApplication.translate("MainWindow", u"Inference", None))
         # inference_panel 使用自定义组件，内部已设置文本
-        
+
         self.tabWidget_bottom.setTabText(self.tabWidget_bottom.indexOf(self.tab_logs), QCoreApplication.translate("MainWindow", u"Logs", None))
         self.label_metricsPlaceholder.setText(QCoreApplication.translate("MainWindow", u"Live metrics chart area\n"
 "(matplotlib / pyqtgraph)", None))

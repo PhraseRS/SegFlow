@@ -143,7 +143,7 @@ class HyperparamTabsWidget(QWidget):
 
         self.combo_img_suffix = QComboBox()
         self.combo_img_suffix.setEditable(True)
-        self.combo_img_suffix.addItems(['.jpg', '.jpeg', '.png', '.tif', '.tiff', '.bmp'])
+        self.combo_img_suffix.addItems(['.png', '.jpg', '.jpeg', '.tif', '.tiff', '.bmp'])
         self.combo_img_suffix.setToolTip(self.tr("Image file suffix (auto-detected or manually specified)"))
         self._add_rec_row(form, "Image Suffix:", self.combo_img_suffix, "img_suffix")
 
